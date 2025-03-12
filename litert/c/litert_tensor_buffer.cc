@@ -37,6 +37,7 @@ LiteRtStatus LiteRtCreateTensorBufferFromHostMemory(
     const LiteRtRankedTensorType* tensor_type, void* host_buffer_addr,
     size_t size, LiteRtHostMemoryDeallocator deallocator,
     LiteRtTensorBuffer* tensor_buffer) {
+  std::cout << ">>>> jl" << std::endl;
   if (!tensor_type || !host_buffer_addr || !tensor_buffer) {
     return kLiteRtStatusErrorInvalidArgument;
   }
@@ -44,7 +45,9 @@ LiteRtStatus LiteRtCreateTensorBufferFromHostMemory(
       *tensor_type,
       absl::MakeSpan(static_cast<uint8_t*>(host_buffer_addr), size),
       deallocator);
+  std::cout << ">>>> LiteRtCreateTensorBufferFromHostMemory" << std::endl;
   if (!created_tensor_buffer) {
+  std::cout << ">>>> !created_tensor_buffer" << std::endl;
     LITERT_LOG(LITERT_ERROR, "%s",
                created_tensor_buffer.Error().Message().c_str());
     return created_tensor_buffer.Error().Status();
