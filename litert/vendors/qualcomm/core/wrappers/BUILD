@@ -30,6 +30,7 @@ cc_library(
     ],
     deps = [
         ":quantize_params_wrapper",
+        "@com_google_absl//absl/types:span",
         "//litert/vendors/qualcomm/core/utils:log",
         # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
     ],
