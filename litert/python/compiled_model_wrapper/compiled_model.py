@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Python lite rt compiled model."""
+"""Python wrapper for LiteRT compiled models."""
 from typing import Any, Dict, cast
 
 from google3.third_party.odml.litert.litert.python.compiled_model_wrapper import _pywrap_litert_compiled_model_wrapper as _cm
@@ -71,63 +71,102 @@ class CompiledModel:
     return self._model.CreateOutputBufferByName(signature_key, output_name)
 
   def create_input_buffers(self, signature_index):
-    """Returns a list of PyCapsules for that signature's inputs."""
+    """Creates a list of PyCapsules for the signature's inputs."""
     return self._model.CreateInputBuffers(signature_index)
 
   def create_input_buffer_from_memory(
       self, signature_key: str, input_name: str, data: Any, dtype: str
   ) -> object:
-    """Create a TensorBuffer that wraps the *existing* memory of `data`.
+    """Creates a TensorBuffer that wraps the existing memory of `data`.
 
-    - data must support the Python buffer protocol (e.g. bytes, bytearray, numpy
-    array). - dtype is a string like "float32", "int8", etc. We need it to
-    interpret the memory size per element.
+    Args:
+      signature_key: The signature key to use.
+      input_name: The name of the input tensor.
+      data: Data object that supports the Python buffer protocol (e.g., bytes, 
+        bytearray, numpy array).
+      dtype: String representation of the data type (e.g., "float32", "int8").
 
-    Returns a PyCapsule that can be passed to 'run_by_name' or 'run_by_index'.
+    Returns:
+      A PyCapsule that can be passed to 'run_by_name' or 'run_by_index'.
     """
     return self._model.CreateTensorBufferFromMemory(
         signature_key, input_name, data, dtype
     )
 
   def create_output_buffers(self, signature_index):
-    """Returns a list of PyCapsules for that signature's outputs."""
+    """Creates a list of PyCapsules for the signature's outputs."""
     return self._model.CreateOutputBuffers(signature_index)
 
   def run_by_name(self, signature_key, input_map, output_map):
-    """Run the model using signature key, passing input_map & output_map dicts of {str: capsule}."""
+    """Runs the model using signature key with input and output maps.
+    
+    Args:
+      signature_key: The signature key to use.
+      input_map: Dictionary mapping input names to tensor buffer capsules.
+      output_map: Dictionary mapping output names to tensor buffer capsules.
+    """
     return self._model.RunByName(signature_key, input_map, output_map)
 
   def run_by_index(self, signature_index, input_caps_list, output_caps_list):
-    """Run the model using signature index, passing lists of input, output capsules."""
+    """Runs the model using signature index with input and output capsule lists.
+    
+    Args:
+      signature_index: The index of the signature to use.
+      input_caps_list: List of input tensor buffer capsules.
+      output_caps_list: List of output tensor buffer capsules.
+    """
     return self._model.RunByIndex(
         signature_index, input_caps_list, output_caps_list
     )
 
-  # New methods for data I/O:
-
   def write_float_tensor(self, tensor_buffer_capsule, float_list):
-    """Write `float_list` into the given TensorBuffer capsule."""
+    """Writes float data into the given TensorBuffer capsule.
+    
+    Args:
+      tensor_buffer_capsule: The tensor buffer to write to.
+      float_list: List of float values to write.
+    """
     self._model.WriteFloatTensor(tensor_buffer_capsule, float_list)
 
   def read_float_tensor(self, tensor_buffer_capsule, num_floats):
-    """Return a Python list of float read from the buffer."""
+    """Reads float data from the given TensorBuffer capsule.
+    
+    Args:
+      tensor_buffer_capsule: The tensor buffer to read from.
+      num_floats: Number of float values to read.
+      
+    Returns:
+      A list of float values.
+    """
     return self._model.ReadFloatTensor(tensor_buffer_capsule, num_floats)
 
   def destroy_tensor_buffer(self, tensor_buffer_capsule):
-    """Explicitly destroy the buffer, if you need to free memory early."""
+    """Explicitly destroys the buffer to free memory.
+    
+    Args:
+      tensor_buffer_capsule: The tensor buffer to destroy.
+    """
     self._model.DestroyTensorBuffer(tensor_buffer_capsule)
 
   def write_tensor(self, tensor_buffer_capsule, data, dtype: str):
-    """Write `data` (a Python list of numbers) into the given TensorBuffer capsule,
-
-    interpreted as `dtype` (e.g. "float32", "int8", "int32").
+    """Writes data into the given TensorBuffer capsule.
+    
+    Args:
+      tensor_buffer_capsule: The tensor buffer to write to.
+      data: List of numeric values to write.
+      dtype: String representation of the data type (e.g., "float32", "int8").
     """
     self._model.WriteTensor(tensor_buffer_capsule, data, dtype)
 
   def read_tensor(self, tensor_buffer_capsule, num_elements: int, dtype: str):
-    """Read `num_elements` items from the given TensorBuffer capsule,
-
-    interpreting them as `dtype` (e.g. "float32", "int8", "int32").
-    Returns a Python list of the read values.
+    """Reads data from the given TensorBuffer capsule.
+    
+    Args:
+      tensor_buffer_capsule: The tensor buffer to read from.
+      num_elements: Number of elements to read.
+      dtype: String representation of the data type (e.g., "float32", "int8").
+      
+    Returns:
+      A list of the read values.
     """
     return self._model.ReadTensor(tensor_buffer_capsule, num_elements, dtype)

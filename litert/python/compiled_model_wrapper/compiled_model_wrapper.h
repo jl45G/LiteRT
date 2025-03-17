@@ -32,18 +32,21 @@ namespace litert {
 namespace compiled_model_wrapper {
 
 /**
- * CompiledModelWrapper is a bridging class that:
- *   - Owns a LiteRT Environment, Model, and CompiledModel
- *   - Exposes all relevant C++ APIs as PyObject-returning methods
- *   - Provides Python-level error reporting
+ * Wrapper class for LiteRT models that provides Python bindings.
+ *
+ * This class manages the lifecycle of LiteRT Environment, Model, and 
+ * CompiledModel objects while exposing their functionality to Python.
+ * It handles Python object conversions and error reporting.
  */
 class CompiledModelWrapper {
  public:
+  // Creates a wrapper from a model file path.
   static CompiledModelWrapper* CreateWrapperFromFile(
       const char* model_path, const char* compiler_plugin_path,
       const char* dispatch_library_path, int hardware_accel,
       std::string* out_error);
 
+  // Creates a wrapper from a model buffer in memory.
   static CompiledModelWrapper* CreateWrapperFromBuffer(
       PyObject* model_data, const char* compiler_plugin_path,
       const char* dispatch_library_path, int hardware_accel,
@@ -54,81 +57,81 @@ class CompiledModelWrapper {
 
   ~CompiledModelWrapper();
 
-  // Return a PyObject describing the model’s signatures.
+  // Returns a Python object containing the model's signatures.
   PyObject* GetSignatureList();
 
-  // Retrieve the signature by index, for advanced introspection.
+  // Returns a Python object with details about the signature at the given index.
   PyObject* GetSignatureByIndex(int signature_index);
 
-  // Retrieve the number of signatures
+  // Returns the number of signatures in the model.
   PyObject* GetNumSignatures();
 
-  // Retrieve subgraph index of a signature key, or -1 if not found
+  // Returns the index of a signature by key, or -1 if not found.
   PyObject* GetSignatureIndex(const char* signature_key);
 
-  // Retrieve buffer requirements for an input (by signature index, input
-  // index).
+  // Returns buffer requirements for an input tensor.
   PyObject* GetInputBufferRequirements(int signature_index, int input_index);
 
-  // Retrieve buffer requirements for an output (by signature index, output
-  // index).
+  // Returns buffer requirements for an output tensor.
   PyObject* GetOutputBufferRequirements(int signature_index, int output_index);
 
-  // Overload: create input buffer by signature key & input name
+  // Creates an input buffer for a tensor identified by signature key and input name.
   PyObject* CreateInputBufferByName(const char* signature_key,
                                     const char* input_name);
 
-  // Overload: create output buffer by signature key & output name
+  // Creates an output buffer for a tensor identified by signature key and output name.
   PyObject* CreateOutputBufferByName(const char* signature_key,
                                      const char* output_name);
 
-  // Create input buffers for the entire subgraph. Returns list of capsules
+  // Creates all input buffers for a signature and returns them as a list of capsules.
   PyObject* CreateInputBuffers(int signature_index);
 
-  // Create output buffers for the entire subgraph. Returns list of capsules
+  // Creates all output buffers for a signature and returns them as a list of capsules.
   PyObject* CreateOutputBuffers(int signature_index);
 
-  // Actually run the model with signature key, passing input_map & output_map
-  // (both dicts: name -> PyCapsule).
+  // Executes the model using a signature key and name-to-buffer mappings.
   PyObject* RunByName(const char* signature_key, PyObject* input_map,
                       PyObject* output_map);
 
-  // Actually run the model with signature index. Takes vector capsules
+  // Executes the model using a signature index and lists of buffer capsules.
   PyObject* RunByIndex(int signature_index, PyObject* input_caps_list,
                        PyObject* output_caps_list);
 
-  // Write a Python list[float] into the specified TensorBuffer capsule.
+  // Writes a Python list of floats to a tensor buffer.
   PyObject* WriteFloatTensor(PyObject* tensor_buffer_capsule,
                              PyObject* float_list);
 
-  // Read back the contents of a TensorBuffer as floats. The user must specify
-  // how many floats to read.
+  // Reads float values from a tensor buffer.
   PyObject* ReadFloatTensor(PyObject* tensor_buffer_capsule, int num_floats);
 
-  // If you want to explicitly free/destroy a buffer in Python, call this.
+  // Explicitly frees a tensor buffer.
   PyObject* DestroyTensorBuffer(PyObject* tensor_buffer_capsule);
 
+  // Creates a tensor buffer from Python data in memory.
   PyObject* CreateTensorBufferFromMemory(const char* signature_key,
                                          const char* tensor_name,
                                          PyObject* py_data,
                                          const std::string& dtype);
 
-  // Existing methods ...
-
-  // Single method that routes to appropriate typed logic
+  // Writes data to a tensor buffer with the specified data type.
   PyObject* WriteTensor(PyObject* buffer_capsule, PyObject* data,
                         const std::string& dtype);
+
+  // Reads data from a tensor buffer with the specified data type.
   PyObject* ReadTensor(PyObject* buffer_capsule, int num_elements,
                        const std::string& dtype);
 
  private:
-  // Possibly some helper to compute element size from dtype, etc.
+  // Returns the size in bytes of a single element of the given data type.
   size_t ByteWidthOfDType(const std::string& dtype);
+
+  // Reports an error to Python and returns nullptr.
   static PyObject* ReportError(const std::string& msg);
-  // Simple internal helper: convert litert::Error -> Python exception
+
+  // Converts a LiteRT error to a Python exception and returns nullptr.
   static PyObject* ConvertErrorToPyExc(const litert::Error& error);
 
-  // store references
+  // Member variables holding the LiteRT objects.
   litert::Environment environment_;
   litert::Model model_;
   litert::CompiledModel compiled_model_;

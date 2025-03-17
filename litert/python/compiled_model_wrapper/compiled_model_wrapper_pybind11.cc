@@ -30,10 +30,10 @@ using litert::compiled_model_wrapper::CompiledModelWrapper;
 PYBIND11_MODULE(_pywrap_litert_compiled_model_wrapper, m) {
   m.doc() = R"pbdoc(
     _pywrap_litert_compiled_model_wrapper
-    A pybind11-based C++ extension for direct LiteRT CompiledModel usage.
+    Python bindings for LiteRT CompiledModel.
   )pbdoc";
 
-  // Expose creation from file
+  // Factory method to create a CompiledModelWrapper from a model file.
   m.def(
       "CreateCompiledModelFromFile",
       [](const std::string& model_path, const std::string& compiler_plugin_path,
@@ -50,13 +50,12 @@ PYBIND11_MODULE(_pywrap_litert_compiled_model_wrapper, m) {
         if (!wrapper) {
           throw std::runtime_error(error);
         }
-        return wrapper;  // raw pointer, which pybind will manage as an opaque
-                         // handle
+        return wrapper;  // Ownership transferred to pybind11
       },
       py::arg("model_path"), py::arg("compiler_plugin_path") = "",
       py::arg("dispatch_library_path") = "", py::arg("hardware_accel") = 0);
 
-  // Expose creation from buffer
+  // Factory method to create a CompiledModelWrapper from a model buffer.
   m.def(
       "CreateCompiledModelFromBuffer",
       [](py::bytes model_data, const std::string& compiler_plugin_path,
@@ -79,7 +78,7 @@ PYBIND11_MODULE(_pywrap_litert_compiled_model_wrapper, m) {
       py::arg("model_data"), py::arg("compiler_plugin_path") = "",
       py::arg("dispatch_library_path") = "", py::arg("hardware_accel") = 0);
 
-  // Expose the class "CompiledModelWrapper"
+  // Bindings for the CompiledModelWrapper class.
   py::class_<CompiledModelWrapper>(m, "CompiledModelWrapper")
       .def("GetSignatureList",
            [](CompiledModelWrapper& self) {
@@ -161,7 +160,6 @@ PYBIND11_MODULE(_pywrap_litert_compiled_model_wrapper, m) {
              PyObject* r = self.RunByName(sig_key.c_str(), input_map.ptr(),
                                           output_map.ptr());
              if (!r) throw py::error_already_set();
-             // Returns None if success
              return py::none();
            })
       .def("RunByIndex",
@@ -173,7 +171,7 @@ PYBIND11_MODULE(_pywrap_litert_compiled_model_wrapper, m) {
              return py::none();
            })
 
-      // New methods for data I/O
+      // Methods for tensor data I/O operations
       .def("WriteFloatTensor",
            [](CompiledModelWrapper& self, py::object buffer_capsule,
               py::object float_list) {
@@ -191,7 +189,7 @@ PYBIND11_MODULE(_pywrap_litert_compiled_model_wrapper, m) {
              return py::reinterpret_steal<py::object>(r);
            })
 
-      // ...
+      // Generic tensor I/O methods supporting multiple data types
       .def("WriteTensor",
            [](CompiledModelWrapper& self, py::object capsule, py::object data,
               const std::string& dtype) {
@@ -213,9 +211,7 @@ PYBIND11_MODULE(_pywrap_litert_compiled_model_wrapper, m) {
               const std::string& dtype) {
              PyObject* r = self.CreateTensorBufferFromMemory(
                  sig_key.c_str(), tensor_name.c_str(), py_data.ptr(), dtype);
-             std::cout << ">>> about to print67 4545" << std::endl;
              if (!r) throw py::error_already_set();
-             std::cout << ">>> about to print7 4545" << std::endl;
              return py::reinterpret_steal<py::object>(r);
            })
       .def("DestroyTensorBuffer",

@@ -12,54 +12,237 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Python type stubs for the LiteRT compiled model wrapper."""
+
 from typing import Any, Dict, List
 
 class CompiledModelWrapper:
-    def GetSignatureList(self) -> Dict[str, Dict[str, List[str]]]: ...
-    def GetSignatureByIndex(self, index: int) -> Dict[str, Any]: ...
+    """Wrapper for a compiled LiteRT model."""
 
-    def GetNumSignatures(self) -> int: ...
+    def GetSignatureList(self) -> Dict[str, Dict[str, List[str]]]:
+        """Returns a dictionary of all signatures in the model."""
+        ...
 
-    def GetSignatureIndex(self, key: str) -> int: ...
+    def GetSignatureByIndex(self, index: int) -> Dict[str, Any]:
+        """Returns the signature at the specified index.
 
-    def GetInputBufferRequirements(self, sig_idx: int, in_idx: int) -> Dict[str, Any]: ...
+        Args:
+          index: The index of the signature to retrieve.
 
-    def GetOutputBufferRequirements(self, sig_idx: int, out_idx: int) -> Dict[str, Any]: ...
-    def CreateInputBufferByName(self, sig_key: str, in_name: str) -> object: ...
-    def CreateOutputBufferByName(self, sig_key: str, out_name: str) -> object: ...
+        Returns:
+          A dictionary containing the signature details.
+        """
+        ...
 
-    def CreateInputBuffers(self, sig_idx: int) -> List[object]: ...
+    def GetNumSignatures(self) -> int:
+        """Returns the number of signatures in the model."""
+        ...
 
-    def CreateOutputBuffers(self, sig_idx: int) -> List[object]: ...
-    def RunByName(self, sig_key: str, input_map: Dict[str, object], output_map: Dict[str, object]) -> None: ...
+    def GetSignatureIndex(self, key: str) -> int:
+        """Returns the index of the signature with the specified key.
 
-    def RunByIndex(self, sig_idx: int, input_caps_list: List[object], output_caps_list: List[object]) -> None: ...
+        Args:
+          key: The signature key to look up.
 
-    # New data I/O methods:
-    def WriteFloatTensor(self, tensor_buffer_capsule: object, float_list: List[float]) -> None: ...
+        Returns:
+          The index of the signature.
+        """
+        ...
 
-    def ReadFloatTensor(self, tensor_buffer_capsule: object, num_floats: int) -> List[float]: ...
+    def GetInputBufferRequirements(self, sig_idx: int, in_idx: int) -> Dict[str, Any]:
+        """Returns the requirements for an input buffer.
 
-    def DestroyTensorBuffer(self, tensor_buffer_capsule: object) -> None: ...
+        Args:
+          sig_idx: The signature index.
+          in_idx: The input index within the signature.
 
-    def WriteTensor(self, tensor_buffer_capsule: object, data: list, dtype: str) -> None: ...
+        Returns:
+          A dictionary containing the buffer requirements.
+        """
+        ...
 
-    def ReadTensor(self, tensor_buffer_capsule: object, num_elements: int, dtype: str) -> list: ...
+    def GetOutputBufferRequirements(self, sig_idx: int, out_idx: int) -> Dict[str, Any]:
+        """Returns the requirements for an output buffer.
+
+        Args:
+          sig_idx: The signature index.
+          out_idx: The output index within the signature.
+
+        Returns:
+          A dictionary containing the buffer requirements.
+        """
+        ...
+
+    def CreateInputBufferByName(self, sig_key: str, in_name: str) -> object:
+        """Creates an input buffer for the specified signature and input name.
+
+        Args:
+          sig_key: The signature key.
+          in_name: The input tensor name.
+
+        Returns:
+          A capsule object representing the tensor buffer.
+        """
+        ...
+
+    def CreateOutputBufferByName(self, sig_key: str, out_name: str) -> object:
+        """Creates an output buffer for the specified signature and output name.
+
+        Args:
+          sig_key: The signature key.
+          out_name: The output tensor name.
+
+        Returns:
+          A capsule object representing the tensor buffer.
+        """
+        ...
+
+    def CreateInputBuffers(self, sig_idx: int) -> List[object]:
+        """Creates all input buffers for the specified signature.
+
+        Args:
+          sig_idx: The signature index.
+
+        Returns:
+          A list of capsule objects representing the tensor buffers.
+        """
+        ...
+
+    def CreateOutputBuffers(self, sig_idx: int) -> List[object]:
+        """Creates all output buffers for the specified signature.
+
+        Args:
+          sig_idx: The signature index.
+
+        Returns:
+          A list of capsule objects representing the tensor buffers.
+        """
+        ...
+
+    def RunByName(self, sig_key: str, input_map: Dict[str, object], output_map: Dict[str, object]) -> None:
+        """Runs inference using the specified signature and named tensors.
+
+        Args:
+          sig_key: The signature key.
+          input_map: A dictionary mapping input names to tensor buffer capsules.
+          output_map: A dictionary mapping output names to tensor buffer capsules.
+        """
+        ...
+
+    def RunByIndex(self, sig_idx: int, input_caps_list: List[object], output_caps_list: List[object]) -> None:
+        """Runs inference using the specified signature index and tensor lists.
+
+        Args:
+          sig_idx: The signature index.
+          input_caps_list: A list of input tensor buffer capsules.
+          output_caps_list: A list of output tensor buffer capsules.
+        """
+        ...
+
+    def WriteFloatTensor(self, tensor_buffer_capsule: object, float_list: List[float]) -> None:
+        """Writes float data to a tensor buffer.
+
+        Args:
+          tensor_buffer_capsule: The tensor buffer capsule.
+          float_list: The list of float values to write.
+        """
+        ...
+
+    def ReadFloatTensor(self, tensor_buffer_capsule: object, num_floats: int) -> List[float]:
+        """Reads float data from a tensor buffer.
+
+        Args:
+          tensor_buffer_capsule: The tensor buffer capsule.
+          num_floats: The number of float values to read.
+
+        Returns:
+          A list of float values.
+        """
+        ...
+
+    def DestroyTensorBuffer(self, tensor_buffer_capsule: object) -> None:
+        """Destroys a tensor buffer and frees its resources.
+
+        Args:
+          tensor_buffer_capsule: The tensor buffer capsule to destroy.
+        """
+        ...
+
+    def WriteTensor(self, tensor_buffer_capsule: object, data: list, dtype: str) -> None:
+        """Writes data of the specified type to a tensor buffer.
+
+        Args:
+          tensor_buffer_capsule: The tensor buffer capsule.
+          data: The list of values to write.
+          dtype: The data type of the values.
+        """
+        ...
+
+    def ReadTensor(self, tensor_buffer_capsule: object, num_elements: int, dtype: str) -> list:
+        """Reads data of the specified type from a tensor buffer.
+
+        Args:
+          tensor_buffer_capsule: The tensor buffer capsule.
+          num_elements: The number of elements to read.
+          dtype: The data type of the values.
+
+        Returns:
+          A list of values.
+        """
+        ...
 
     def CreateTensorBufferFromMemory(
             self, signature_key: str, tensor_name: str, data: Any, dtype: str
-    ) -> object: ...
+    ) -> object:
+        """Creates a tensor buffer from existing data in memory.
+
+        Args:
+          signature_key: The signature key.
+          tensor_name: The tensor name.
+          data: The data to initialize the tensor with.
+          dtype: The data type of the values.
+
+        Returns:
+          A capsule object representing the tensor buffer.
+        """
+        ...
+
 
 def CreateCompiledModelFromFile(
         model_path: str,
         compiler_plugin_path: str = ...,
         dispatch_library_path: str = ...,
         hardware_accel: int = ...
-) -> CompiledModelWrapper: ...
+) -> CompiledModelWrapper:
+    """Creates a compiled model from a model file.
+
+    Args:
+      model_path: Path to the model file.
+      compiler_plugin_path: Optional path to the compiler plugin.
+      dispatch_library_path: Optional path to the dispatch library.
+      hardware_accel: Optional hardware acceleration flag.
+
+    Returns:
+      A CompiledModelWrapper instance.
+    """
+    ...
+
 
 def CreateCompiledModelFromBuffer(
         model_data: bytes,
         compiler_plugin_path: str = ...,
         dispatch_library_path: str = ...,
         hardware_accel: int = ...
-) -> CompiledModelWrapper: ...
+) -> CompiledModelWrapper:
+    """Creates a compiled model from a model buffer.
+
+    Args:
+      model_data: The model data as bytes.
+      compiler_plugin_path: Optional path to the compiler plugin.
+      dispatch_library_path: Optional path to the dispatch library.
+      hardware_accel: Optional hardware acceleration flag.
+
+    Returns:
+      A CompiledModelWrapper instance.
+    """
+    ...

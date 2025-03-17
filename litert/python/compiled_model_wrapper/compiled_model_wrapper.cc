@@ -43,7 +43,7 @@ namespace litert {
 namespace compiled_model_wrapper {
 
 namespace {
-// Utility: convert a `TensorBuffer` to a PyCapsule with optional destructor.
+// Destructor for TensorBuffer PyCapsules.
 static void CapsuleTensorBufferDestructor(PyObject* capsule) {
   void* ptr = PyCapsule_GetPointer(capsule, "LiteRtTensorBuffer");
   if (ptr) {
@@ -51,6 +51,7 @@ static void CapsuleTensorBufferDestructor(PyObject* capsule) {
   }
 }
 
+// Creates a PyCapsule for a TensorBuffer with appropriate destructor.
 PyObject* MakePyCapsuleForTensorBuffer(litert::TensorBuffer& buffer,
                                        bool owned_by_python) {
   if (owned_by_python) {
@@ -62,35 +63,34 @@ PyObject* MakePyCapsuleForTensorBuffer(litert::TensorBuffer& buffer,
   }
 }
 
-// A small structure to hold the Py_buffer and a reference to the PyObject
-// so we can PyBuffer_Release and Py_XDECREF in the final destructor.
+// Context for host memory deallocation.
 struct HostMemoryDeallocatorContext {
   Py_buffer py_buf;
-  PyObject* py_obj;  // We keep a ref to ensure it doesn't get GC'd
+  PyObject* py_obj;  // Reference to ensure object isn't garbage collected
 };
-// This is called by LiteRt when it destroys the tensor buffer.
+
+// Deallocator callback for host memory.
 static void HostMemoryDeallocator(void* context) {
   if (!context) return;
   auto* ctx = static_cast<HostMemoryDeallocatorContext*>(context);
-  // Release the buffer
   PyBuffer_Release(&ctx->py_buf);
-  // Decrement our reference to the python object
   Py_XDECREF(ctx->py_obj);
-  delete ctx;  // free the context
+  delete ctx;
 }
-// Suppose you define a small struct to hold your pinned Py_buffer:
+
+// Context for Python buffer capsules.
 struct HostMemoryPyCapsuleContext {
   Py_buffer py_buf;
-  PyObject* py_obj;                    // reference to the Python object
-  LiteRtTensorBuffer c_tensor_buffer;  // handle to the C++ buffer
+  PyObject* py_obj;                    // Reference to Python object
+  LiteRtTensorBuffer c_tensor_buffer;  // Handle to C++ buffer
 };
 
-// No-op deallocator for the TFLite call
+// No-op deallocator for TensorBuffers.
 static void NoopDeallocator(void* /*unused*/) {
-  // Does nothing
+  // Intentionally empty
 }
 
-// Helper: read a Python list of Python ints into a std::vector of int8_t.
+// Converts a Python list to a vector of int8_t values.
 bool ConvertPyListToInt8Vector(PyObject* py_list, std::vector<int8_t>* out,
                                std::string* error) {
   if (!PyList_Check(py_list)) {
@@ -106,7 +106,7 @@ bool ConvertPyListToInt8Vector(PyObject* py_list, std::vector<int8_t>* out,
       *error = "Non-integer value encountered in int8 list.";
       return false;
     }
-    long val = PyLong_AsLong(item);  // can be large
+    long val = PyLong_AsLong(item);
     if ((val == -1) && PyErr_Occurred()) {
       *error = "Error converting python int to C long.";
       return false;
@@ -121,7 +121,7 @@ bool ConvertPyListToInt8Vector(PyObject* py_list, std::vector<int8_t>* out,
   return true;
 }
 
-// Similar for int32
+// Converts a Python list to a vector of int32_t values.
 bool ConvertPyListToInt32Vector(PyObject* py_list, std::vector<int32_t>* out,
                                 std::string* error) {
   if (!PyList_Check(py_list)) {
@@ -137,7 +137,7 @@ bool ConvertPyListToInt32Vector(PyObject* py_list, std::vector<int32_t>* out,
       *error = "Non-integer value encountered in int32 list.";
       return false;
     }
-    long val = PyLong_AsLong(item);  // can exceed int32
+    long val = PyLong_AsLong(item);
     if ((val == -1) && PyErr_Occurred()) {
       *error = "Error converting python int to long for int32.";
       return false;
@@ -153,7 +153,7 @@ bool ConvertPyListToInt32Vector(PyObject* py_list, std::vector<int32_t>* out,
   return true;
 }
 
-// For float32
+// Converts a Python list to a vector of float values.
 bool ConvertPyListToFloatVector(PyObject* py_list, std::vector<float>* out,
                                 std::string* error) {
   if (!PyList_Check(py_list)) {
@@ -165,11 +165,10 @@ bool ConvertPyListToFloatVector(PyObject* py_list, std::vector<float>* out,
 
   for (Py_ssize_t i = 0; i < length; i++) {
     PyObject* item = PyList_GetItem(py_list, i);
-    // We treat any numeric type as float
     double val = PyFloat_AsDouble(item);
     if ((val == -1.0) && PyErr_Occurred()) {
-      // Maybe it was an int, let's try PyLong_AsLong?
-      PyErr_Clear();  // We'll try to parse as int
+      // Try parsing as integer if float parsing failed
+      PyErr_Clear();
       long maybe_int_val = PyLong_AsLong(item);
       if ((maybe_int_val == -1) && PyErr_Occurred()) {
         *error = "Non-numeric value in float list.";
@@ -182,8 +181,7 @@ bool ConvertPyListToFloatVector(PyObject* py_list, std::vector<float>* out,
   return true;
 }
 
-// The symmetrical approach for read_tensor, building a Python list from a typed
-// vector
+// Creates a Python list from a span of int8_t values.
 PyObject* BuildPyListFromInt8(absl::Span<const int8_t> data) {
   PyObject* py_list = PyList_New(data.size());
   for (size_t i = 0; i < data.size(); i++) {
@@ -192,6 +190,7 @@ PyObject* BuildPyListFromInt8(absl::Span<const int8_t> data) {
   return py_list;
 }
 
+// Creates a Python list from a span of int32_t values.
 PyObject* BuildPyListFromInt32(absl::Span<const int32_t> data) {
   PyObject* py_list = PyList_New(data.size());
   for (size_t i = 0; i < data.size(); i++) {
@@ -200,6 +199,7 @@ PyObject* BuildPyListFromInt32(absl::Span<const int32_t> data) {
   return py_list;
 }
 
+// Creates a Python list from a span of float values.
 PyObject* BuildPyListFromFloat(absl::Span<const float> data) {
   PyObject* py_list = PyList_New(data.size());
   for (size_t i = 0; i < data.size(); i++) {
@@ -210,13 +210,11 @@ PyObject* BuildPyListFromFloat(absl::Span<const float> data) {
 }
 }  // namespace
 
-//----------------------------------------------
-// Implementation of WriteTensor
-//----------------------------------------------
+// Writes data to a tensor buffer.
 PyObject* CompiledModelWrapper::WriteTensor(PyObject* buffer_capsule,
                                             PyObject* py_data,
                                             const std::string& dtype) {
-  // 1) Check capsule
+  // Validate capsule
   if (!PyCapsule_CheckExact(buffer_capsule)) {
     return ReportError("WriteTensor: invalid TensorBuffer capsule.");
   }
@@ -226,7 +224,7 @@ PyObject* CompiledModelWrapper::WriteTensor(PyObject* buffer_capsule,
   }
   litert::TensorBuffer tb((LiteRtTensorBuffer)ptr, false);
 
-  // 2) Switch on dtype
+  // Handle different data types
   std::string error;
   if (dtype == "float32") {
     std::vector<float> host_data;
@@ -266,13 +264,11 @@ PyObject* CompiledModelWrapper::WriteTensor(PyObject* buffer_capsule,
   }
 }
 
-//----------------------------------------------
-// Implementation of ReadTensor
-//----------------------------------------------
+// Reads data from a tensor buffer.
 PyObject* CompiledModelWrapper::ReadTensor(PyObject* buffer_capsule,
                                            int num_elements,
                                            const std::string& dtype) {
-  // 1) Check capsule
+  // Validate capsule
   if (!PyCapsule_CheckExact(buffer_capsule)) {
     return ReportError("ReadTensor: invalid TensorBuffer capsule.");
   }
@@ -282,7 +278,7 @@ PyObject* CompiledModelWrapper::ReadTensor(PyObject* buffer_capsule,
   }
   litert::TensorBuffer tb((LiteRtTensorBuffer)ptr, false);
 
-  // 2) Switch on dtype
+  // Handle different data types
   if (dtype == "float32") {
     std::vector<float> host_data(num_elements, 0.0f);
     auto status = tb.Read<float>(absl::MakeSpan(host_data));
@@ -312,19 +308,19 @@ PyObject* CompiledModelWrapper::ReadTensor(PyObject* buffer_capsule,
   }
 }
 
+// Returns the byte width of a data type.
 size_t CompiledModelWrapper::ByteWidthOfDType(const std::string& dtype) {
   if (dtype == "float32") return 4;
   if (dtype == "int8") return 1;
   if (dtype == "int32") return 4;
-  // add more if needed...
-  // fallback
-  return 0;
+  return 0;  // Unknown type
 }
 
+// Creates a tensor buffer from Python memory.
 PyObject* CompiledModelWrapper::CreateTensorBufferFromMemory(
     const char* signature_key, const char* tensor_name, PyObject* py_data,
     const std::string& dtype) {
-  // 1) Get the input buffer requirements
+  // Get input buffer requirements
   auto sig_idx_or = model_.GetSignatureIndex(signature_key);
   if (!sig_idx_or) {
     return ReportError("Signature key not found: " +
@@ -337,14 +333,13 @@ PyObject* CompiledModelWrapper::CreateTensorBufferFromMemory(
   }
   auto buffer_req = std::move(*buffer_req_or);
 
-  // 2) Acquire a Python buffer
+  // Acquire Python buffer
   Py_buffer py_buf;
   if (PyObject_GetBuffer(py_data, &py_buf, PyBUF_CONTIG_RO) < 0) {
-    // error is already set
-    return nullptr;
+    return nullptr;  // Error already set by Python
   }
 
-  // 3) Check size
+  // Validate buffer size
   size_t dtype_size = ByteWidthOfDType(dtype);
   if (dtype_size == 0) {
     PyBuffer_Release(&py_buf);
@@ -365,7 +360,7 @@ PyObject* CompiledModelWrapper::CreateTensorBufferFromMemory(
                        std::to_string(required_size));
   }
 
-  // 4) Build a minimal LiteRtRankedTensorType
+  // Create tensor type descriptor
   LiteRtRankedTensorType dummy_type;
   size_t num_elements = required_size / dtype_size;
 
@@ -382,8 +377,7 @@ PyObject* CompiledModelWrapper::CreateTensorBufferFromMemory(
   dummy_type.layout.dimensions[0] = static_cast<int32_t>(num_elements);
   dummy_type.layout.strides = nullptr;
 
-  // 5) Create the buffer with a no-op deallocator
-  //    because we have no 'deallocator_context' param.
+  // Create tensor buffer with no-op deallocator
   LiteRtTensorBuffer tensor_buffer = nullptr;
   auto status = LiteRtCreateTensorBufferFromHostMemory(
       &dummy_type, py_buf.buf, required_size,
@@ -394,33 +388,25 @@ PyObject* CompiledModelWrapper::CreateTensorBufferFromMemory(
     return ReportError("LiteRtCreateTensorBufferFromHostMemory failed");
   }
 
-  // 6) Make a small struct to hold references for the capsule destructor
+  // Create context for capsule
   auto* ctx = new HostMemoryPyCapsuleContext();
   ctx->py_buf = py_buf;
   ctx->py_obj = py_data;
   ctx->c_tensor_buffer = tensor_buffer;
 
-  // We need to keep the Python object alive for the buffer's lifetime.
+  // Keep Python object alive
   Py_INCREF(py_data);
 
-  // 7) Create a PyCapsule. We'll store 'tensor_buffer' as the pointer
-  //    and stash 'ctx' in the capsule's "context."
-  //    Then the destructor can do the real cleanup (PyBuffer_Release,
-  //    Py_DECREF, etc.)
-
+  // Create capsule with destructor
   auto capsule_destructor = [](PyObject* capsule) {
-    // 1. Extract the c_tensor_buffer from the capsule pointer
     void* raw_ptr = PyCapsule_GetPointer(capsule, "LiteRtTensorBuffer");
-    // 2. Extract our context from the capsule context
     auto* ctx =
         static_cast<HostMemoryPyCapsuleContext*>(PyCapsule_GetContext(capsule));
 
-    // 3. Destroy the TFLite buffer (triggers the no-op c-level deallocator)
     if (raw_ptr) {
       LiteRtDestroyTensorBuffer(static_cast<LiteRtTensorBuffer>(raw_ptr));
     }
 
-    // 4. Now do the real cleanup: unpin memory, drop Python ref
     if (ctx) {
       PyBuffer_Release(&ctx->py_buf);
       Py_DECREF(ctx->py_obj);
@@ -428,11 +414,10 @@ PyObject* CompiledModelWrapper::CreateTensorBufferFromMemory(
     }
   };
 
-  // Create the capsule
   PyObject* capsule =
       PyCapsule_New(tensor_buffer, "LiteRtTensorBuffer", capsule_destructor);
   if (!capsule) {
-    // Capsule creation failed, free everything
+    // Clean up on failure
     LiteRtDestroyTensorBuffer(tensor_buffer);
     PyBuffer_Release(&py_buf);
     Py_DECREF(py_data);
@@ -440,12 +425,13 @@ PyObject* CompiledModelWrapper::CreateTensorBufferFromMemory(
     return ReportError("Failed to create PyCapsule");
   }
 
-  // Attach our context to the capsule
+  // Attach context to capsule
   PyCapsule_SetContext(capsule, ctx);
 
   return capsule;
 }
 
+// Constructor for CompiledModelWrapper.
 CompiledModelWrapper::CompiledModelWrapper(litert::Environment env,
                                            litert::Model model,
                                            litert::CompiledModel compiled)
@@ -453,13 +439,16 @@ CompiledModelWrapper::CompiledModelWrapper(litert::Environment env,
       model_(std::move(model)),
       compiled_model_(std::move(compiled)) {}
 
+// Destructor for CompiledModelWrapper.
 CompiledModelWrapper::~CompiledModelWrapper() = default;
 
+// Reports an error by setting a Python exception.
 PyObject* CompiledModelWrapper::ReportError(const std::string& msg) {
   PyErr_SetString(PyExc_RuntimeError, msg.c_str());
   return nullptr;
 }
 
+// Converts a LiteRT error to a Python exception.
 PyObject* CompiledModelWrapper::ConvertErrorToPyExc(
     const litert::Error& error) {
   PyErr_Format(PyExc_RuntimeError, "CompiledModel error: code=%d, message=%s",
@@ -467,12 +456,12 @@ PyObject* CompiledModelWrapper::ConvertErrorToPyExc(
   return nullptr;
 }
 
-/*static*/
+// Creates a CompiledModelWrapper from a model file.
 CompiledModelWrapper* CompiledModelWrapper::CreateWrapperFromFile(
     const char* model_path, const char* compiler_plugin_path,
     const char* dispatch_library_path, int hardware_accel,
     std::string* out_error) {
-  // 1) Make environment
+  // Create environment with options
   std::vector<litert::Environment::Option> options;
   if (compiler_plugin_path && *compiler_plugin_path) {
     options.push_back(litert::Environment::Option{
@@ -491,7 +480,7 @@ CompiledModelWrapper* CompiledModelWrapper::CreateWrapperFromFile(
   }
   litert::Environment env = std::move(*env_or);
 
-  // 2) Load model
+  // Load model from file
   auto model_or = litert::Model::CreateFromFile(model_path);
   if (!model_or) {
     if (out_error) *out_error = model_or.Error().Message();
@@ -499,7 +488,7 @@ CompiledModelWrapper* CompiledModelWrapper::CreateWrapperFromFile(
   }
   litert::Model model = std::move(*model_or);
 
-  // 3) Create compiled model
+  // Create compiled model
   auto compiled_or = litert::CompiledModel::Create(
       env, model, (LiteRtHwAccelerators)hardware_accel);
   if (!compiled_or) {
@@ -507,25 +496,25 @@ CompiledModelWrapper* CompiledModelWrapper::CreateWrapperFromFile(
     return nullptr;
   }
 
-  // Build final wrapper
   return new CompiledModelWrapper(std::move(env), std::move(model),
                                   std::move(*compiled_or));
 }
 
+// Converts a Python string or bytes object to a C string.
 int ConvertFromPyString(PyObject* obj, char** data, Py_ssize_t* length) {
   if (PyUnicode_Check(obj)) {
-    // const_cast<> is for CPython 3.7 finally adding const to the API.
     *data = const_cast<char*>(PyUnicode_AsUTF8AndSize(obj, length));
     return *data == nullptr ? -1 : 0;
   }
   return PyBytes_AsStringAndSize(obj, data, length);
 }
 
-/*static*/
+// Creates a CompiledModelWrapper from a model buffer.
 CompiledModelWrapper* CompiledModelWrapper::CreateWrapperFromBuffer(
     PyObject* model_data, const char* compiler_plugin_path,
     const char* dispatch_library_path, int hardware_accel,
     std::string* out_error) {
+  // Extract buffer from Python object
   char* buf = nullptr;
   Py_ssize_t length = 0;
   if (ConvertFromPyString(model_data, &buf, &length) == -1) {
@@ -533,6 +522,7 @@ CompiledModelWrapper* CompiledModelWrapper::CreateWrapperFromBuffer(
     return nullptr;
   }
 
+  // Create environment with options
   std::vector<litert::Environment::Option> options;
   if (compiler_plugin_path && *compiler_plugin_path) {
     options.push_back(litert::Environment::Option{
@@ -552,7 +542,7 @@ CompiledModelWrapper* CompiledModelWrapper::CreateWrapperFromBuffer(
   }
   litert::Environment env = std::move(*env_or);
 
-  // 2) Build Model from buffer
+  // Create model from buffer
   litert::BufferRef<uint8_t> ref(reinterpret_cast<uint8_t*>(buf),
                                  static_cast<size_t>(length));
   auto model_or = litert::Model::CreateFromBuffer(ref);
@@ -562,7 +552,7 @@ CompiledModelWrapper* CompiledModelWrapper::CreateWrapperFromBuffer(
   }
   litert::Model model = std::move(*model_or);
 
-  // 3) Create compiled
+  // Create compiled model
   auto compiled_or = litert::CompiledModel::Create(
       env, model, static_cast<LiteRtHwAccelerators>(hardware_accel));
   if (!compiled_or) {
@@ -574,6 +564,7 @@ CompiledModelWrapper* CompiledModelWrapper::CreateWrapperFromBuffer(
                                   std::move(*compiled_or));
 }
 
+// Returns a dictionary of all signatures in the model.
 PyObject* CompiledModelWrapper::GetSignatureList() {
   auto sigs_or = model_.GetSignatures();
   if (!sigs_or) {
@@ -584,16 +575,15 @@ PyObject* CompiledModelWrapper::GetSignatureList() {
 
   for (size_t i = 0; i < sigs.size(); ++i) {
     const auto& sig = sigs[i];
-    // signature key
-    PyObject* sig_info = PyDict_New();  // dict for "inputs", "outputs"
+    PyObject* sig_info = PyDict_New();
 
-    // gather input names
+    // Add input names
     PyObject* py_in = PyList_New(0);
     for (auto& n : sig.InputNames()) {
       PyList_Append(py_in, PyUnicode_FromString(n.data()));
     }
 
-    // gather output names
+    // Add output names
     PyObject* py_out = PyList_New(0);
     for (auto& n : sig.OutputNames()) {
       PyList_Append(py_out, PyUnicode_FromString(n.data()));
@@ -605,13 +595,14 @@ PyObject* CompiledModelWrapper::GetSignatureList() {
     Py_DECREF(py_in);
     Py_DECREF(py_out);
 
-    // place in root dict: key is signature.Key(), value is sig_info
+    // Add signature to root dictionary
     PyDict_SetItemString(py_dict, sig.Key().data(), sig_info);
     Py_DECREF(sig_info);
   }
   return py_dict;
 }
 
+// Returns details about a signature by index.
 PyObject* CompiledModelWrapper::GetSignatureByIndex(int signature_index) {
   auto sig_or = model_.GetSignature(signature_index);
   if (!sig_or) {
@@ -620,10 +611,10 @@ PyObject* CompiledModelWrapper::GetSignatureByIndex(int signature_index) {
   auto sig = std::move(*sig_or);
 
   PyObject* result = PyDict_New();
-  // store "key"
+  // Add signature key
   PyDict_SetItemString(result, "key", PyUnicode_FromString(sig.Key().data()));
 
-  // store "inputs" as list
+  // Add input names
   {
     PyObject* py_in = PyList_New(0);
     for (auto& nm : sig.InputNames()) {
@@ -633,7 +624,7 @@ PyObject* CompiledModelWrapper::GetSignatureByIndex(int signature_index) {
     Py_DECREF(py_in);
   }
 
-  // store "outputs" as list
+  // Add output names
   {
     PyObject* py_out = PyList_New(0);
     for (auto& nm : sig.OutputNames()) {
@@ -646,20 +637,23 @@ PyObject* CompiledModelWrapper::GetSignatureByIndex(int signature_index) {
   return result;
 }
 
+// Returns the number of signatures in the model.
 PyObject* CompiledModelWrapper::GetNumSignatures() {
   auto num = model_.GetNumSignatures();
   return PyLong_FromLong((int64_t)num);
 }
 
+// Returns the index of a signature by key.
 PyObject* CompiledModelWrapper::GetSignatureIndex(const char* signature_key) {
   auto idx_or = model_.GetSignatureIndex(signature_key);
   if (!idx_or) {
-    // return -1 if not found
+    // Return -1 if not found
     return PyLong_FromLong(-1);
   }
   return PyLong_FromLong((long)(*idx_or));
 }
 
+// Returns requirements for an input buffer.
 PyObject* CompiledModelWrapper::GetInputBufferRequirements(int signature_index,
                                                            int input_index) {
   auto req_or = compiled_model_.GetInputBufferRequirements(
@@ -670,7 +664,7 @@ PyObject* CompiledModelWrapper::GetInputBufferRequirements(int signature_index,
   auto req = std::move(*req_or);
   PyObject* dict = PyDict_New();
 
-  // buffer size
+  // Add buffer size
   auto size_or = req.BufferSize();
   if (!size_or) {
     Py_DECREF(dict);
@@ -678,7 +672,7 @@ PyObject* CompiledModelWrapper::GetInputBufferRequirements(int signature_index,
   }
   PyDict_SetItemString(dict, "buffer_size", PyLong_FromLong((int64_t)*size_or));
 
-  // supported types
+  // Add supported types
   auto types_or = req.SupportedTypes();
   if (!types_or) {
     Py_DECREF(dict);
@@ -695,6 +689,7 @@ PyObject* CompiledModelWrapper::GetInputBufferRequirements(int signature_index,
   return dict;
 }
 
+// Returns requirements for an output buffer.
 PyObject* CompiledModelWrapper::GetOutputBufferRequirements(int signature_index,
                                                             int output_index) {
   auto req_or = compiled_model_.GetOutputBufferRequirements(
@@ -705,6 +700,8 @@ PyObject* CompiledModelWrapper::GetOutputBufferRequirements(int signature_index,
   auto req = std::move(*req_or);
 
   PyObject* dict = PyDict_New();
+  
+  // Add buffer size
   auto size_or = req.BufferSize();
   if (!size_or) {
     Py_DECREF(dict);
