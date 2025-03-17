@@ -42,8 +42,9 @@ JNIEXPORT void JNICALL
 Java_com_google_ai_edge_litert_CompiledModel_nativeDestroy(JNIEnv* env,
                                                            jclass clazz,
                                                            jlong handle);
-// Asynchronous version of "run", which returns true if the runtime is actually
-// running asynchronously, false if it fell back to synchronous execution.
+// Executes the model asynchronously if supported by the runtime.
+// Returns JNI_TRUE if execution is performed asynchronously,
+// JNI_FALSE if the runtime falls back to synchronous execution.
 JNIEXPORT jboolean JNICALL
 Java_com_google_ai_edge_litert_CompiledModel_nativeRunAsync(
     JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,

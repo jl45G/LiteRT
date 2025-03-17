@@ -7,9 +7,6 @@
 extern "C" {
 #endif  // __cplusplus
 
-///////////////////////////////////////////////////////////////////////////////
-// EXISTING METHODS (array-based write/read/destroy)
-///////////////////////////////////////////////////////////////////////////////
 JNIEXPORT void JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeWriteInt(JNIEnv* env,
                                                            jclass clazz,
@@ -37,9 +34,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeDestroy(JNIEnv* env,
                                                           jclass clazz,
                                                           jlong handle);
 
-///////////////////////////////////////////////////////////////////////////////
-// ZERO-COPY METHODS (Create from direct ByteBuffer, read/write direct)
-///////////////////////////////////////////////////////////////////////////////
+// Efficient zero-copy buffer management methods
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromDirectBuffer(
     JNIEnv* env, jclass clazz, jint element_type_code, jintArray dimensions,
@@ -55,9 +50,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeReadToDirect(
     JNIEnv* env, jclass clazz, jlong tensor_buffer_handle,
     jobject dst_direct_buffer, jlong size_in_bytes);
 
-///////////////////////////////////////////////////////////////////////////////
-// EVENT-RELATED METHODS
-///////////////////////////////////////////////////////////////////////////////
+// Event synchronization methods for asynchronous operations
 JNIEXPORT jboolean JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeHasEvent(JNIEnv* env,
                                                            jclass clazz,
@@ -86,9 +79,7 @@ JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_AlignedBufferUtils_nativeGetDirectBufferAddress(
     JNIEnv* env, jclass clazz, jobject buffer);
 
-// =========================
-// AHardwareBuffer Interop
-// =========================
+// Android Hardware Buffer integration methods
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromAhwb(
     JNIEnv* env, jclass clazz, jint element_type_code, jintArray dimensions,
@@ -98,9 +89,7 @@ JNIEXPORT jobject JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeGetAhwb(
     JNIEnv* env, jclass clazz, jlong tensor_buffer_handle);
 
-// =========================
-// GL Texture Interop
-// =========================
+// OpenGL texture integration methods
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromGlTexture(
     JNIEnv* env, jclass clazz, jint element_type_code, jintArray dimensions,
@@ -110,9 +99,7 @@ JNIEXPORT jintArray JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeGetGlTexture(
     JNIEnv* env, jclass clazz, jlong tensor_buffer_handle);
 
-// =========================
-// GL Buffer Interop
-// =========================
+// OpenGL buffer integration methods
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromGlBuffer(
     JNIEnv* env, jclass clazz, jint element_type_code, jintArray dimensions,
@@ -122,32 +109,19 @@ JNIEXPORT jlongArray JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeGetGlBuffer(
     JNIEnv* env, jclass clazz, jlong tensor_buffer_handle);
 
-/**
- * Creates a locked “scope” around a given TensorBuffer handle.
- * It locks the underlying buffer via LiteRtLockTensorBuffer()
- * and returns a "ScopedLock" handle pointer that you must later destroy.
- *
- * Returns 0 if locking fails or if handle is invalid.
- */
+// Creates a scoped lock for safe memory access to a TensorBuffer.
+// Returns a handle to the lock, or 0 on failure.
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBufferScopedLock_nativeCreateScopedLock(
     JNIEnv* env, jclass clazz, jlong tensor_buffer_handle);
 
-/**
- * Returns the pointer to the locked memory from the "ScopedLock" handle.
- * This is a convenience if your Kotlin code wants to do further direct
- * reads or writes. If not needed, you can skip exposing this function.
- *
- * Returns 0 on error.
- */
+// Returns the memory address of the locked TensorBuffer data.
+// Returns 0 if the lock handle is invalid.
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBufferScopedLock_nativeGetLockedPointer(
     JNIEnv* env, jclass clazz, jlong scoped_lock_handle);
 
-/**
- * Destroys the “ScopedLock” handle, which automatically calls
- * LiteRtUnlockTensorBuffer(), then frees the lock structure.
- */
+// Releases the scoped lock and unlocks the TensorBuffer.
 JNIEXPORT void JNICALL
 Java_com_google_ai_edge_litert_TensorBufferScopedLock_nativeDestroyScopedLock(
     JNIEnv* env, jclass clazz, jlong scoped_lock_handle);

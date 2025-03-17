@@ -7,44 +7,45 @@
 extern "C" {
 #endif  // __cplusplus
 
-// Creates an Event from a Linux sync fence fd.
+// Creates a LiteRtEvent from a Linux sync fence file descriptor.
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_Event_nativeCreateFromSyncFenceFd(
     JNIEnv* env, jclass clazz, jint sync_fence_fd, jboolean owns_fd);
 
-// Creates an Event from an OpenCL event handle. The event handle is typically
-// of type cl_event, passed as jlong from the Java side.
+// Creates a LiteRtEvent from an OpenCL event.
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_Event_nativeCreateFromOpenClEvent(
     JNIEnv* env, jclass clazz, jlong cl_event_handle);
 
-// Creates a "managed" event. (Internally uses LiteRtCreateManagedEvent.)
+// Creates a managed LiteRtEvent with the specified event type.
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_Event_nativeCreateManaged(
-    JNIEnv* env, jclass clazz, jint event_type);  // e.g. 0 for UNKNOWN, etc.
+    JNIEnv* env, jclass clazz, jint event_type);
 
-// Returns the sync fence fd from the event, or -1 if not applicable.
+// Extracts the sync fence file descriptor from a LiteRtEvent.
+// Returns -1 if the event is not a sync fence event.
 JNIEXPORT jint JNICALL
 Java_com_google_ai_edge_litert_Event_nativeGetSyncFenceFd(JNIEnv* env,
                                                           jclass clazz,
                                                           jlong event_handle);
 
-// Returns the underlying cl_event as a jlong, or 0 if not applicable
+// Extracts the OpenCL event from a LiteRtEvent.
+// Returns 0 if the event is not an OpenCL event.
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_Event_nativeGetOpenClEvent(JNIEnv* env,
                                                           jclass clazz,
                                                           jlong event_handle);
 
-// Wait on the event with the given timeout (ms). -1 = indefinite.
+// Waits for the event to complete with the specified timeout in milliseconds.
+// A timeout of -1 means wait indefinitely.
 JNIEXPORT void JNICALL Java_com_google_ai_edge_litert_Event_nativeWait(
     JNIEnv* env, jclass clazz, jlong event_handle, jlong timeout_ms);
 
-// Returns the event type, e.g. 0 for unknown, 1 for sync_fence, 2 for OpenCL,
-// etc.
+// Returns the event type as defined in LiteRtEventType.
 JNIEXPORT jint JNICALL Java_com_google_ai_edge_litert_Event_nativeGetType(
     JNIEnv* env, jclass clazz, jlong event_handle);
 
-// Destroy the event. This frees the underlying LiteRtEvent resource.
+// Destroys the LiteRtEvent and releases associated resources.
 JNIEXPORT void JNICALL Java_com_google_ai_edge_litert_Event_nativeDestroy(
     JNIEnv* env, jclass clazz, jlong event_handle);
 

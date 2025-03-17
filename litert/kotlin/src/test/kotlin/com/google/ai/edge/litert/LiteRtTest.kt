@@ -35,7 +35,7 @@ class LiteRtTest {
     val outputBuffers = compiledModel.createOutputBuffers()
     assertThat(outputBuffers).hasSize(1)
 
-    // Normal synchronous run
+    // Execute model synchronously and verify output
     compiledModel.run(inputBuffers, outputBuffers)
     val output = outputBuffers[0].readFloat()
     assertThat(output.size).isEqualTo(testOutputTensor.size)
@@ -43,68 +43,22 @@ class LiteRtTest {
       assertThat(output[i]).isWithin(1e-5f).of(testOutputTensor[i])
     }
 
-    // NEW: Test async run
+    // Test asynchronous execution
+    // Note: Actual asynchronicity depends on hardware and driver support
     val wasAsync = compiledModel.runAsync(inputBuffers, outputBuffers)
-    // Depending on your hardware or driver, it might or might not be truly async.
-    // For test, let's just confirm no crash:
     assertThat(wasAsync).isNotNull()
 
-    // Clean up
+    // Release resources
     outputBuffers.forEach { it.destroy() }
     inputBuffers.forEach { it.destroy() }
     compiledModel.destroy()
   }
 
-  // Example test for zero-copy TensorBuffer creation
   @Test
-  fun zeroCopyTensorBufferTest() {
-    // Suppose we want a 2-element float buffer: [123.0f, 456.0f]
-    val capacityBytes = 8
-
-    val directBuf = AlignedBufferUtils.create64ByteAlignedByteBuffer(capacityBytes)
-    directBuf.putFloat(123.0f)
-    directBuf.putFloat(456.0f)
-    directBuf.rewind()
-
-    // shape => [1,2], elementTypeCode => 0 => Float32
-    val tb = TensorBuffer.createFromDirectBuffer(0, intArrayOf(1, 2), directBuf)
-    val readFloats = tb.readFloat()
-    // Should match [123f, 456f]
-    assertThat(readFloats).usingExactEquality().containsExactly(123.0f, 456.0f).inOrder()
-
-    // We can do partial writes, e.g. update the second float to 999.0f:
-    directBuf.rewind()
-    directBuf.putFloat(123.0f)
-    directBuf.putFloat(999.0f)
-    directBuf.rewind()
-
-    tb.writeFromDirect(directBuf, capacityBytes.toLong())
-
-    val read2 = tb.readFloat()
-    assertThat(read2).usingExactEquality().containsExactly(123.0f, 999.0f).inOrder()
-
-    tb.destroy()
-  }
-
-  @Test
-  fun modelSelector_gpu() {
+  fun e2eFlow_modelSelector_cpu() {
     val cpuModelProvider =
-      ModelProvider.staticModel(ModelProvider.Type.ASSET, "not_exist.tflite", Accelerator.CPU)
-    val gpuModelProvider =
-      ModelProvider.staticModel(ModelProvider.Type.ASSET, "simple_model.tflite", Accelerator.GPU)
-    val modelSelector = ModelSelector(cpuModelProvider, gpuModelProvider)
-    val modelProvider = modelSelector.selectModel(Environment.create())
-    assertThat(modelProvider.getCompatibleAccelerators()).containsExactly(Accelerator.GPU)
-    assertThat(modelProvider.getPath()).isEqualTo("simple_model.tflite")
-  }
-
-  @Test
-  fun e2eFlow_modelSelector_gpu() {
-    val cpuModelProvider =
-      ModelProvider.staticModel(ModelProvider.Type.ASSET, "not_exist.tflite", Accelerator.CPU)
-    val gpuModelProvider =
-      ModelProvider.staticModel(ModelProvider.Type.ASSET, "simple_model.tflite", Accelerator.GPU)
-    val modelSelector = ModelSelector(cpuModelProvider, gpuModelProvider)
+      ModelProvider.staticModel(ModelProvider.Type.ASSET, "simple_model.tflite", Accelerator.CPU)
+    val modelSelector = ModelSelector(cpuModelProvider)
     val compiledModel = CompiledModel.create(modelSelector, assetManager = context!!.assets)
 
     val inputBuffers = compiledModel.createInputBuffers()
@@ -120,116 +74,138 @@ class LiteRtTest {
     for (i in 0 until output.size) {
       assertThat(output[i]).isWithin(1e-5f).of(testOutputTensor[i])
     }
+
+    inputBuffers.forEach { it.destroy() }
+    outputBuffers.forEach { it.destroy() }
+    compiledModel.destroy()
   }
 
-  // Example test for event usage
+  @Test
+  fun modelSelector_gpu() {
+    val cpuModelProvider =
+      ModelProvider.staticModel(ModelProvider.Type.ASSET, "not_exist.tflite", Accelerator.CPU)
+    val gpuModelProvider =
+      ModelProvider.staticModel(ModelProvider.Type.ASSET, "simple_model.tflite", Accelerator.GPU)
+    val modelSelector = ModelSelector(cpuModelProvider, gpuModelProvider)
+    val modelProvider = modelSelector.selectModel(Environment.create())
+    assertThat(modelProvider.getCompatibleAccelerators()).containsExactly(Accelerator.GPU)
+    assertThat(modelProvider.getPath()).isEqualTo("simple_model.tflite")
+  }
+
+  @Test
+  fun zeroCopyTensorBufferTest() {
+    // Create a buffer for 2 float values (8 bytes total)
+    val capacityBytes = 8
+
+    val directBuf = AlignedBufferUtils.create64ByteAlignedByteBuffer(capacityBytes)
+    directBuf.putFloat(123.0f)
+    directBuf.putFloat(456.0f)
+    directBuf.rewind()
+
+    // Create a tensor buffer from the direct buffer with shape [1,2] and Float32 type (code 0)
+    val tb = TensorBuffer.createFromDirectBuffer(0, intArrayOf(1, 2), directBuf)
+    val readFloats = tb.readFloat()
+    assertThat(readFloats).usingExactEquality().containsExactly(123.0f, 456.0f).inOrder()
+
+    // Demonstrate partial buffer updates
+    directBuf.rewind()
+    directBuf.putFloat(123.0f)
+    directBuf.putFloat(999.0f)
+    directBuf.rewind()
+
+    tb.writeFromDirect(directBuf, capacityBytes.toLong())
+
+    val read2 = tb.readFloat()
+    assertThat(read2).usingExactEquality().containsExactly(123.0f, 999.0f).inOrder()
+
+    tb.destroy()
+  }
+
+
   @Test
   fun eventUsageTest() {
     val compiledModel = CompiledModel.create(context.assets, "simple_model.tflite")
     val inputBuffers = compiledModel.createInputBuffers()
     val outputBuffers = compiledModel.createOutputBuffers()
 
-    // Write input
+    // Populate input buffers with test data
     for (i in inputBuffers.indices) {
       inputBuffers[i].writeFloat(testInputTensors[i])
     }
 
-    // run
+    // Execute the model
     compiledModel.run(inputBuffers, outputBuffers)
 
-    // Typically event is set by the accelerator. Let's just see if it's there:
+    // Check for and handle any events associated with the output buffer
     val out0 = outputBuffers[0]
     val hasEv = out0.hasEvent()
-    // Might be false in CPU scenario
+    // Events may not be present when using CPU acceleration
     if (hasEv) {
       val evHandle = out0.getEventHandle()
-      // wait on it
+      // Wait indefinitely for the event to complete
       out0.waitOnEvent(-1L)
-      // clear
+      // Release the event resources
       out0.clearEvent()
     }
 
-    // read output
+    // Verify output data
     val outData = outputBuffers[0].readFloat()
     assertThat(outData.size).isEqualTo(testOutputTensor.size)
 
-    // cleanup
+    // Clean up resources
     inputBuffers.forEach { it.destroy() }
     outputBuffers.forEach { it.destroy() }
     compiledModel.destroy()
   }
 
-  @Test
-  fun e2eFlow_modelSelector_cpu() {
-    val cpuModelProvider =
-      ModelProvider.staticModel(ModelProvider.Type.ASSET, "simple_model.tflite", Accelerator.CPU)
-    val modelSelector = ModelSelector(cpuModelProvider)
-    val compiledModel = CompiledModel.create(modelSelector, assetManager = context.assets)
-
-    val inputBuffers = compiledModel.createInputBuffers()
-    for (i in inputBuffers.indices) {
-      inputBuffers[i].writeFloat(testInputTensors[i])
-    }
-    val outputBuffers = compiledModel.createOutputBuffers()
-    compiledModel.run(inputBuffers, outputBuffers)
-    val output = outputBuffers[0].readFloat()
-    for (i in output.indices) {
-      assertThat(output[i]).isWithin(1e-5f).of(testOutputTensor[i])
-    }
-
-    inputBuffers.forEach { it.destroy() }
-    outputBuffers.forEach { it.destroy() }
-    compiledModel.destroy()
-  }
 
   @Test
   fun createAhwbBufferTest() {
-    // Only runs on API 29+ devices or mocks
+    // Skip test on devices below API 29 which don't support HardwareBuffer
     if (Build.VERSION.SDK_INT < 29) return
 
     val shape = intArrayOf(1, 2)
-    // Suppose you have a HardWareBuffer from somewhere, e.g.:
+    // Create a HardwareBuffer with appropriate usage flags
     val usage = HardwareBuffer.USAGE_CPU_READ_RARELY or HardwareBuffer.USAGE_CPU_WRITE_RARELY
     val hwBuf = HardwareBuffer.create(8, 1, HardwareBuffer.RGBA_8888, 1, usage)
 
+    // Create a tensor buffer from the hardware buffer (Float32 type)
     val tb = TensorBuffer.createFromAhwb(0 /* Float32 */, shape, hwBuf, 0)
     assertThat(tb.handle).isNotEqualTo(0L)
 
-    // Read from it, etc.
+    // Clean up resources
     tb.destroy()
   }
 
   @Test
   fun tensorScopedLockTest() {
-
     val capacityBytes = 8
     val directBuf = AlignedBufferUtils.create64ByteAlignedByteBuffer(capacityBytes)
     directBuf.putFloat(123.0f)
     directBuf.putFloat(456.0f)
     directBuf.rewind()
 
-    // shape => [1,2], elementTypeCode => 0 => Float32
-    // Acquire (or create) a small buffer
+    // Create a tensor buffer with shape [1,2] and Float32 type
     val tb =
       TensorBuffer.createFromDirectBuffer(
         elementTypeCode = 0, // float32
         shape = intArrayOf(1, 2),
         directBuffer = directBuf,
       )
-    // Write data via your normal method
+    // Initialize buffer with test values
     tb.writeFloat(floatArrayOf(100f, 200f))
 
-    // Now create a lock
+    // Acquire a scoped lock for direct memory access
     val lock = TensorBufferScopedLock.create(tb)
     assertThat(lock).isNotNull()
     lock!!.use {
-      // We can see the native pointer (not super useful in pure Kotlin alone)
+      // Get the native memory pointer for potential native operations
       val nativePtr = it.ptr
       assertThat(nativePtr).isNotEqualTo(0L)
-      // ... if you had a custom native op that writes to that pointer, do it now ...
-    } // auto unlock on close
+      // Native operations could be performed here with the pointer
+    } // Lock is automatically released when exiting the scope
 
-    // Check data is still intact:
+    // Verify data integrity after lock release
     val readBack = tb.readFloat()
     assertThat(readBack).usingExactEquality().containsExactly(100f, 200f)
     tb.destroy()
@@ -237,13 +213,15 @@ class LiteRtTest {
 
   @Test
   fun eventAsyncWaitTest() {
-    // Suppose we get a sync fence FD from somewhere:
+    // Create an event from a sync fence file descriptor
+    // Using -1 as a dummy FD for testing purposes
     val dummyFd = -1
     val event = Event.createFromSyncFenceFd(dummyFd, ownsFd = false)
-    // If creation fails, handle==0
+    // Verify event creation succeeded
     assertThat(event.handle).isNotEqualTo(0L)
-    // Wait
+    // Wait for the fence with a timeout of 500ms
     event.waitFence(500 /* ms */)
+    // Clean up resources
     event.destroy()
   }
 

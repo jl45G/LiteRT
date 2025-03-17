@@ -26,10 +26,9 @@ Java_com_google_ai_edge_litert_Event_nativeCreateFromSyncFenceFd(
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_Event_nativeCreateFromOpenClEvent(
     JNIEnv* env, jclass clazz, jlong cl_event_handle) {
-#if defined(LITERT_HAS_OPENCL_SUPPORT) || \
-    defined(__ANDROID__)  // or your own guard
+#if defined(LITERT_HAS_OPENCL_SUPPORT) || defined(__ANDROID__)
   LiteRtEvent event = nullptr;
-  // reinterpret user pointer for cl_event
+  // Convert the handle to an OpenCL event
   cl_event c_ev = reinterpret_cast<cl_event>(cl_event_handle);
 
   LiteRtStatus status = LiteRtCreateEventFromOpenClEvent(c_ev, &event);
@@ -39,7 +38,7 @@ Java_com_google_ai_edge_litert_Event_nativeCreateFromOpenClEvent(
   }
   return reinterpret_cast<jlong>(event);
 #else
-  LITERT_LOG(LITERT_ERROR, "OpenCL not supported on this build.");
+  LITERT_LOG(LITERT_ERROR, "OpenCL not supported in this build.");
   return 0;
 #endif
 }
@@ -49,7 +48,7 @@ Java_com_google_ai_edge_litert_Event_nativeCreateManaged(JNIEnv* env,
                                                          jclass clazz,
                                                          jint event_type) {
   LiteRtEvent event = nullptr;
-  // event_type is a LiteRtEventType. e.g. 0 => kLiteRtEventTypeUnknown
+  // Convert Java int to LiteRtEventType enum
   auto ctype = static_cast<LiteRtEventType>(event_type);
 
   LiteRtStatus status = LiteRtCreateManagedEvent(ctype, &event);
@@ -114,7 +113,7 @@ JNIEXPORT jint JNICALL Java_com_google_ai_edge_litert_Event_nativeGetType(
   LiteRtStatus status =
       LiteRtGetEventEventType(reinterpret_cast<LiteRtEvent>(event_handle), &t);
   if (status != kLiteRtStatusOk) {
-    LITERT_LOG(LITERT_ERROR, "GetEventType fail: handle=%p",
+    LITERT_LOG(LITERT_ERROR, "GetEventType failed: handle=%p",
                (void*)event_handle);
     return -1;
   }

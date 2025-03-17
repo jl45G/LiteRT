@@ -27,7 +27,7 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif  // __cplusplus
 
 static bool IsDirectBuffer(JNIEnv* env, jobject buffer) {
   return (env->GetDirectBufferAddress(buffer) != nullptr);
@@ -75,124 +75,100 @@ static litert::RankedTensorType MakeRankedTensorType(
   return litert::RankedTensorType(elemType, std::move(layout));
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// (A) Existing JNI methods (read/write arrays)
-////////////////////////////////////////////////////////////////////////////////
 JNIEXPORT void JNICALL
-Java_com_google_ai_edge_litert_TensorBuffer_nativeWriteInt(JNIEnv* env, jclass,
+Java_com_google_ai_edge_litert_TensorBuffer_nativeWriteInt(JNIEnv* env,
+                                                           jclass clazz,
                                                            jlong handle,
                                                            jintArray input) {
-  if (!handle) return;
-  auto c_buffer = reinterpret_cast<LiteRtTensorBuffer>(handle);
-  litert::TensorBuffer tb(c_buffer, false);
+  auto input_array = env->GetIntArrayElements(input, nullptr);
+  auto num_elements = env->GetArrayLength(input);
+  auto input_span = absl::MakeConstSpan(input_array, num_elements);
 
-  jsize num_elements = env->GetArrayLength(input);
-  jint* data_ptr = env->GetIntArrayElements(input, nullptr);
-
-  absl::Span<const jint> data_span(data_ptr, num_elements);
-  auto result = tb.Write<jint>(data_span);
-
-  env->ReleaseIntArrayElements(input, data_ptr, JNI_ABORT);
-
-  if (!result) {
-    LITERT_LOG(LITERT_ERROR, "nativeWriteInt failed => %s",
-               result.Error().Message().c_str());
+  auto tb = reinterpret_cast<LiteRtTensorBuffer>(handle);
+  auto tensor_buffer = litert::TensorBuffer(tb, false);
+  auto write_result = tensor_buffer.Write<jint>(input_span);
+  env->ReleaseIntArrayElements(input, input_array, JNI_ABORT);
+  if (!write_result) {
+    LITERT_LOG(LITERT_ERROR, "Failed to write tensor buffer.");
   }
 }
 
 JNIEXPORT void JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeWriteFloat(
-    JNIEnv* env, jclass, jlong handle, jfloatArray input) {
-  if (!handle) return;
-  auto c_buffer = reinterpret_cast<LiteRtTensorBuffer>(handle);
-  litert::TensorBuffer tb(c_buffer, false);
+    JNIEnv* env, jclass clazz, jlong handle, jfloatArray input) {
+  auto input_array = env->GetFloatArrayElements(input, nullptr);
+  auto num_elements = env->GetArrayLength(input);
+  auto input_span = absl::MakeConstSpan(input_array, num_elements);
 
-  jsize num_elems = env->GetArrayLength(input);
-  jfloat* data_ptr = env->GetFloatArrayElements(input, nullptr);
-
-  absl::Span<const jfloat> data_span(data_ptr, num_elems);
-  auto result = tb.Write<jfloat>(data_span);
-
-  env->ReleaseFloatArrayElements(input, data_ptr, JNI_ABORT);
-  if (!result) {
-    LITERT_LOG(LITERT_ERROR, "nativeWriteFloat failed => %s",
-               result.Error().Message().c_str());
+  auto tb = reinterpret_cast<LiteRtTensorBuffer>(handle);
+  auto tensor_buffer = litert::TensorBuffer(tb, false);
+  auto write_result = tensor_buffer.Write<jfloat>(input_span);
+  env->ReleaseFloatArrayElements(input, input_array, JNI_ABORT);
+  if (!write_result) {
+    LITERT_LOG(LITERT_ERROR, "Failed to write tensor buffer.");
   }
 }
 
 JNIEXPORT jintArray JNICALL
-Java_com_google_ai_edge_litert_TensorBuffer_nativeReadInt(JNIEnv* env, jclass,
+Java_com_google_ai_edge_litert_TensorBuffer_nativeReadInt(JNIEnv* env,
+                                                          jclass clazz,
                                                           jlong handle) {
-  if (!handle) return nullptr;
-  litert::TensorBuffer tb(reinterpret_cast<LiteRtTensorBuffer>(handle), false);
-
-  auto type_or = tb.TensorType();
-  if (!type_or) {
-    LITERT_LOG(LITERT_ERROR, "nativeReadInt: no tensor type => %s",
-               type_or.Error().Message().c_str());
+  auto tb = reinterpret_cast<LiteRtTensorBuffer>(handle);
+  auto tensor_buffer = litert::TensorBuffer(tb, false);
+  auto tensor_type = tensor_buffer.TensorType();
+  if (!tensor_type) {
+    LITERT_LOG(LITERT_ERROR, "Failed to get tensor type.");
     return nullptr;
   }
-  auto num_elems = type_or->Layout().NumElements();
-  if (!num_elems.has_value()) {
-    LITERT_LOG(LITERT_ERROR, "nativeReadInt: dynamic shape not supported");
+  auto num_elements = tensor_type->Layout().NumElements();
+  if (!num_elements) {
+    LITERT_LOG(LITERT_ERROR, "Failed to get tensor num elements.");
     return nullptr;
   }
-
-  std::vector<int> temp(num_elems.value());
-  auto read_res = tb.Read<int>(absl::MakeSpan(temp));
-  if (!read_res) {
-    LITERT_LOG(LITERT_ERROR, "nativeReadInt: read fail => %s",
-               read_res.Error().Message().c_str());
-    return nullptr;
-  }
-
-  jintArray result = env->NewIntArray(num_elems.value());
-  env->SetIntArrayRegion(result, 0, num_elems.value(), temp.data());
+  auto lock_and_addr =
+      litert::TensorBufferScopedLock::Create<const int>(tensor_buffer);
+  jintArray result = env->NewIntArray(num_elements.value());
+  // Copy the data from the locked tensor buffer to the JVM array.
+  env->SetIntArrayRegion(result, 0, num_elements.value(),
+                         lock_and_addr->second);
   return result;
 }
 
 JNIEXPORT jfloatArray JNICALL
-Java_com_google_ai_edge_litert_TensorBuffer_nativeReadFloat(JNIEnv* env, jclass,
+Java_com_google_ai_edge_litert_TensorBuffer_nativeReadFloat(JNIEnv* env,
+                                                            jclass clazz,
                                                             jlong handle) {
-  if (!handle) return nullptr;
-  litert::TensorBuffer tb(reinterpret_cast<LiteRtTensorBuffer>(handle), false);
-
-  auto type_or = tb.TensorType();
-  if (!type_or) {
-    LITERT_LOG(LITERT_ERROR, "nativeReadFloat: no tensor type => %s",
-               type_or.Error().Message().c_str());
+  auto tb = reinterpret_cast<LiteRtTensorBuffer>(handle);
+  auto tensor_buffer = litert::TensorBuffer(tb, false);
+  auto tensor_type = tensor_buffer.TensorType();
+  if (!tensor_type) {
+    LITERT_LOG(LITERT_ERROR, "Failed to get tensor type.");
     return nullptr;
   }
-  auto num_elems = type_or->Layout().NumElements();
-  if (!num_elems.has_value()) {
-    LITERT_LOG(LITERT_ERROR, "nativeReadFloat: dynamic shape not supported");
-    return nullptr;
-  }
-
-  std::vector<float> temp(num_elems.value());
-  auto read_res = tb.Read<float>(absl::MakeSpan(temp));
-  if (!read_res) {
-    LITERT_LOG(LITERT_ERROR, "nativeReadFloat: read fail => %s",
-               read_res.Error().Message().c_str());
+  auto num_elements = tensor_type->Layout().NumElements();
+  if (!num_elements) {
+    LITERT_LOG(LITERT_ERROR, "Failed to get tensor num elements.");
     return nullptr;
   }
 
-  jfloatArray result = env->NewFloatArray(num_elems.value());
-  env->SetFloatArrayRegion(result, 0, num_elems.value(), temp.data());
+  auto lock_and_addr =
+      litert::TensorBufferScopedLock::Create<const float>(tensor_buffer);
+  jfloatArray result = env->NewFloatArray(num_elements.value());
+  // Copy the data from the locked tensor buffer to the JVM array.
+  env->SetFloatArrayRegion(result, 0, num_elements.value(),
+                           lock_and_addr->second);
   return result;
 }
 
 JNIEXPORT void JNICALL
-Java_com_google_ai_edge_litert_TensorBuffer_nativeDestroy(JNIEnv* env, jclass,
+Java_com_google_ai_edge_litert_TensorBuffer_nativeDestroy(JNIEnv* env,
+                                                          jclass clazz,
                                                           jlong handle) {
-  if (handle) {
-    LiteRtDestroyTensorBuffer(reinterpret_cast<LiteRtTensorBuffer>(handle));
-  }
+  LiteRtDestroyTensorBuffer(reinterpret_cast<LiteRtTensorBuffer>(handle));
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// (B) Zero-copy JNI
-////////////////////////////////////////////////////////////////////////////////
+// Zero-copy buffer management methods
+
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromDirectBuffer(
     JNIEnv* env, jclass, jint element_type_code, jintArray dimensions,
@@ -217,7 +193,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromDirectBuffer(
   }
 
   auto tb_or = litert::TensorBuffer::CreateFromHostMemory(
-      rtype, addr, (size_t)size_in_bytes);
+      rtype, addr, static_cast<size_t>(size_in_bytes));
   if (!tb_or) {
     LITERT_LOG(LITERT_ERROR, "CreateFromHostMemory fail => %s",
                tb_or.Error().Message().c_str());
@@ -259,7 +235,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeWriteFromDirect(
     return;
   }
 
-  size_t n = std::min(*tb_size, (size_t)size_in_bytes);
+  size_t n = std::min(*tb_size, static_cast<size_t>(size_in_bytes));
   std::memcpy(dst, src_addr, n);
   tb.Unlock();
 }
@@ -297,14 +273,13 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeReadToDirect(
     return;
   }
 
-  size_t n = std::min(*tb_size, (size_t)size_in_bytes);
+  size_t n = std::min(*tb_size, static_cast<size_t>(size_in_bytes));
   std::memcpy(dst_addr, src, n);
   tb.Unlock();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// (C) EVENT-RELATED
-////////////////////////////////////////////////////////////////////////////////
+// Event management methods
+
 JNIEXPORT jboolean JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeHasEvent(
     JNIEnv* env, jclass, jlong buffer_handle) {
@@ -326,7 +301,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeGetEvent(
                ev_or.Error().Message().c_str());
     return 0;
   }
-  // This returns a non-owned handle
+  // Returns a non-owned handle to the event
   return reinterpret_cast<jlong>(ev_or->Get());
 }
 
@@ -370,7 +345,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeWaitOnEvent(
                ev_or.Error().Message().c_str());
     return;
   }
-  auto w = ev_or->Wait((int64_t)timeout_ms);
+  auto w = ev_or->Wait(static_cast<int64_t>(timeout_ms));
   if (!w) {
     LITERT_LOG(LITERT_ERROR, "nativeWaitOnEvent: wait fail => %s",
                w.Error().Message().c_str());
@@ -384,9 +359,8 @@ Java_com_google_ai_edge_litert_AlignedBufferUtils_nativeGetDirectBufferAddress(
   return reinterpret_cast<jlong>(addr);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// (D) AHardwareBuffer Interop
-////////////////////////////////////////////////////////////////////////////////
+// AHardwareBuffer integration methods
+
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromAhwb(
     JNIEnv* env, jclass, jint element_type_code, jintArray dimensions,
@@ -408,7 +382,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromAhwb(
     return 0;
   }
   auto tb_or =
-      litert::TensorBuffer::CreateFromAhwb(rtype, c_ahwb, (size_t)ahwb_offset);
+      litert::TensorBuffer::CreateFromAhwb(rtype, c_ahwb, static_cast<size_t>(ahwb_offset));
   if (!tb_or) {
     LITERT_LOG(LITERT_ERROR, "CreateFromAhwb fail => %s",
                tb_or.Error().Message().c_str());
@@ -416,7 +390,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromAhwb(
   }
   return reinterpret_cast<jlong>(tb_or->Release());
 #else
-  LITERT_LOG(LITERT_ERROR, "nativeCreateFromAhwb: < 29 not supported");
+  LITERT_LOG(LITERT_ERROR, "nativeCreateFromAhwb: Android API < 29 not supported");
   return 0;
 #endif
 }
@@ -440,14 +414,13 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeGetAhwb(
   jobject jhwbuf = AHardwareBuffer_toHardwareBuffer(env, c_ahwb);
   return jhwbuf;
 #else
-  LITERT_LOG(LITERT_ERROR, "nativeGetAhwb: < 29 not supported");
+  LITERT_LOG(LITERT_ERROR, "nativeGetAhwb: Android API < 29 not supported");
   return nullptr;
 #endif
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// (E) GL TEXTURE
-////////////////////////////////////////////////////////////////////////////////
+// OpenGL texture integration methods
+
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromGlTexture(
     JNIEnv* env, jclass, jint element_type_code, jintArray dimensions,
@@ -459,8 +432,9 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromGlTexture(
   auto rtype = MakeRankedTensorType(et, dims);
 
   auto tb_or = litert::TensorBuffer::CreateFromGlTexture(
-      rtype, (GLenum)glTarget, (GLuint)glId, (GLenum)glFormat,
-      (size_t)sizeBytes, (GLint)layer);
+      rtype, static_cast<GLenum>(glTarget), static_cast<GLuint>(glId), 
+      static_cast<GLenum>(glFormat), static_cast<size_t>(sizeBytes), 
+      static_cast<GLint>(layer));
   if (!tb_or) {
     LITERT_LOG(LITERT_ERROR, "CreateFromGlTexture fail => %s",
                tb_or.Error().Message().c_str());
@@ -468,7 +442,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromGlTexture(
   }
   return reinterpret_cast<jlong>(tb_or->Release());
 #else
-  LITERT_LOG(LITERT_ERROR, "nativeCreateFromGlTexture: no OpenGL support");
+  LITERT_LOG(LITERT_ERROR, "nativeCreateFromGlTexture: OpenGL support not available");
   return 0;
 #endif
 }
@@ -486,29 +460,27 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeGetGlTexture(
                gl_or.Error().Message().c_str());
     return nullptr;
   }
-  // We'll pack [target, id, format, sizeBytes (low32?), sizeBytes(hi32?),
-  // layer] into an int array If you only want the first few, adapt as needed.
+  // Return array with texture parameters: [target, id, format, sizeBytes(low32), sizeBytes(high32), layer]
   jintArray result = env->NewIntArray(6);
   jint vals[6];
-  vals[0] = (jint)gl_or->target;
-  vals[1] = (jint)gl_or->id;
-  vals[2] = (jint)gl_or->format;
-  // We can only pass 32-bit so let's do a simple split if needed
-  uint64_t sb = (uint64_t)(gl_or->size_bytes);
-  vals[3] = (jint)(sb & 0xFFFFFFFFul);
-  vals[4] = (jint)((sb >> 32) & 0xFFFFFFFFul);
-  vals[5] = (jint)gl_or->layer;
+  vals[0] = static_cast<jint>(gl_or->target);
+  vals[1] = static_cast<jint>(gl_or->id);
+  vals[2] = static_cast<jint>(gl_or->format);
+  // Split 64-bit size into two 32-bit values for JNI compatibility
+  uint64_t sb = static_cast<uint64_t>(gl_or->size_bytes);
+  vals[3] = static_cast<jint>(sb & 0xFFFFFFFFul);
+  vals[4] = static_cast<jint>((sb >> 32) & 0xFFFFFFFFul);
+  vals[5] = static_cast<jint>(gl_or->layer);
   env->SetIntArrayRegion(result, 0, 6, vals);
   return result;
 #else
-  LITERT_LOG(LITERT_ERROR, "nativeGetGlTexture: no OpenGL support");
+  LITERT_LOG(LITERT_ERROR, "nativeGetGlTexture: OpenGL support not available");
   return nullptr;
 #endif
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// (F) GL BUFFER
-////////////////////////////////////////////////////////////////////////////////
+// OpenGL buffer integration methods
+
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromGlBuffer(
     JNIEnv* env, jclass, jint element_type_code, jintArray dimensions,
@@ -520,7 +492,8 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromGlBuffer(
   auto rtype = MakeRankedTensorType(et, dims);
 
   auto tb_or = litert::TensorBuffer::CreateFromGlBuffer(
-      rtype, (GLenum)glTarget, (GLuint)glId, (size_t)sizeBytes, (size_t)offset);
+      rtype, static_cast<GLenum>(glTarget), static_cast<GLuint>(glId), 
+      static_cast<size_t>(sizeBytes), static_cast<size_t>(offset));
   if (!tb_or) {
     LITERT_LOG(LITERT_ERROR, "CreateFromGlBuffer fail => %s",
                tb_or.Error().Message().c_str());
@@ -528,7 +501,7 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeCreateFromGlBuffer(
   }
   return reinterpret_cast<jlong>(tb_or->Release());
 #else
-  LITERT_LOG(LITERT_ERROR, "nativeCreateFromGlBuffer: no OpenGL support");
+  LITERT_LOG(LITERT_ERROR, "nativeCreateFromGlBuffer: OpenGL support not available");
   return 0;
 #endif
 }
@@ -546,37 +519,32 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeGetGlBuffer(
                glbuf_or.Error().Message().c_str());
     return nullptr;
   }
-  // We'll pack [target, id, sizeBytesLow, sizeBytesHigh, offsetLow, offsetHigh]
-  // into a jlongArray (or int?) Here let's just do jlongArray of length 6 so we
-  // can store 64-bit fields directly.
+  // Return array with buffer parameters: [target, id, size_bytes, offset, 0, 0]
+  // Last two elements reserved for future use
   jlongArray result = env->NewLongArray(6);
   jlong vals[6];
-  vals[0] = (jlong)(glbuf_or->target);  // though it's typically 32-bit
-  vals[1] = (jlong)(glbuf_or->id);
-  vals[2] = (jlong)(glbuf_or->size_bytes);
-  vals[3] = (jlong)(glbuf_or->offset);
-  // The last two can be zeros if you want, or use them for something else
-  vals[4] = 0;
-  vals[5] = 0;
+  vals[0] = static_cast<jlong>(glbuf_or->target);
+  vals[1] = static_cast<jlong>(glbuf_or->id);
+  vals[2] = static_cast<jlong>(glbuf_or->size_bytes);
+  vals[3] = static_cast<jlong>(glbuf_or->offset);
+  vals[4] = 0;  // Reserved for future use
+  vals[5] = 0;  // Reserved for future use
   env->SetLongArrayRegion(result, 0, 6, vals);
   return result;
 #else
-  LITERT_LOG(LITERT_ERROR, "nativeGetGlBuffer: no OpenGL support");
+  LITERT_LOG(LITERT_ERROR, "nativeGetGlBuffer: OpenGL support not available");
   return nullptr;
 #endif
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// TENSOR SCOPED LOCK IMPLEMENTATION
-////////////////////////////////////////////////////////////////////////////////
+// TensorBufferScopedLock implementation
 
-// We store a small struct to remember the buffer handle & the locked pointer.
+// Structure to track tensor buffer handle and locked pointer.
 struct JniTensorScopedLock {
   LiteRtTensorBuffer c_tensor_buffer = nullptr;
   void* locked_ptr = nullptr;
 };
 
-// 1) CREATE SCOPED LOCK
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBufferScopedLock_nativeCreateScopedLock(
     JNIEnv* env, jclass /*clazz*/, jlong tensor_buffer_handle) {
@@ -585,11 +553,12 @@ Java_com_google_ai_edge_litert_TensorBufferScopedLock_nativeCreateScopedLock(
     return 0;
   }
 
-  // Wrap it in the C++ convenience class (non‐owned).
+  // Create non-owned wrapper for the tensor buffer
   litert::TensorBuffer tb(
       reinterpret_cast<LiteRtTensorBuffer>(tensor_buffer_handle),
       /*owned=*/false);
-  // Attempt to lock
+  
+  // Lock the tensor buffer for memory access
   auto lockResult = tb.Lock();
   if (!lockResult) {
     LITERT_LOG(LITERT_ERROR, "nativeCreateScopedLock: Lock() failed => %s",
@@ -597,23 +566,22 @@ Java_com_google_ai_edge_litert_TensorBufferScopedLock_nativeCreateScopedLock(
     return 0;
   }
 
-  // Allocate a small struct on the heap to store the info.
+  // Allocate tracking structure for the lock
   auto* scopedLock = new (std::nothrow) JniTensorScopedLock;
   if (!scopedLock) {
     LITERT_LOG(LITERT_ERROR,
-               "nativeCreateScopedLock: OOM allocating lock struct");
-    // Must unlock if we can’t store it
+               "nativeCreateScopedLock: Failed to allocate lock structure");
     tb.Unlock();
     return 0;
   }
+  
   scopedLock->c_tensor_buffer =
       reinterpret_cast<LiteRtTensorBuffer>(tensor_buffer_handle);
   scopedLock->locked_ptr = *lockResult;
-  // Return the pointer to this struct as a jlong
+  
   return reinterpret_cast<jlong>(scopedLock);
 }
 
-// 2) GET LOCKED POINTER
 JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_TensorBufferScopedLock_nativeGetLockedPointer(
     JNIEnv* env, jclass /*clazz*/, jlong scoped_lock_handle) {
@@ -621,33 +589,30 @@ Java_com_google_ai_edge_litert_TensorBufferScopedLock_nativeGetLockedPointer(
     return 0;
   }
   auto* lockObj = reinterpret_cast<JniTensorScopedLock*>(scoped_lock_handle);
-  // Return the pointer as a jlong
   return reinterpret_cast<jlong>(lockObj->locked_ptr);
 }
 
-// 3) DESTROY SCOPED LOCK
 JNIEXPORT void JNICALL
 Java_com_google_ai_edge_litert_TensorBufferScopedLock_nativeDestroyScopedLock(
     JNIEnv* env, jclass /*clazz*/, jlong scoped_lock_handle) {
   if (!scoped_lock_handle) return;
   auto* lockObj = reinterpret_cast<JniTensorScopedLock*>(scoped_lock_handle);
   if (!lockObj->c_tensor_buffer) {
-    // Nothing to unlock
     delete lockObj;
     return;
   }
 
-  // Actually call Unlock on the underlying buffer
+  // Unlock the tensor buffer
   litert::TensorBuffer tb(lockObj->c_tensor_buffer, /*owned=*/false);
   auto st = tb.Unlock();
   if (!st) {
     LITERT_LOG(LITERT_ERROR, "nativeDestroyScopedLock: unlock failed => %s",
                st.Error().Message().c_str());
   }
-  // free
+  
   delete lockObj;
 }
 
 #ifdef __cplusplus
-}
-#endif
+}  // extern "C"
+#endif  // __cplusplus

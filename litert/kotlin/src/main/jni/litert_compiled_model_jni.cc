@@ -220,29 +220,24 @@ JNIEXPORT void JNICALL Java_com_google_ai_edge_litert_CompiledModel_nativeRun(
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// NEW: Asynchronous run JNI method
-////////////////////////////////////////////////////////////////////////////////
 JNIEXPORT jboolean JNICALL
 Java_com_google_ai_edge_litert_CompiledModel_nativeRunAsync(
     JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
     jint signature_index, jlongArray input_buffers, jlongArray output_buffers) {
-  // Convert the raw jlong to a compiled model handle
   auto compiled_model = CreateCompileModel(compiled_model_handle, model_handle);
 
-  // Gather input buffer handles
+  // Process input buffers
   const int num_inputs = env->GetArrayLength(input_buffers);
   jlong* inputs = env->GetLongArrayElements(input_buffers, nullptr);
   std::vector<litert::TensorBuffer> input_buffer_vector;
   input_buffer_vector.reserve(num_inputs);
   for (int i = 0; i < num_inputs; ++i) {
     auto c_buffer = reinterpret_cast<LiteRtTensorBuffer>(inputs[i]);
-    // false = do not own these buffers from the JNI side
     input_buffer_vector.emplace_back(c_buffer, /*owned=*/false);
   }
   env->ReleaseLongArrayElements(input_buffers, inputs, 0);
 
-  // Gather output buffer handles
+  // Process output buffers
   const int num_outputs = env->GetArrayLength(output_buffers);
   jlong* outputs = env->GetLongArrayElements(output_buffers, nullptr);
   std::vector<litert::TensorBuffer> output_buffer_vector;
@@ -253,21 +248,18 @@ Java_com_google_ai_edge_litert_CompiledModel_nativeRunAsync(
   }
   env->ReleaseLongArrayElements(output_buffers, outputs, 0);
 
-  // Actually run asynchronously (if possible)
+  // Execute model asynchronously if supported
   bool async_executed = false;
   auto result = compiled_model.RunAsync(
       static_cast<size_t>(signature_index), input_buffer_vector,
       output_buffer_vector, /*OUT*/ async_executed);
 
   if (!result) {
-    // If you want to throw an exception in Java, do it here.
-    // Or just log an error for now:
     LITERT_LOG(LITERT_ERROR, "RunAsync() failed: %s",
                result.Error().Message().c_str());
-    return JNI_FALSE;  // Indicate error or fallback
+    return JNI_FALSE;
   }
 
-  // The boolean return indicates whether we are truly async
   return async_executed ? JNI_TRUE : JNI_FALSE;
 }
 
