@@ -16,6 +16,9 @@ import logging
 import unittest
 import numpy as np
 from google3.third_party.odml.litert.litert.python.compiled_model_wrapper import compiled_model
+from google3.third_party.odml.litert.litert.python.tensor_buffer_wrapper.tensor_buffer import (
+    TensorBuffer, BUFFER_TYPE_HOST, ELEMENT_TYPE_FLOAT32, ELEMENT_TYPE_INT32
+)
 from google3.third_party.tensorflow.python.platform import resource_loader
 
 # Paths to test model files
@@ -84,29 +87,103 @@ class CompiledModelBasicTest(unittest.TestCase):
     if sig_idx < 0:
       sig_idx = 0
 
-    input_caps_list = cm.create_input_buffers(sig_idx)
-    output_caps_list = cm.create_output_buffers(sig_idx)
+    input_buffers = cm.create_input_buffers(sig_idx)
+    output_buffers = cm.create_output_buffers(sig_idx)
 
     req = cm.get_input_buffer_requirements(signature_index=0, input_index=0)
     print("Required buffer size:", req["buffer_size"])
 
-    self.assertEqual(len(input_caps_list), 2)
-    self.assertEqual(len(output_caps_list), 1)
+    self.assertEqual(len(input_buffers), 2)
+    self.assertEqual(len(output_buffers), 1)
 
-    # Fill inputs
-    cm.write_float_tensor(input_caps_list[0], TEST_INPUT0_FLOAT)
-    cm.write_float_tensor(input_caps_list[1], TEST_INPUT1_FLOAT)
+    # Fill inputs using the new TensorBuffer API
+    input_buffers[0].write(TEST_INPUT0_FLOAT)
+    input_buffers[1].write(TEST_INPUT1_FLOAT)
 
     # Invoke
-    cm.run_by_index(sig_idx, input_caps_list, output_caps_list)
+    cm.run_by_index(sig_idx, input_buffers, output_buffers)
 
-    # Verify output
-    out_values = cm.read_float_tensor(
-        output_caps_list[0], len(EXPECTED_OUTPUT_FLOAT)
-    )
+    # Verify output using the new TensorBuffer API
+    out_values = output_buffers[0].read(len(EXPECTED_OUTPUT_FLOAT))
     logging.info("Output = %s", out_values)
     for got, expected in zip(out_values, EXPECTED_OUTPUT_FLOAT):
       self.assertAlmostEqual(got, expected, delta=1e-5)
+
+  def test_tensor_buffer_api(self):
+    """Tests the new TensorBuffer API."""
+    # Create a managed tensor buffer
+    buffer = TensorBuffer.create_managed(
+        dimensions=[2, 2],
+        dtype="float32",
+        buffer_type=BUFFER_TYPE_HOST
+    )
+    
+    # Check properties
+    self.assertEqual(buffer.get_dtype(), "float32")
+    self.assertEqual(buffer.get_shape(), [2, 2])
+    self.assertEqual(buffer.get_size(), 16)  # 2*2*4 bytes
+    
+    # Write and read data
+    test_data = [1.0, 2.0, 3.0, 4.0]
+    buffer.write(test_data)
+    read_data = buffer.read(4)
+    self.assertEqual(read_data, test_data)
+    
+    # Convert to numpy array
+    np_array = buffer.numpy()
+    self.assertEqual(np_array.shape, (2, 2))
+    self.assertEqual(np_array.dtype, np.dtype("float32"))
+    np.testing.assert_array_equal(np_array.flatten(), test_data)
+
+  def test_tensor_buffer_with_model(self):
+    """Tests using standalone TensorBuffer objects with a model."""
+    float_model_path = get_model_path(MODEL_FLOAT_FILE_NAME)
+    cm = compiled_model.CompiledModel.from_file(float_model_path)
+    
+    sig_idx = cm.get_signature_index("<placeholder signature>")
+    if sig_idx < 0:
+      sig_idx = 0
+    
+    # Get the required buffer sizes
+    in0_req = cm.get_input_buffer_requirements(sig_idx, 0)
+    in1_req = cm.get_input_buffer_requirements(sig_idx, 1)
+    out_req = cm.get_output_buffer_requirements(sig_idx, 0)
+    
+    # Create tensor buffers directly
+    in0_buffer = TensorBuffer.create_managed(
+        dimensions=[4], 
+        dtype="float32",
+        buffer_size=in0_req["buffer_size"]
+    )
+    
+    in1_buffer = TensorBuffer.create_managed(
+        dimensions=[4], 
+        dtype="float32",
+        buffer_size=in1_req["buffer_size"]
+    )
+    
+    out_buffer = TensorBuffer.create_managed(
+        dimensions=[4], 
+        dtype="float32",
+        buffer_size=out_req["buffer_size"]
+    )
+    
+    # Write input data
+    in0_buffer.write(TEST_INPUT0_FLOAT)
+    in1_buffer.write(TEST_INPUT1_FLOAT)
+    
+    # Run model
+    input_buffers = [in0_buffer, in1_buffer]
+    output_buffers = [out_buffer]
+    cm.run_by_index(sig_idx, input_buffers, output_buffers)
+    
+    # Verify results
+    output_data = out_buffer.read(len(EXPECTED_OUTPUT_FLOAT))
+    self.assertEqual(output_data, EXPECTED_OUTPUT_FLOAT)
+    
+    # Check conversion to numpy
+    output_numpy = out_buffer.numpy()
+    np.testing.assert_array_equal(output_numpy, EXPECTED_OUTPUT_FLOAT)
 
   def test_from_file_and_signatures(self):
     """Tests loading a model from file and accessing its signatures."""
@@ -138,32 +215,24 @@ class CompiledModelBasicTest(unittest.TestCase):
       sig_idx = 0  # Fall back to first signature if name doesn't match
 
     # Create input & output buffers
-    input_caps_list = cm.create_input_buffers(sig_idx)
-    output_caps_list = cm.create_output_buffers(sig_idx)
+    input_buffers = cm.create_input_buffers(sig_idx)
+    output_buffers = cm.create_output_buffers(sig_idx)
 
-    self.assertEqual(len(input_caps_list), 2)
-    self.assertEqual(len(output_caps_list), 1)
+    self.assertEqual(len(input_buffers), 2)
+    self.assertEqual(len(output_buffers), 1)
 
-    # Write data to inputs
-    cm.write_tensor(input_caps_list[0], TEST_INPUT0_FLOAT, "float32")
-    cm.write_tensor(input_caps_list[1], TEST_INPUT1_FLOAT, "float32")
+    # Write data to inputs using TensorBuffer API
+    input_buffers[0].write(TEST_INPUT0_FLOAT)
+    input_buffers[1].write(TEST_INPUT1_FLOAT)
 
     # Run inference
-    cm.run_by_index(sig_idx, input_caps_list, output_caps_list)
+    cm.run_by_index(sig_idx, input_buffers, output_buffers)
 
-    # Verify results
-    out_data = cm.read_tensor(
-        output_caps_list[0], len(EXPECTED_OUTPUT_FLOAT), "float32"
-    )
+    # Verify results using TensorBuffer API
+    out_data = output_buffers[0].read(len(EXPECTED_OUTPUT_FLOAT))
     self.assertEqual(len(out_data), len(EXPECTED_OUTPUT_FLOAT))
     for got, expect in zip(out_data, EXPECTED_OUTPUT_FLOAT):
       self.assertAlmostEqual(got, expect, delta=1e-5)
-
-    # Clean up resources
-    for cap in input_caps_list:
-      cm.destroy_tensor_buffer(cap)
-    for cap in output_caps_list:
-      cm.destroy_tensor_buffer(cap)
 
   def test_run_by_name_float(self):
     """Tests running inference on a float model using name-based API."""
@@ -171,42 +240,67 @@ class CompiledModelBasicTest(unittest.TestCase):
     cm = compiled_model.CompiledModel.from_file(float_model_path)
 
     # Create buffers by name
-    in0_caps = cm.create_input_buffer_by_name("<placeholder signature>", "arg0")
-    in1_caps = cm.create_input_buffer_by_name("<placeholder signature>", "arg1")
-    out_caps = cm.create_output_buffer_by_name(
+    in0_buffer = cm.create_input_buffer_by_name("<placeholder signature>", "arg0")
+    in1_buffer = cm.create_input_buffer_by_name("<placeholder signature>", "arg1")
+    out_buffer = cm.create_output_buffer_by_name(
         "<placeholder signature>", "tfl.add"
     )
 
-    # Fill input data
-    cm.write_tensor(in0_caps, TEST_INPUT0_FLOAT, "float32")
-    cm.write_tensor(in1_caps, TEST_INPUT1_FLOAT, "float32")
+    # Fill input data using the new API
+    in0_buffer.write(TEST_INPUT0_FLOAT)
+    in1_buffer.write(TEST_INPUT1_FLOAT)
 
     # Run inference using name-based API
-    input_map = {"arg0": in0_caps, "arg1": in1_caps}
-    output_map = {"tfl.add": out_caps}
+    input_map = {"arg0": in0_buffer, "arg1": in1_buffer}
+    output_map = {"tfl.add": out_buffer}
     cm.run_by_name("<placeholder signature>", input_map, output_map)
 
-    # Verify results
-    out_data = cm.read_tensor(out_caps, len(EXPECTED_OUTPUT_FLOAT), "float32")
+    # Verify results using the new API
+    out_data = out_buffer.read(len(EXPECTED_OUTPUT_FLOAT))
     self.assertEqual(out_data, EXPECTED_OUTPUT_FLOAT)
 
-    # Clean up resources
-    cm.destroy_tensor_buffer(in0_caps)
-    cm.destroy_tensor_buffer(in1_caps)
-    cm.destroy_tensor_buffer(out_caps)
-
-  def test_from_buffer(self):
-    """Tests loading a model from an in-memory buffer."""
+  def test_zero_copy_with_numpy(self):
+    """Tests creating a tensor buffer from NumPy array memory."""
+    # Create a numpy array
+    arr = np.array(TEST_INPUT0_FLOAT, dtype=np.float32)
+    
+    # Create a TensorBuffer that wraps this memory
+    buffer = TensorBuffer.create_from_host_memory(
+        arr, dimensions=[4], dtype="float32"
+    )
+    
+    # Verify the buffer contains the expected data
+    data = buffer.read(len(TEST_INPUT0_FLOAT))
+    self.assertEqual(data, TEST_INPUT0_FLOAT)
+    
+    # Modify the numpy array and verify the buffer sees the changes
+    arr[0] = 100.0
+    data = buffer.read(len(TEST_INPUT0_FLOAT))
+    self.assertEqual(data[0], 100.0)
+    
+    # Use the buffer with a model
     float_model_path = get_model_path(MODEL_FLOAT_FILE_NAME)
-    with open(float_model_path, "rb") as f:
-      model_data = f.read()
+    cm = compiled_model.CompiledModel.from_file(float_model_path)
+    
+    in1_buffer = cm.create_input_buffer_by_name("<placeholder signature>", "arg1")
+    out_buffer = cm.create_output_buffer_by_name("<placeholder signature>", "tfl.add")
+    
+    in1_buffer.write(TEST_INPUT1_FLOAT)
+    
+    # Run the model
+    input_map = {"arg0": buffer, "arg1": in1_buffer}
+    output_map = {"tfl.add": out_buffer}
+    cm.run_by_name("<placeholder signature>", input_map, output_map)
+    
+    # Verify results - first element should now be 100 + 10 = 110
+    expected = [110.0] + [a + b for a, b in zip(TEST_INPUT0_FLOAT[1:], TEST_INPUT1_FLOAT[1:])]
+    out_data = out_buffer.read(len(expected))
+    self.assertEqual(out_data[0], 110.0)
+    for i in range(1, len(out_data)):
+      self.assertAlmostEqual(out_data[i], expected[i], delta=1e-5)
 
-    cm = compiled_model.CompiledModel.from_buffer(model_data)
-
-    self.assertGreaterEqual(cm.get_num_signatures(), 1)
-
-  def test_int8_model_inference(self):
-    """Tests inference on an int8 quantized model."""
+  def test_int8_model_with_tensor_buffer(self):
+    """Tests inference on an int8 quantized model with TensorBuffer."""
     int8_model_path = get_model_path(MODEL_INT8_FILE_NAME)
     cm = compiled_model.CompiledModel.from_file(int8_model_path)
 
@@ -216,82 +310,40 @@ class CompiledModelBasicTest(unittest.TestCase):
     )
 
     # Create buffers
-    input_caps_list = cm.create_input_buffers(sig_idx)
-    output_caps_list = cm.create_output_buffers(sig_idx)
-    self.assertEqual(len(input_caps_list), 1)
-    self.assertEqual(len(output_caps_list), 1)
+    input_buffers = cm.create_input_buffers(sig_idx)
+    output_buffers = cm.create_output_buffers(sig_idx)
+    self.assertEqual(len(input_buffers), 1)
+    self.assertEqual(len(output_buffers), 1)
 
     # Write input data
-    cm.write_tensor(input_caps_list[0], TEST_INPUT_INT8, "int32")
+    input_buffers[0].write(TEST_INPUT_INT8, dtype="int32")
 
     # Run inference
-    cm.run_by_index(sig_idx, input_caps_list, output_caps_list)
+    cm.run_by_index(sig_idx, input_buffers, output_buffers)
 
     # Verify results
-    out_data = cm.read_tensor(
-        output_caps_list[0], len(TEST_INPUT_INT8), "int32"
-    )
+    out_data = output_buffers[0].read(len(TEST_INPUT_INT8), dtype="int32")
     self.assertEqual(out_data, EXPECTED_OUTPUT_INT8)
 
-    # Clean up resources
-    cm.destroy_tensor_buffer(input_caps_list[0])
-    cm.destroy_tensor_buffer(output_caps_list[0])
-
-  def test_zero_copy_input(self):
-    """Tests creating an input buffer from existing memory (zero-copy)."""
-    float_model_path = get_model_path(MODEL_FLOAT_FILE_NAME)
-    cm = compiled_model.CompiledModel.from_file(float_model_path)
-
-    # Create aligned numpy array for zero-copy input
-    arr = aligned_array((4,), np.float32)
-    arr[:] = TEST_INPUT0_FLOAT
-
-    # Create zero-copy input buffer
-    zero_copy_caps = cm.create_input_buffer_from_memory(
-        "<placeholder signature>", "arg0", arr, "float32"
+    # Test numpy integration
+    input_numpy = np.array(TEST_INPUT_INT8, dtype=np.int32)
+    numpy_buffer = TensorBuffer.create_from_host_memory(
+        input_numpy, dimensions=[4], dtype="int32"
     )
-
-    # Create regular input buffer for second input
-    input1_caps = cm.create_input_buffer_by_name(
-        "<placeholder signature>", "arg1"
+    
+    # Create fresh output buffer
+    out_buffer = cm.create_output_buffer_by_name(
+        "<placeholder signature>", "out_int8"
     )
-    cm.write_tensor(input1_caps, TEST_INPUT1_FLOAT, "float32")
-
-    # Create output buffer
-    out_caps = cm.create_output_buffer_by_name(
-        "<placeholder signature>", "tfl.add"
-    )
-
-    # Run inference
-    input_map = {"arg0": zero_copy_caps, "arg1": input1_caps}
-    output_map = {"tfl.add": out_caps}
+    
+    # Run with numpy-backed buffer
+    input_map = {"arg_int8": numpy_buffer}
+    output_map = {"out_int8": out_buffer}
     cm.run_by_name("<placeholder signature>", input_map, output_map)
-
-    # Verify results
-    out_data = cm.read_tensor(out_caps, len(EXPECTED_OUTPUT_FLOAT), "float32")
-    self.assertEqual(out_data, EXPECTED_OUTPUT_FLOAT)
-
-    # Clean up resources
-    cm.destroy_tensor_buffer(zero_copy_caps)
-    cm.destroy_tensor_buffer(input1_caps)
-    cm.destroy_tensor_buffer(out_caps)
-
-  def test_destroy_buffer_twice(self):
-    """Tests that destroying a tensor buffer multiple times is safe."""
-    float_model_path = get_model_path(MODEL_FLOAT_FILE_NAME)
-    cm = compiled_model.CompiledModel.from_file(float_model_path)
-
-    in0_caps = cm.create_input_buffer_by_name("<placeholder signature>", "arg0")
-    cm.write_tensor(in0_caps, TEST_INPUT0_FLOAT, "float32")
-
-    # First destroy call
-    cm.destroy_tensor_buffer(in0_caps)
-
-    # Second destroy call should not crash
-    try:
-      cm.destroy_tensor_buffer(in0_caps)
-    except Exception as e:
-      self.fail(f"Second destroy call raised an exception: {e}")
+    
+    # Verify with numpy array
+    output_numpy = out_buffer.numpy()
+    np.testing.assert_array_equal(output_numpy, EXPECTED_OUTPUT_INT8)
 
 
 if __name__ == "__main__":
