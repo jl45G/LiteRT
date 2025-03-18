@@ -163,7 +163,7 @@ PyObject* BuildPyListFromFloat(absl::Span<const float> data) {
 }
 
 // Converts Python dimensions to C++ vector
-bool ConvertPyDimensionsToVector(PyObject* py_dimensions, 
+bool ConvertPyDimensionsToVector(PyObject* py_dimensions,
                               std::vector<int32_t>* out_dims,
                               std::string* error) {
   if (!PyList_Check(py_dimensions) && !PyTuple_Check(py_dimensions)) {
@@ -187,18 +187,18 @@ bool ConvertPyDimensionsToVector(PyObject* py_dimensions,
       *error = "Dimension values must be integers";
       return false;
     }
-    
+
     int32_t dim = PyLong_AsLong(dim_obj);
     Py_DECREF(dim_obj);
-    
+
     if (dim < 0) {
       *error = "Dimension values must be non-negative";
       return false;
     }
-    
+
     out_dims->push_back(dim);
   }
-  
+
   return true;
 }
 
@@ -213,76 +213,84 @@ TensorBufferWrapper::TensorBufferWrapper(litert::TensorBuffer tensor_buffer,
 TensorBufferWrapper* TensorBufferWrapper::CreateManagedBuffer(
     int buffer_type, int element_type, PyObject* dimensions,
     size_t buffer_size, std::string* out_error) {
-  
+
   // Convert Python dimensions to C++ vector
   std::vector<int32_t> dims;
   if (!ConvertPyDimensionsToVector(dimensions, &dims, out_error)) {
     return nullptr;
   }
-  
-  // Create ranked tensor type
-  litert::RankedTensorType tensor_type;
-  tensor_type.element_type = static_cast<LiteRtElementType>(element_type);
-  tensor_type.layout.rank = dims.size();
-  
+
+  // Create C API ranked tensor type
+  LiteRtRankedTensorType c_tensor_type;
+  c_tensor_type.element_type = static_cast<LiteRtElementType>(element_type);
+  c_tensor_type.layout.rank = dims.size();
+
   // Copy dimensions
   for (size_t i = 0; i < dims.size() && i < 8; i++) {
-    tensor_type.layout.dimensions[i] = dims[i];
+    c_tensor_type.layout.dimensions[i] = dims[i];
   }
-  
+  c_tensor_type.layout.strides = nullptr;  // No strides
+
+  // Create C++ API tensor type from C struct
+  litert::RankedTensorType tensor_type(c_tensor_type);
+
   // Create tensor buffer
   auto buffer_or = litert::TensorBuffer::CreateManaged(
       static_cast<LiteRtTensorBufferType>(buffer_type),
       tensor_type, buffer_size);
-  
+
   if (!buffer_or) {
     if (out_error) *out_error = buffer_or.Error().Message();
     return nullptr;
   }
-  
+
   return new TensorBufferWrapper(std::move(*buffer_or));
 }
 
 // Create a tensor buffer from host memory
 TensorBufferWrapper* TensorBufferWrapper::CreateFromHostMemory(
-    int element_type, PyObject* dimensions, 
+    int element_type, PyObject* dimensions,
     PyObject* host_memory_object, std::string* out_error) {
-  
+
   // Convert Python dimensions to C++ vector
   std::vector<int32_t> dims;
   if (!ConvertPyDimensionsToVector(dimensions, &dims, out_error)) {
     return nullptr;
   }
-  
-  // Create ranked tensor type
-  litert::RankedTensorType tensor_type;
-  tensor_type.element_type = static_cast<LiteRtElementType>(element_type);
-  tensor_type.layout.rank = dims.size();
-  
+
+  // Create C API ranked tensor type
+  LiteRtRankedTensorType c_tensor_type;
+  c_tensor_type.element_type = static_cast<LiteRtElementType>(element_type);
+  c_tensor_type.layout.rank = dims.size();
+
   // Copy dimensions
   for (size_t i = 0; i < dims.size() && i < 8; i++) {
-    tensor_type.layout.dimensions[i] = dims[i];
+    c_tensor_type.layout.dimensions[i] = dims[i];
   }
-  
+  c_tensor_type.layout.strides = nullptr;  // No strides
+
+  // Create C++ API tensor type from C struct
+  litert::RankedTensorType tensor_type(c_tensor_type);
+
   // Acquire buffer from Python object
   Py_buffer py_buf;
   if (PyObject_GetBuffer(host_memory_object, &py_buf, PyBUF_CONTIG_RO) < 0) {
     if (out_error) *out_error = "Failed to get buffer from Python object";
     return nullptr;
   }
-  
+
   // Create tensor buffer
   auto buffer_or = litert::TensorBuffer::CreateFromHostMemory(
       tensor_type, py_buf.buf, py_buf.len);
-  
+
   // Release Python buffer
   PyBuffer_Release(&py_buf);
-  
+
   if (!buffer_or) {
     if (out_error) *out_error = buffer_or.Error().Message();
     return nullptr;
   }
-  
+
   return new TensorBufferWrapper(std::move(*buffer_or));
 }
 
@@ -322,28 +330,32 @@ PyObject* TensorBufferWrapper::GetTensorType() {
   if (!type_or) {
     return ConvertErrorToPyExc(type_or.Error());
   }
-  
+
+  // Get C++ wrapper for tensor type
   auto tensor_type = *type_or;
-  
+
+  // Get underlying C struct from C++ wrapper
+  LiteRtRankedTensorType c_type = static_cast<LiteRtRankedTensorType>(tensor_type);
+
   // Build a dict with tensor type info
   PyObject* dict = PyDict_New();
-  
+
   // Add element type
-  PyDict_SetItemString(dict, "element_type", 
-                    PyLong_FromLong(tensor_type.element_type));
-  
+  PyDict_SetItemString(dict, "element_type",
+                    PyLong_FromLong(c_type.element_type));
+
   // Add rank
-  PyDict_SetItemString(dict, "rank", 
-                    PyLong_FromLong(tensor_type.layout.rank));
-  
+  PyDict_SetItemString(dict, "rank",
+                    PyLong_FromLong(c_type.layout.rank));
+
   // Add dimensions
-  PyObject* dims = PyList_New(tensor_type.layout.rank);
-  for (int i = 0; i < tensor_type.layout.rank; i++) {
-    PyList_SetItem(dims, i, PyLong_FromLong(tensor_type.layout.dimensions[i]));
+  PyObject* dims = PyList_New(c_type.layout.rank);
+  for (int i = 0; i < c_type.layout.rank; i++) {
+    PyList_SetItem(dims, i, PyLong_FromLong(c_type.layout.dimensions[i]));
   }
   PyDict_SetItemString(dict, "dimensions", dims);
   Py_DECREF(dims);
-  
+
   return dict;
 }
 
