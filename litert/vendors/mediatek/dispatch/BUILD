@@ -43,8 +43,7 @@ litert_dynamic_lib(
         "@org_tensorflow//tensorflow:android": ["-landroid"],
         "//conditions:default": [],
     }) + [
-        "-Wl,-soname=libLiteRtDispatch_GoogleTensor.so",
-        "-Wl,-lc++abi",
+        "-Wl,-soname=libLiteRtDispatch_Mediatek.so",
     ],
     shared_lib_name = "dispatch_api_so",
     so_name = "libLiteRtDispatch_Mediatek.so",

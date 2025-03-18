@@ -45,7 +45,6 @@ litert_dynamic_lib(
         "//conditions:default": [],
     }) + [
         "-Wl,-soname=libLiteRtDispatch_Qualcomm.so",
-        "-Wl,-lc++abi",
     ],
     shared_lib_name = "dispatch_api_so",
     so_name = "libLiteRtDispatch_Qualcomm.so",
