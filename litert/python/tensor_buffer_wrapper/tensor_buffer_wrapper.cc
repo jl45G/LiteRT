@@ -31,6 +31,8 @@
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_tensor_buffer.h"
+#include "litert/cc/litert_layout.h"
+#include "litert/cc/litert_element_type.h"
 
 namespace litert {
 namespace tensor_buffer_wrapper {
@@ -220,19 +222,16 @@ TensorBufferWrapper* TensorBufferWrapper::CreateManagedBuffer(
     return nullptr;
   }
 
-  // Create C API ranked tensor type
-  LiteRtRankedTensorType c_tensor_type;
-  c_tensor_type.element_type = static_cast<LiteRtElementType>(element_type);
-  c_tensor_type.layout.rank = dims.size();
+  // Create dimensions using Dimensions class (absl::InlinedVector)
+  litert::Dimensions litert_dims(dims.begin(), dims.end());
 
-  // Copy dimensions
-  for (size_t i = 0; i < dims.size() && i < 8; i++) {
-    c_tensor_type.layout.dimensions[i] = dims[i];
-  }
-  c_tensor_type.layout.strides = nullptr;  // No strides
+  // Create Layout object with these dimensions
+  litert::Layout layout(std::move(litert_dims));
 
-  // Create C++ API tensor type from C struct
-  litert::RankedTensorType tensor_type(c_tensor_type);
+  // Create RankedTensorType with element type and layout
+  litert::RankedTensorType tensor_type(
+      static_cast<litert::ElementType>(element_type),
+      std::move(layout));
 
   // Create tensor buffer
   auto buffer_or = litert::TensorBuffer::CreateManaged(
@@ -258,19 +257,16 @@ TensorBufferWrapper* TensorBufferWrapper::CreateFromHostMemory(
     return nullptr;
   }
 
-  // Create C API ranked tensor type
-  LiteRtRankedTensorType c_tensor_type;
-  c_tensor_type.element_type = static_cast<LiteRtElementType>(element_type);
-  c_tensor_type.layout.rank = dims.size();
+  // Create dimensions using Dimensions class (absl::InlinedVector)
+  litert::Dimensions litert_dims(dims.begin(), dims.end());
 
-  // Copy dimensions
-  for (size_t i = 0; i < dims.size() && i < 8; i++) {
-    c_tensor_type.layout.dimensions[i] = dims[i];
-  }
-  c_tensor_type.layout.strides = nullptr;  // No strides
+  // Create Layout object with these dimensions
+  litert::Layout layout(std::move(litert_dims));
 
-  // Create C++ API tensor type from C struct
-  litert::RankedTensorType tensor_type(c_tensor_type);
+  // Create RankedTensorType with element type and layout
+  litert::RankedTensorType tensor_type(
+      static_cast<litert::ElementType>(element_type),
+      std::move(layout));
 
   // Acquire buffer from Python object
   Py_buffer py_buf;
