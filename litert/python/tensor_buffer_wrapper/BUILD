@@ -22,10 +22,10 @@ package(
 )
 
 cc_library(
-    name = "compiled_model_wrapper_lib",
-    srcs = ["compiled_model_wrapper.cc"],
+    name = "tensor_buffer_wrapper_lib",
+    srcs = ["tensor_buffer_wrapper.cc"],
     hdrs = [
-        "compiled_model_wrapper.h",
+        "tensor_buffer_wrapper.h",
     ],
     deps = [
         "@com_google_absl//absl/container:flat_hash_map",
@@ -34,7 +34,6 @@ cc_library(
         "//litert/c:litert_model",
         "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_buffer_ref",
-        "//litert/cc:litert_compiled_model",
         "//litert/cc:litert_environment",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_model",
@@ -46,21 +45,20 @@ cc_library(
 )
 
 pybind_extension(
-    name = "_pywrap_litert_compiled_model_wrapper",
+    name = "_pywrap_litert_tensor_buffer_wrapper",
     srcs = [
-        "compiled_model_wrapper_pybind11.cc",
+        "tensor_buffer_wrapper_pybind11.cc",
     ],
-    hdrs = ["compiled_model_wrapper.h"],
+    hdrs = ["tensor_buffer_wrapper.h"],
     enable_stub_generation = True,
     link_in_framework = True,
     pytype_srcs = [
-        "_pywrap_litert_compiled_model_wrapper.pyi",
+        "_pywrap_litert_tensor_buffer_wrapper.pyi",
     ],
     deps = [
-        ":compiled_model_wrapper_lib",
+        ":tensor_buffer_wrapper_lib",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings:string_view",
-        "//litert/cc:litert_compiled_model",
         "//litert/cc:litert_environment",
         "//litert/cc:litert_model",
         "//litert/cc:litert_tensor_buffer",
@@ -71,57 +69,31 @@ pybind_extension(
 )
 
 py_strict_library(
-    name = "compiled_model",
+    name = "tensor_buffer",
     srcs = [
-        "compiled_model.py",
+        "tensor_buffer.py",
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//litert/python/compiled_model_wrapper:_pywrap_litert_compiled_model_wrapper",
-        "//litert/python/tensor_buffer_wrapper:tensor_buffer",
+        "//litert/python/tensor_buffer_wrapper:_pywrap_litert_tensor_buffer_wrapper",
         "//third_party/py/numpy",
     ],
 )
 
 py_strict_test(
-    name = "compiled_model_test",
-    srcs = ["compiled_model_test.py"],
-    data = [
-        "testdata/simple_model_float.tflite",
-        "testdata/simple_model_int.tflite",
-    ],
+    name = "tensor_buffer_test",
+    srcs = ["tensor_buffer_test.py"],
     # Static linking is required because this loads a cc_binary as a shared
     # library, which would otherwise create ODR violations.
     # copybara:uncomment linking_mode = "static",
     tags = [
-        "no_oss",  # TODO(b/190842754): Enable test in OSS.
+        "no_oss",  # TODO: Enable test in OSS.
     ],
     deps = [
-        ":compiled_model",
+        ":tensor_buffer",
         "//third_party/py/google/protobuf:use_fast_cpp_protos",  # Automatically added go/proto_python_upb_flip
         "//third_party/py/numpy",
         "//third_party/py/tensorflow",
         "@org_tensorflow//tensorflow/python/platform:resource_loader",
     ],
-)
-
-OUT_DIR = "$(RULEDIR)"
-
-CONVERTER = "@org_tensorflow//tensorflow/compiler/mlir/lite:tf_tfl_translate"
-
-CMD = """
-for mlir_file in $(SRCS); do
-    $(location {converter}) --input-mlir $$mlir_file --o={out_dir}/testdata/$$(basename $$mlir_file .mlir).tflite
-done
-""".format(
-    converter = CONVERTER,
-    out_dir = OUT_DIR,
-)
-
-genrule(
-    name = "mlir_test_data",
-    srcs = glob(["testdata/*.mlir"]),
-    outs = [s.removesuffix(".mlir") + ".tflite" for s in glob(["testdata/*.mlir"])],
-    cmd = CMD,
-    tools = [CONVERTER],
 )
