@@ -1,5 +1,3 @@
-# compiled_model_test.py
-
 # Copyright 2025 Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +17,7 @@ import unittest
 
 import numpy as np
 
-# The updated compiled_model with removed read/write methods
-from google3.third_party.odml.litert.litert.python.compiled_model_wrapper import compiled_model
-# Import the new python-level TensorBuffer for read/write/destroy
+from google3.third_party.odml.litert.litert.python.compiled_model_wrapper.compiled_model import CompiledModel
 from google3.third_party.odml.litert.litert.python.tensor_buffer_wrapper.tensor_buffer import TensorBuffer
 from google3.third_party.tensorflow.python.platform import resource_loader
 
@@ -40,17 +36,27 @@ EXPECTED_OUTPUT_INT8 = [1, 11, 21, 31]
 
 
 def get_model_path(model_filename):
-  """Returns the absolute path to a test model file."""
+  """Returns the absolute path to a test model file.
+  
+  Args:
+    model_filename: Name of the model file in the testdata directory.
+    
+  Returns:
+    String containing the absolute path to the model file.
+  """
   return resource_loader.get_path_to_datafile(model_filename)
 
 
 def aligned_array(shape, dtype, alignment=64):
   """Allocates a NumPy array with the specified memory alignment.
+  
+  Creates a NumPy array where the underlying memory is aligned to the specified
+  byte boundary, which is useful for hardware-specific optimizations.
 
   Args:
     shape: The shape of the array.
     dtype: The data type of the array.
-    alignment: The memory alignment in bytes.
+    alignment: The memory alignment in bytes (default: 64).
 
   Returns:
     A NumPy array with the specified alignment.
@@ -76,7 +82,7 @@ class CompiledModelBasicTest(unittest.TestCase):
 
   def test_basic(self):
     """Tests basic functionality of the CompiledModel."""
-    cm = compiled_model.CompiledModel.from_file(
+    cm = CompiledModel.from_file(
         resource_loader.get_path_to_datafile(MODEL_FLOAT_FILE_NAME)
     )
     num_signatures = cm.get_num_signatures()
@@ -87,7 +93,7 @@ class CompiledModelBasicTest(unittest.TestCase):
     if sig_idx < 0:
       sig_idx = 0
 
-    # Create buffers
+    # Create input and output buffers
     input_bufs = cm.create_input_buffers(sig_idx)
     output_bufs = cm.create_output_buffers(sig_idx)
 
@@ -97,14 +103,14 @@ class CompiledModelBasicTest(unittest.TestCase):
     self.assertEqual(len(input_bufs), 2)
     self.assertEqual(len(output_bufs), 1)
 
-    # Fill inputs using TensorBuffer's write()
+    # Populate input buffers with test data
     input_bufs[0].write(TEST_INPUT0_FLOAT, "float32")
     input_bufs[1].write(TEST_INPUT1_FLOAT, "float32")
 
-    # Invoke
+    # Execute the model
     cm.run_by_index(sig_idx, input_bufs, output_bufs)
 
-    # Verify output with TensorBuffer read()
+    # Retrieve and verify output values
     out_values = output_bufs[0].read(len(EXPECTED_OUTPUT_FLOAT), "float32")
     logging.info("Output = %s", out_values)
     for got, expected in zip(out_values, EXPECTED_OUTPUT_FLOAT):
@@ -113,27 +119,27 @@ class CompiledModelBasicTest(unittest.TestCase):
   def test_from_file_and_signatures(self):
     """Tests loading a model from file and accessing its signatures."""
     float_model_path = get_model_path(MODEL_FLOAT_FILE_NAME)
-    cm = compiled_model.CompiledModel.from_file(float_model_path)
+    cm = CompiledModel.from_file(float_model_path)
 
-    # Check number of signatures
+    # Verify signature count
     num_sigs = cm.get_num_signatures()
     self.assertGreaterEqual(num_sigs, 1)
 
-    # Get signature list
+    # Retrieve and validate signature metadata
     sig_list = cm.get_signature_list()
     self.assertIn("<placeholder signature>", sig_list)
     serving_default_info = sig_list["<placeholder signature>"]
     self.assertIn("inputs", serving_default_info)
     self.assertIn("outputs", serving_default_info)
 
-    # Check signature index
+    # Verify signature lookup works
     sig_idx = cm.get_signature_index("<placeholder signature>")
     self.assertNotEqual(sig_idx, -1)
 
   def test_run_by_index_float(self):
     """Tests running inference on a float model using index-based API."""
     float_model_path = get_model_path(MODEL_FLOAT_FILE_NAME)
-    cm = compiled_model.CompiledModel.from_file(float_model_path)
+    cm = CompiledModel.from_file(float_model_path)
 
     sig_idx = cm.get_signature_index("<placeholder signature>")
     if sig_idx < 0:
@@ -146,20 +152,20 @@ class CompiledModelBasicTest(unittest.TestCase):
     self.assertEqual(len(input_bufs), 2)
     self.assertEqual(len(output_bufs), 1)
 
-    # Write data
+    # Populate input buffers
     input_bufs[0].write(TEST_INPUT0_FLOAT, "float32")
     input_bufs[1].write(TEST_INPUT1_FLOAT, "float32")
 
-    # Run inference
+    # Execute the model
     cm.run_by_index(sig_idx, input_bufs, output_bufs)
 
-    # Verify results
+    # Verify inference results
     out_data = output_bufs[0].read(len(EXPECTED_OUTPUT_FLOAT), "float32")
     self.assertEqual(len(out_data), len(EXPECTED_OUTPUT_FLOAT))
     for got, expect in zip(out_data, EXPECTED_OUTPUT_FLOAT):
       self.assertAlmostEqual(got, expect, delta=1e-5)
 
-    # Clean up resources
+    # Release tensor buffer resources
     for buf in input_bufs:
       buf.destroy()
     for buf in output_bufs:
@@ -168,29 +174,29 @@ class CompiledModelBasicTest(unittest.TestCase):
   def test_run_by_name_float(self):
     """Tests running inference on a float model using name-based API."""
     float_model_path = get_model_path(MODEL_FLOAT_FILE_NAME)
-    cm = compiled_model.CompiledModel.from_file(float_model_path)
+    cm = CompiledModel.from_file(float_model_path)
 
-    # Create buffers by name
+    # Create buffers by tensor name
     in0_buf = cm.create_input_buffer_by_name("<placeholder signature>", "arg0")
     in1_buf = cm.create_input_buffer_by_name("<placeholder signature>", "arg1")
     out_buf = cm.create_output_buffer_by_name(
         "<placeholder signature>", "tfl.add"
     )
 
-    # Fill input data
+    # Populate input buffers
     in0_buf.write(TEST_INPUT0_FLOAT, "float32")
     in1_buf.write(TEST_INPUT1_FLOAT, "float32")
 
-    # Run inference using name-based API
+    # Execute the model using name-based API
     input_map = {"arg0": in0_buf, "arg1": in1_buf}
     output_map = {"tfl.add": out_buf}
     cm.run_by_name("<placeholder signature>", input_map, output_map)
 
-    # Verify results
+    # Verify inference results
     out_data = out_buf.read(len(EXPECTED_OUTPUT_FLOAT), "float32")
     self.assertEqual(out_data, EXPECTED_OUTPUT_FLOAT)
 
-    # Clean up resources
+    # Release tensor buffer resources
     in0_buf.destroy()
     in1_buf.destroy()
     out_buf.destroy()
@@ -201,49 +207,49 @@ class CompiledModelBasicTest(unittest.TestCase):
     with open(float_model_path, "rb") as f:
       model_data = f.read()
 
-    cm = compiled_model.CompiledModel.from_buffer(model_data)
+    cm = CompiledModel.from_buffer(model_data)
     self.assertGreaterEqual(cm.get_num_signatures(), 1)
 
   def test_int8_model_inference(self):
     """Tests inference on an int8 quantized model."""
     int8_model_path = get_model_path(MODEL_INT8_FILE_NAME)
-    cm = compiled_model.CompiledModel.from_file(int8_model_path)
+    cm = CompiledModel.from_file(int8_model_path)
 
     sig_idx = cm.get_signature_index("<placeholder signature>")
     self.assertNotEqual(
         sig_idx, -1, "Model must have '<placeholder signature>' signature."
     )
 
-    # Create buffers
+    # Create tensor buffers
     input_bufs = cm.create_input_buffers(sig_idx)
     output_bufs = cm.create_output_buffers(sig_idx)
     self.assertEqual(len(input_bufs), 1)
     self.assertEqual(len(output_bufs), 1)
 
-    # Write input data
+    # Populate input buffer
     input_bufs[0].write(TEST_INPUT_INT8, "int32")
 
-    # Run inference
+    # Execute the model
     cm.run_by_index(sig_idx, input_bufs, output_bufs)
 
-    # Verify results
+    # Verify inference results
     out_data = output_bufs[0].read(len(TEST_INPUT_INT8), "int32")
     self.assertEqual(out_data, EXPECTED_OUTPUT_INT8)
 
-    # Clean up resources
+    # Release tensor buffer resources
     input_bufs[0].destroy()
     output_bufs[0].destroy()
 
   def test_zero_copy_input(self):
     """Tests creating an input buffer from existing memory (zero-copy)."""
     float_model_path = get_model_path(MODEL_FLOAT_FILE_NAME)
-    cm = compiled_model.CompiledModel.from_file(float_model_path)
+    cm = CompiledModel.from_file(float_model_path)
 
     # Create aligned numpy array for zero-copy input
     arr = aligned_array((4,), np.float32)
     arr[:] = TEST_INPUT0_FLOAT
 
-    # Instead of cm.create_input_buffer_from_memory, use direct TensorBuffer from_host_memory
+    # Create a TensorBuffer that references the existing memory without copying
     zero_copy_buf = TensorBuffer.create_from_host_memory(
         data=arr, dtype="float32", num_elements=4
     )
@@ -259,16 +265,16 @@ class CompiledModelBasicTest(unittest.TestCase):
         "<placeholder signature>", "tfl.add"
     )
 
-    # Run inference
+    # Execute the model
     input_map = {"arg0": zero_copy_buf, "arg1": input1_buf}
     output_map = {"tfl.add": out_buf}
     cm.run_by_name("<placeholder signature>", input_map, output_map)
 
-    # Verify results
+    # Verify inference results
     out_data = out_buf.read(len(EXPECTED_OUTPUT_FLOAT), "float32")
     self.assertEqual(out_data, EXPECTED_OUTPUT_FLOAT)
 
-    # Clean up resources
+    # Release tensor buffer resources
     zero_copy_buf.destroy()
     input1_buf.destroy()
     out_buf.destroy()
@@ -276,7 +282,7 @@ class CompiledModelBasicTest(unittest.TestCase):
   def test_destroy_buffer_twice(self):
     """Tests that destroying a tensor buffer multiple times is safe."""
     float_model_path = get_model_path(MODEL_FLOAT_FILE_NAME)
-    cm = compiled_model.CompiledModel.from_file(float_model_path)
+    cm = CompiledModel.from_file(float_model_path)
 
     in0_buf = cm.create_input_buffer_by_name("<placeholder signature>", "arg0")
     in0_buf.write(TEST_INPUT0_FLOAT, "float32")

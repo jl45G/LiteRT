@@ -26,39 +26,80 @@ namespace litert {
 namespace tensor_buffer_wrapper {
 
 /**
- * A helper class to manage creation, reading, and writing to a
- * LiteRtTensorBuffer, exposed via pybind to Python.
+ * Wrapper class for LiteRtTensorBuffer operations exposed to Python.
  *
- * The methods here implement the logic that was originally in
- * compiled_model_wrapper for read/write. We keep all that functionality here so
- * that it's easy to create and manipulate TensorBuffers from Python without
- * going through a model.
+ * This class provides a C++ interface for creating, reading from, and writing to
+ * LiteRtTensorBuffer objects from Python. It encapsulates tensor buffer
+ * management functionality in a centralized location, allowing direct
+ * manipulation of tensor buffers without requiring a model instance.
  */
 class TensorBufferWrapper {
  public:
-  // Creates a new Python capsule that owns a newly created LiteRtTensorBuffer
-  // from host memory, with an optional deallocator if needed.
+  /**
+   * Creates a TensorBuffer from host memory and returns it as a Python capsule.
+   *
+   * @param py_data Python object containing the source data.
+   * @param dtype String representation of the data type (e.g., "float32").
+   * @param num_elements Number of elements in the tensor.
+   * @return A new Python capsule containing the LiteRtTensorBuffer, or nullptr on error.
+   */
   static PyObject* CreateFromHostMemory(PyObject* py_data,
                                         const std::string& dtype,
                                         Py_ssize_t num_elements);
 
-  // Writes Python data into the given TensorBuffer capsule.
+  /**
+   * Writes data from a Python list to a TensorBuffer.
+   *
+   * @param buffer_capsule Python capsule containing the LiteRtTensorBuffer.
+   * @param data_list Python list containing the data to write.
+   * @param dtype String representation of the data type.
+   * @return PyObject* indicating success (Py_None) or nullptr on error.
+   */
   static PyObject* WriteTensor(PyObject* buffer_capsule, PyObject* data_list,
                                const std::string& dtype);
 
-  // Reads data from the given TensorBuffer capsule into a Python list.
+  /**
+   * Reads data from a TensorBuffer into a new Python list.
+   *
+   * @param buffer_capsule Python capsule containing the LiteRtTensorBuffer.
+   * @param num_elements Number of elements to read.
+   * @param dtype String representation of the data type.
+   * @return A new Python list containing the tensor data, or nullptr on error.
+   */
   static PyObject* ReadTensor(PyObject* buffer_capsule, int num_elements,
                               const std::string& dtype);
 
-  // Explicitly destroy a TensorBuffer capsule (if the Python user wants).
+  /**
+   * Explicitly destroys a TensorBuffer and releases associated resources.
+   *
+   * @param buffer_capsule Python capsule containing the LiteRtTensorBuffer.
+   * @return PyObject* indicating success (Py_None) or nullptr on error.
+   */
   static PyObject* DestroyTensorBuffer(PyObject* buffer_capsule);
 
-  // Provide error conversion helpers.
+  /**
+   * Creates a Python exception with the given error message.
+   *
+   * @param msg The error message.
+   * @return nullptr after setting the Python exception.
+   */
   static PyObject* ReportError(const std::string& msg);
+
+  /**
+   * Converts a LiteRT error to a Python exception.
+   *
+   * @param error The LiteRT error to convert.
+   * @return nullptr after setting the Python exception.
+   */
   static PyObject* ConvertErrorToPyExc(const litert::Error& error);
 
  private:
-  // Helper: convert dtype string to a known byte width, or zero if unknown.
+  /**
+   * Returns the byte width of a data type.
+   *
+   * @param dtype String representation of the data type.
+   * @return Size in bytes of the data type, or 0 if unknown.
+   */
   static size_t ByteWidthOfDType(const std::string& dtype);
 };
 

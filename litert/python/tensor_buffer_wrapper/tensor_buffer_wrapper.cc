@@ -36,10 +36,12 @@ namespace litert {
 namespace tensor_buffer_wrapper {
 
 namespace {
-// A no-op deallocator.
+// A deallocator that performs no operation, used when the memory is managed
+// externally.
 static void NoopDeallocator(void*) {}
 
 // Destructor callback for the PyCapsule that owns a LiteRtTensorBuffer.
+// Releases the tensor buffer when the capsule is garbage collected.
 static void CapsuleTensorBufferDestructor(PyObject* capsule) {
   void* ptr = PyCapsule_GetPointer(capsule, "LiteRtTensorBuffer");
   if (ptr) {
@@ -47,7 +49,8 @@ static void CapsuleTensorBufferDestructor(PyObject* capsule) {
   }
 }
 
-// Convert a Python list of floats -> std::vector<float>, etc.
+// Converts a Python list of numeric values to a std::vector<float>.
+// Returns true on success, false on failure with error message populated.
 bool ConvertPyListToFloatVector(PyObject* py_list, std::vector<float>* out,
                                 std::string* error) {
   if (!PyList_Check(py_list)) {
@@ -68,6 +71,8 @@ bool ConvertPyListToFloatVector(PyObject* py_list, std::vector<float>* out,
   return true;
 }
 
+// Converts a Python list of integers to a std::vector<int32_t>.
+// Returns true on success, false on failure with error message populated.
 bool ConvertPyListToInt32Vector(PyObject* py_list, std::vector<int32_t>* out,
                                 std::string* error) {
   if (!PyList_Check(py_list)) {
@@ -92,6 +97,9 @@ bool ConvertPyListToInt32Vector(PyObject* py_list, std::vector<int32_t>* out,
   return true;
 }
 
+// Converts a Python list of integers to a std::vector<int8_t>.
+// Returns true on success, false on failure with error message populated.
+// Validates that values are within the int8_t range [-128, 127].
 bool ConvertPyListToInt8Vector(PyObject* py_list, std::vector<int8_t>* out,
                                std::string* error) {
   if (!PyList_Check(py_list)) {
@@ -120,7 +128,7 @@ bool ConvertPyListToInt8Vector(PyObject* py_list, std::vector<int8_t>* out,
   return true;
 }
 
-// Build Python list from raw data
+// Creates a Python list from a span of float values.
 PyObject* BuildPyListFromFloat(absl::Span<const float> data) {
   PyObject* py_list = PyList_New(data.size());
   for (size_t i = 0; i < data.size(); i++) {
@@ -128,6 +136,8 @@ PyObject* BuildPyListFromFloat(absl::Span<const float> data) {
   }
   return py_list;
 }
+
+// Creates a Python list from a span of int32_t values.
 PyObject* BuildPyListFromInt32(absl::Span<const int32_t> data) {
   PyObject* py_list = PyList_New(data.size());
   for (size_t i = 0; i < data.size(); i++) {
@@ -135,6 +145,8 @@ PyObject* BuildPyListFromInt32(absl::Span<const int32_t> data) {
   }
   return py_list;
 }
+
+// Creates a Python list from a span of int8_t values.
 PyObject* BuildPyListFromInt8(absl::Span<const int8_t> data) {
   PyObject* py_list = PyList_New(data.size());
   for (size_t i = 0; i < data.size(); i++) {
@@ -145,14 +157,18 @@ PyObject* BuildPyListFromInt8(absl::Span<const int8_t> data) {
 
 }  // namespace
 
+// Returns the size in bytes for the given data type.
 size_t TensorBufferWrapper::ByteWidthOfDType(const std::string& dtype) {
   if (dtype == "float32") return 4;
   if (dtype == "int32") return 4;
   if (dtype == "int8") return 1;
-  // Extend as needed, returning 0 for unknown
+  // Return 0 for unsupported data types
   return 0;
 }
 
+// Creates a TensorBuffer from existing host memory.
+// The memory is referenced, not copied, so the original data must outlive
+// the TensorBuffer unless it's explicitly copied.
 PyObject* TensorBufferWrapper::CreateFromHostMemory(PyObject* py_data,
                                                     const std::string& dtype,
                                                     Py_ssize_t num_elements) {
@@ -179,7 +195,7 @@ PyObject* TensorBufferWrapper::CreateFromHostMemory(PyObject* py_data,
   dummy_type.layout.dimensions[0] = (int32_t)num_elements;
   dummy_type.layout.strides = nullptr;
 
-  // Decide the element type
+  // Set the element type based on the dtype string
   if (dtype == "float32") {
     dummy_type.element_type = kLiteRtElementTypeFloat32;
   } else if (dtype == "int8") {
@@ -190,7 +206,7 @@ PyObject* TensorBufferWrapper::CreateFromHostMemory(PyObject* py_data,
     dummy_type.element_type = kLiteRtElementTypeNone;
   }
 
-  // Actually create the buffer
+  // Create the tensor buffer
   LiteRtTensorBuffer tensor_buffer = nullptr;
   LiteRtStatus status = LiteRtCreateTensorBufferFromHostMemory(
       &dummy_type, py_buf.buf, required_size, &NoopDeallocator, &tensor_buffer);
@@ -199,8 +215,7 @@ PyObject* TensorBufferWrapper::CreateFromHostMemory(PyObject* py_data,
     return ReportError("Failed LiteRtCreateTensorBufferFromHostMemory");
   }
 
-  // Create a PyCapsule to own the handle
-  // We'll store the Py_buffer so it won't be GC'd
+  // Create a context structure to manage the lifetime of resources
   struct CapsuleContext {
     Py_buffer py_buf;
     PyObject* py_obj;
@@ -211,9 +226,10 @@ PyObject* TensorBufferWrapper::CreateFromHostMemory(PyObject* py_data,
   ctx->py_obj = py_data;
   ctx->c_tensor_buffer = tensor_buffer;
 
-  // Keep a reference to the original py_data
+  // Keep a reference to the original py_data to prevent garbage collection
   Py_INCREF(py_data);
 
+  // Define the capsule destructor to clean up resources
   auto capsule_destructor = [](PyObject* capsule) {
     void* raw_ptr = PyCapsule_GetPointer(capsule, "LiteRtTensorBuffer");
     auto* ctx = static_cast<CapsuleContext*>(PyCapsule_GetContext(capsule));
@@ -227,6 +243,7 @@ PyObject* TensorBufferWrapper::CreateFromHostMemory(PyObject* py_data,
     }
   };
 
+  // Create a PyCapsule to own the tensor buffer and associated resources
   PyObject* capsule =
       PyCapsule_New(tensor_buffer, "LiteRtTensorBuffer", capsule_destructor);
   if (!capsule) {
@@ -240,6 +257,8 @@ PyObject* TensorBufferWrapper::CreateFromHostMemory(PyObject* py_data,
   return capsule;
 }
 
+// Writes data from a Python list to a TensorBuffer.
+// Supports float32, int32, and int8 data types.
 PyObject* TensorBufferWrapper::WriteTensor(PyObject* buffer_capsule,
                                            PyObject* data_list,
                                            const std::string& dtype) {
@@ -252,7 +271,7 @@ PyObject* TensorBufferWrapper::WriteTensor(PyObject* buffer_capsule,
   }
   litert::TensorBuffer tb((LiteRtTensorBuffer)ptr, /*owned=*/false);
 
-  // Convert the Python list to a C++ vector
+  // Convert the Python list to a C++ vector based on the data type
   std::string error;
   if (dtype == "float32") {
     std::vector<float> host_data;
@@ -286,6 +305,8 @@ PyObject* TensorBufferWrapper::WriteTensor(PyObject* buffer_capsule,
   }
 }
 
+// Reads data from a TensorBuffer into a Python list.
+// Supports float32, int32, and int8 data types.
 PyObject* TensorBufferWrapper::ReadTensor(PyObject* buffer_capsule,
                                           int num_elements,
                                           const std::string& dtype) {
@@ -321,6 +342,7 @@ PyObject* TensorBufferWrapper::ReadTensor(PyObject* buffer_capsule,
   }
 }
 
+// Explicitly destroys a TensorBuffer and releases associated resources.
 PyObject* TensorBufferWrapper::DestroyTensorBuffer(PyObject* buffer_capsule) {
   if (PyCapsule_CheckExact(buffer_capsule)) {
     if (void* ptr =
@@ -328,16 +350,16 @@ PyObject* TensorBufferWrapper::DestroyTensorBuffer(PyObject* buffer_capsule) {
       LiteRtDestroyTensorBuffer(static_cast<LiteRtTensorBuffer>(ptr));
     }
   }
-  // Optionally set the pointer to null to avoid double free
-  // PyCapsule_SetPointer(buffer_capsule, nullptr);
   Py_RETURN_NONE;
 }
 
+// Reports an error by setting a Python exception.
 PyObject* TensorBufferWrapper::ReportError(const std::string& msg) {
   PyErr_SetString(PyExc_RuntimeError, msg.c_str());
   return nullptr;
 }
 
+// Converts a LiteRT Error to a Python exception.
 PyObject* TensorBufferWrapper::ConvertErrorToPyExc(const litert::Error& error) {
   PyErr_Format(PyExc_RuntimeError,
                "TensorBufferWrapper error: code=%d, message=%s",

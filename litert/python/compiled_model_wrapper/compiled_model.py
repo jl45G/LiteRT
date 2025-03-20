@@ -1,5 +1,3 @@
-# Located at: google3/litert/python/compiled_model_wrapper/compiled_model.py
-
 # Copyright 2025 Google LLC.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,19 +16,26 @@
 
 from typing import Any, Dict, List
 
-# C++ binding for compiled models
 from google3.third_party.odml.litert.litert.python.compiled_model_wrapper import (
     _pywrap_litert_compiled_model_wrapper as _cm,
 )
-# The Python-level TensorBuffer class that wraps PyCapsules
 from google3.third_party.odml.litert.litert.python.tensor_buffer_wrapper.tensor_buffer import TensorBuffer
 
 
 class CompiledModel:
-  """Python-friendly wrapper around the C++ CompiledModelWrapper."""
+  """Python wrapper for the C++ CompiledModelWrapper.
+  
+  This class provides methods to load, inspect, and execute machine learning
+  models using the LiteRT runtime.
+  """
 
   def __init__(self, c_model_ptr):
-    self._model = c_model_ptr  # pointer to C++ CompiledModelWrapper
+    """Initializes the CompiledModel with a C++ model pointer.
+    
+    Args:
+      c_model_ptr: Pointer to the underlying C++ CompiledModelWrapper.
+    """
+    self._model = c_model_ptr  # Pointer to C++ CompiledModelWrapper
 
   @classmethod
   def from_file(
@@ -40,6 +45,17 @@ class CompiledModel:
       dispatch_library: str = "",
       hardware_accel: int = 0,
   ) -> "CompiledModel":
+    """Creates a CompiledModel from a model file.
+    
+    Args:
+      model_path: Path to the model file.
+      compiler_plugin: Optional compiler plugin to use.
+      dispatch_library: Optional dispatch library to use.
+      hardware_accel: Optional hardware acceleration flag.
+      
+    Returns:
+      A new CompiledModel instance.
+    """
     ptr = _cm.CreateCompiledModelFromFile(
         model_path, compiler_plugin, dispatch_library, hardware_accel
     )
@@ -53,31 +69,86 @@ class CompiledModel:
       dispatch_library: str = "",
       hardware_accel: int = 0,
   ) -> "CompiledModel":
+    """Creates a CompiledModel from an in-memory buffer.
+    
+    Args:
+      model_data: Model data as bytes.
+      compiler_plugin: Optional compiler plugin to use.
+      dispatch_library: Optional dispatch library to use.
+      hardware_accel: Optional hardware acceleration flag.
+      
+    Returns:
+      A new CompiledModel instance.
+    """
     ptr = _cm.CreateCompiledModelFromBuffer(
         model_data, compiler_plugin, dispatch_library, hardware_accel
     )
     return cls(ptr)
 
   def get_signature_list(self) -> Dict[str, Dict[str, List[str]]]:
+    """Returns a dictionary of all available model signatures.
+    
+    Returns:
+      Dictionary mapping signature names to their input/output specifications.
+    """
     return self._model.GetSignatureList()
 
   def get_signature_by_index(self, index: int) -> Dict[str, Any]:
+    """Returns signature information for the given index.
+    
+    Args:
+      index: Index of the signature to retrieve.
+      
+    Returns:
+      Dictionary containing signature information.
+    """
     return self._model.GetSignatureByIndex(index)
 
   def get_num_signatures(self) -> int:
+    """Returns the number of signatures in the model.
+    
+    Returns:
+      Number of signatures.
+    """
     return self._model.GetNumSignatures()
 
   def get_signature_index(self, key: str) -> int:
+    """Returns the index for a signature name.
+    
+    Args:
+      key: Name of the signature.
+      
+    Returns:
+      Index of the signature, or -1 if not found.
+    """
     return self._model.GetSignatureIndex(key)
 
   def get_input_buffer_requirements(
       self, signature_index: int, input_index: int
   ) -> Dict[str, Any]:
+    """Returns memory requirements for an input tensor.
+    
+    Args:
+      signature_index: Index of the signature.
+      input_index: Index of the input tensor.
+      
+    Returns:
+      Dictionary with buffer requirements (size, alignment, etc.).
+    """
     return self._model.GetInputBufferRequirements(signature_index, input_index)
 
   def get_output_buffer_requirements(
       self, signature_index: int, output_index: int
   ) -> Dict[str, Any]:
+    """Returns memory requirements for an output tensor.
+    
+    Args:
+      signature_index: Index of the signature.
+      output_index: Index of the output tensor.
+      
+    Returns:
+      Dictionary with buffer requirements (size, alignment, etc.).
+    """
     return self._model.GetOutputBufferRequirements(
         signature_index, output_index
     )
@@ -85,24 +156,54 @@ class CompiledModel:
   def create_input_buffer_by_name(
       self, signature_key: str, input_name: str
   ) -> TensorBuffer:
-    """Creates an input TensorBuffer for the specified signature & input name."""
+    """Creates an input TensorBuffer for the specified signature and input name.
+    
+    Args:
+      signature_key: Name of the signature.
+      input_name: Name of the input tensor.
+      
+    Returns:
+      A TensorBuffer object for the specified input.
+    """
     capsule = self._model.CreateInputBufferByName(signature_key, input_name)
     return TensorBuffer(capsule)
 
   def create_output_buffer_by_name(
       self, signature_key: str, output_name: str
   ) -> TensorBuffer:
-    """Creates an output TensorBuffer for the specified signature & output name."""
+    """Creates an output TensorBuffer for the specified signature and output name.
+    
+    Args:
+      signature_key: Name of the signature.
+      output_name: Name of the output tensor.
+      
+    Returns:
+      A TensorBuffer object for the specified output.
+    """
     capsule = self._model.CreateOutputBufferByName(signature_key, output_name)
     return TensorBuffer(capsule)
 
   def create_input_buffers(self, signature_index: int) -> List[TensorBuffer]:
-    """Creates a list of TensorBuffers for the signature's inputs."""
+    """Creates TensorBuffers for all inputs of the specified signature.
+    
+    Args:
+      signature_index: Index of the signature.
+      
+    Returns:
+      List of TensorBuffer objects for all inputs.
+    """
     capsule_list = self._model.CreateInputBuffers(signature_index)
     return [TensorBuffer(c) for c in capsule_list]
 
   def create_output_buffers(self, signature_index: int) -> List[TensorBuffer]:
-    """Creates a list of TensorBuffers for the signature's outputs."""
+    """Creates TensorBuffers for all outputs of the specified signature.
+    
+    Args:
+      signature_index: Index of the signature.
+      
+    Returns:
+      List of TensorBuffer objects for all outputs.
+    """
     capsule_list = self._model.CreateOutputBuffers(signature_index)
     return [TensorBuffer(c) for c in capsule_list]
 
@@ -112,7 +213,13 @@ class CompiledModel:
       input_map: Dict[str, TensorBuffer],
       output_map: Dict[str, TensorBuffer],
   ) -> None:
-    """Runs the model by signature name with input/output TensorBuffers."""
+    """Runs inference using the named signature and tensor maps.
+    
+    Args:
+      signature_key: Name of the signature to execute.
+      input_map: Dictionary mapping input names to TensorBuffer objects.
+      output_map: Dictionary mapping output names to TensorBuffer objects.
+    """
     # Convert TensorBuffer objects to raw capsules
     capsule_input_map = {k: v.capsule for k, v in input_map.items()}
     capsule_output_map = {k: v.capsule for k, v in output_map.items()}
@@ -124,7 +231,13 @@ class CompiledModel:
       input_buffers: List[TensorBuffer],
       output_buffers: List[TensorBuffer],
   ) -> None:
-    """Runs the model by signature index with input/output TensorBuffers."""
+    """Runs inference using the indexed signature and tensor lists.
+    
+    Args:
+      signature_index: Index of the signature to execute.
+      input_buffers: List of input TensorBuffer objects.
+      output_buffers: List of output TensorBuffer objects.
+    """
     input_capsules = [tb.capsule for tb in input_buffers]
     output_capsules = [tb.capsule for tb in output_buffers]
     self._model.RunByIndex(signature_index, input_capsules, output_capsules)

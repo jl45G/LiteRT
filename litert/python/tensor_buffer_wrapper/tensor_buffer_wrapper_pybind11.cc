@@ -32,9 +32,9 @@ PYBIND11_MODULE(_pywrap_litert_tensor_buffer_wrapper, m) {
     Python bindings for LiteRT TensorBuffers.
   )pbdoc";
 
-  // This function wraps the creation from host memory. If you want to
-  // unify it with your existing createManaged or createFromHostMemory
-  // approach, simply rename or expand as needed.
+  // Creates a TensorBuffer from existing host memory.
+  // The memory is not copied but referenced, so the original data must outlive
+  // the TensorBuffer unless it's explicitly copied.
   m.def(
       "CreateTensorBufferFromHostMemory",
       [](py::object py_data, const std::string& dtype,
@@ -46,14 +46,18 @@ PYBIND11_MODULE(_pywrap_litert_tensor_buffer_wrapper, m) {
       },
       py::arg("py_data"), py::arg("dtype"), py::arg("num_elements"));
 
+  // Writes data to an existing TensorBuffer.
+  // The data is copied from the provided Python list into the TensorBuffer.
   m.def("WriteTensor",
         [](py::object capsule, py::object data_list, std::string dtype) {
           PyObject* res = TensorBufferWrapper::WriteTensor(
               capsule.ptr(), data_list.ptr(), dtype);
           if (!res) throw py::error_already_set();
-          // Return None
+          // No return value needed
         });
 
+  // Reads data from a TensorBuffer into a Python list.
+  // The data is copied from the TensorBuffer into a new Python list.
   m.def("ReadTensor",
         [](py::object capsule, int num_elements, std::string dtype) {
           PyObject* res = TensorBufferWrapper::ReadTensor(capsule.ptr(),
@@ -62,9 +66,11 @@ PYBIND11_MODULE(_pywrap_litert_tensor_buffer_wrapper, m) {
           return py::reinterpret_steal<py::object>(res);
         });
 
+  // Destroys a TensorBuffer and releases associated resources.
+  // This should be called when the TensorBuffer is no longer needed.
   m.def("DestroyTensorBuffer", [](py::object capsule) {
     PyObject* res = TensorBufferWrapper::DestroyTensorBuffer(capsule.ptr());
     if (!res) throw py::error_already_set();
-    // Return None
+    // No return value needed
   });
 }
