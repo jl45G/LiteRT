@@ -201,8 +201,12 @@ cc_test(
         "//litert/c:litert_model",
         "//litert/c:litert_tensor_buffer",
         "//litert/c:litert_tensor_buffer_types",
+        "//litert/runtime:gpu_environment",
         "//litert/runtime:tensor_buffer",
         "//litert/test:matchers",
+        "@opencl_headers",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:buffer",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_command_queue",
     ] + select({
         "@org_tensorflow//tensorflow:android": [
             "@org_tensorflow//tensorflow/lite/delegates/gpu/gl:egl_environment",
