@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//devtools/python/blaze:strict.bzl", "py_strict_library")
+load("//devtools/python/blaze:strict.bzl", "py_strict_library", "py_strict_test")
 load("@org_tensorflow//tensorflow:tensorflow.google.bzl", "pybind_extension")
 
 package(
@@ -76,6 +76,18 @@ py_strict_library(
     visibility = ["//visibility:public"],
     deps = [
         "//litert/python/tensor_buffer_wrapper:_pywrap_litert_tensor_buffer_wrapper",
+        "//third_party/py/numpy",
+    ],
+)
+
+py_strict_test(
+    name = "tensor_buffer_test",
+    srcs = ["tensor_buffer_test.py"],
+    # Static linking is required because this loads a cc_binary as a shared
+    # library, which would otherwise create ODR violations.
+    # copybara:uncomment linking_mode = "static",
+    deps = [
+        ":tensor_buffer",
         "//third_party/py/numpy",
     ],
 )

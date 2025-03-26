@@ -106,6 +106,29 @@ py_strict_test(
     ],
 )
 
+py_strict_test(
+    name = "compiled_model_unit_test",
+    srcs = ["compiled_model_unit_test.py"],
+    data = [
+        "testdata/simple_model_float.mlir",
+        "testdata/simple_model_int.mlir",
+    ],
+    # Static linking is required because this loads a cc_binary as a shared
+    # library, which would otherwise create ODR violations.
+    # copybara:uncomment linking_mode = "static",
+    tags = [
+        "no_oss",  # TODO(b/190842754): Enable test in OSS.
+    ],
+    deps = [
+        ":compiled_model",
+        "//litert/python/tensor_buffer_wrapper:tensor_buffer",
+        "//third_party/py/google/protobuf:use_fast_cpp_protos",  # Automatically added go/proto_python_upb_flip
+        "//third_party/py/numpy",
+        "//third_party/py/tensorflow",
+        "@org_tensorflow//tensorflow/python/platform:resource_loader",
+    ],
+)
+
 OUT_DIR = "$(RULEDIR)"
 
 CONVERTER = "@org_tensorflow//tensorflow/compiler/mlir/lite:tf_tfl_translate"
