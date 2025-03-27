@@ -180,6 +180,38 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeReadBoolean(JNIEnv* env,
 }
 
 JNIEXPORT void JNICALL
+Java_com_google_ai_edge_litert_TensorBuffer_nativeSetEvent(JNIEnv* env,
+                                                           jclass clazz,
+                                                           jlong handle,
+                                                           jlong event_handle) {
+  auto tb = reinterpret_cast<LiteRtTensorBuffer>(handle);
+  auto tensor_buffer = litert::TensorBuffer(tb, false);
+  auto event = reinterpret_cast<LiteRtEvent>(event_handle);
+  
+  auto result = tensor_buffer.SetEvent(litert::Event(event, false));
+  if (!result) {
+    LITERT_LOG(LITERT_ERROR, "Failed to set event on tensor buffer.");
+  }
+}
+
+JNIEXPORT jint JNICALL
+Java_com_google_ai_edge_litert_TensorBuffer_nativeGetGlBuffer(JNIEnv* env,
+                                                              jclass clazz,
+                                                              jlong handle) {
+  auto tb = reinterpret_cast<LiteRtTensorBuffer>(handle);
+  auto tensor_buffer = litert::TensorBuffer(tb, false);
+  
+  LiteRtGLBuffer gl_buffer;
+  auto status = LiteRtTensorBufferGetGlBuffer(tb, &gl_buffer);
+  if (status != kLiteRtStatusOk) {
+    LITERT_LOG(LITERT_ERROR, "Failed to get GL buffer from tensor buffer.");
+    return -1;
+  }
+  
+  return gl_buffer.id;
+}
+
+JNIEXPORT void JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeDestroy(JNIEnv* env,
                                                           jclass clazz,
                                                           jlong handle) {

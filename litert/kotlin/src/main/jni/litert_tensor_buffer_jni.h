@@ -50,6 +50,17 @@ Java_com_google_ai_edge_litert_TensorBuffer_nativeReadBoolean(JNIEnv* env,
                                                               jlong handle);
 
 JNIEXPORT void JNICALL
+Java_com_google_ai_edge_litert_TensorBuffer_nativeSetEvent(JNIEnv* env,
+                                                           jclass clazz,
+                                                           jlong handle,
+                                                           jlong event_handle);
+
+JNIEXPORT jint JNICALL
+Java_com_google_ai_edge_litert_TensorBuffer_nativeGetGlBuffer(JNIEnv* env,
+                                                              jclass clazz,
+                                                              jlong handle);
+
+JNIEXPORT void JNICALL
 Java_com_google_ai_edge_litert_TensorBuffer_nativeDestroy(JNIEnv* env,
                                                           jclass clazz,
                                                           jlong handle);

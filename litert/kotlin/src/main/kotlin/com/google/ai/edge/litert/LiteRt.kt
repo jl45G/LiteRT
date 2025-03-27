@@ -128,6 +128,34 @@ private constructor(
       outputs.map { it.handle }.toLongArray(),
     )
   }
+  
+  /**
+   * Runs the model asynchronously using the specified inputs and outputs.
+   * 
+   * @param inputs List of input tensor buffers.
+   * @param outputs List of output tensor buffers.
+   * @param signatureIndex The index of the signature to use.
+   * @param asyncExecutionMode Whether to run the model asynchronously.
+   * @return true if the execution was asynchronous, false if it was synchronous.
+   */
+  @JvmOverloads
+  fun runAsync(
+    inputs: List<TensorBuffer>, 
+    outputs: List<TensorBuffer>, 
+    signatureIndex: Int = 0,
+    asyncExecutionMode: Boolean = true
+  ): Boolean {
+    assertNotDestroyed()
+
+    return nativeRunAsync(
+      handle,
+      model.handle,
+      signatureIndex,
+      inputs.map { it.handle }.toLongArray(),
+      outputs.map { it.handle }.toLongArray(),
+      asyncExecutionMode,
+    )
+  }
 
   fun run(inputs: List<TensorBuffer>, outputs: List<TensorBuffer>, signature: String) {
     assertNotDestroyed()
@@ -138,6 +166,33 @@ private constructor(
       signature,
       inputs.map { it.handle }.toLongArray(),
       outputs.map { it.handle }.toLongArray(),
+    )
+  }
+  
+  /**
+   * Runs the model asynchronously using the specified inputs and outputs.
+   * 
+   * @param inputs List of input tensor buffers.
+   * @param outputs List of output tensor buffers.
+   * @param signature The signature key to use.
+   * @param asyncExecutionMode Whether to run the model asynchronously.
+   * @return true if the execution was asynchronous, false if it was synchronous.
+   */
+  fun runAsync(
+    inputs: List<TensorBuffer>, 
+    outputs: List<TensorBuffer>, 
+    signature: String,
+    asyncExecutionMode: Boolean = true
+  ): Boolean {
+    assertNotDestroyed()
+
+    return nativeRunAsyncBySignature(
+      handle,
+      model.handle,
+      signature,
+      inputs.map { it.handle }.toLongArray(),
+      outputs.map { it.handle }.toLongArray(),
+      asyncExecutionMode,
     )
   }
 
@@ -320,6 +375,26 @@ private constructor(
       outputKeys: Array<String>,
       outputBuffers: LongArray,
     )
+    
+    @JvmStatic
+    private external fun nativeRunAsync(
+      compiledModelHandle: Long,
+      modelHandle: Long,
+      signatureIndex: Int,
+      inputBuffers: LongArray,
+      outputBuffers: LongArray,
+      asyncExecutionMode: Boolean,
+    ): Boolean
+    
+    @JvmStatic
+    private external fun nativeRunAsyncBySignature(
+      compiledModelHandle: Long,
+      modelHandle: Long,
+      signature: String,
+      inputBuffers: LongArray,
+      outputBuffers: LongArray,
+      asyncExecutionMode: Boolean,
+    ): Boolean
 
     @JvmStatic private external fun nativeDestroy(handle: Long)
   }
@@ -329,6 +404,29 @@ private constructor(
 class TensorBuffer internal constructor(handle: Long) : JniHandle(handle) {
   // TODO(niuchl): Add support for different types of tensor buffers.
   // TODO(niuchl): Add tests for different element types.
+
+  /**
+   * Associates an event with this tensor buffer. The event will be signaled when
+   * operations on this buffer are complete.
+   *
+   * @param event The event to associate with this buffer. Ownership of the event
+   * is transferred to the tensor buffer.
+   */
+  fun setEvent(event: Event) {
+    assertNotDestroyed()
+    nativeSetEvent(handle, event.handle)
+    // Don't close the event here, as ownership is transferred to the native code
+  }
+
+  /**
+   * If this buffer is a GPU GL buffer, returns the GL buffer ID.
+   * 
+   * @return The GL buffer ID.
+   */
+  fun getGlBuffer(): Int {
+    assertNotDestroyed()
+    return nativeGetGlBuffer(handle)
+  }
 
   fun writeInt(data: IntArray) {
     assertNotDestroyed()
@@ -386,6 +484,10 @@ class TensorBuffer internal constructor(handle: Long) : JniHandle(handle) {
     init {
       System.loadLibrary("litert_jni")
     }
+
+    @JvmStatic private external fun nativeSetEvent(handle: Long, eventHandle: Long)
+    
+    @JvmStatic private external fun nativeGetGlBuffer(handle: Long): Int
 
     @JvmStatic private external fun nativeWriteInt(handle: Long, data: IntArray)
 

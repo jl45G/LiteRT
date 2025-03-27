@@ -59,6 +59,18 @@ Java_com_google_ai_edge_litert_CompiledModel_nativeRunBySignatureWithMap(
     jstring signature, jobjectArray input_keys, jlongArray input_buffers,
     jobjectArray output_keys, jlongArray output_buffers);
 
+JNIEXPORT jboolean JNICALL
+Java_com_google_ai_edge_litert_CompiledModel_nativeRunAsync(
+    JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
+    jint signature_index, jlongArray input_buffers, jlongArray output_buffers,
+    jboolean async_execution_mode);
+
+JNIEXPORT jboolean JNICALL
+Java_com_google_ai_edge_litert_CompiledModel_nativeRunAsyncBySignature(
+    JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
+    jstring signature, jlongArray input_buffers, jlongArray output_buffers,
+    jboolean async_execution_mode);
+
 JNIEXPORT void JNICALL
 Java_com_google_ai_edge_litert_CompiledModel_nativeDestroy(JNIEnv* env,
                                                            jclass clazz,

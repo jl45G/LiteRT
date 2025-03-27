@@ -341,6 +341,91 @@ Java_com_google_ai_edge_litert_CompiledModel_nativeRunBySignatureWithMap(
   }
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_google_ai_edge_litert_CompiledModel_nativeRunAsync(
+    JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
+    jint signature_index, jlongArray input_buffers, jlongArray output_buffers,
+    jboolean async_execution_mode) {
+  auto compiled_model = CreateCompileModel(compiled_model_handle, model_handle);
+
+  auto num_inputs = env->GetArrayLength(input_buffers);
+  AUTO_CLEANUP_JNI_LONG_ARRAY(env, input_buffers);
+  std::vector<litert::TensorBuffer> input_buffer_vector;
+  input_buffer_vector.reserve(num_inputs);
+  for (int i = 0; i < num_inputs; ++i) {
+    auto litert_tensor_buffer =
+        reinterpret_cast<LiteRtTensorBuffer>(input_buffers_array[i]);
+    input_buffer_vector.push_back(
+        litert::TensorBuffer(litert_tensor_buffer, /*owned=*/false));
+  }
+
+  auto num_outputs = env->GetArrayLength(output_buffers);
+  AUTO_CLEANUP_JNI_LONG_ARRAY(env, output_buffers);
+  std::vector<litert::TensorBuffer> output_buffer_vector;
+  output_buffer_vector.reserve(num_outputs);
+  for (int i = 0; i < num_outputs; ++i) {
+    auto litert_tensor_buffer =
+        reinterpret_cast<LiteRtTensorBuffer>(output_buffers_array[i]);
+    output_buffer_vector.push_back(
+        litert::TensorBuffer(litert_tensor_buffer, /*owned=*/false));
+  }
+
+  bool was_async = false;
+  auto result = compiled_model.RunAsync(
+      signature_index, input_buffer_vector, output_buffer_vector, 
+      async_execution_mode, &was_async);
+  
+  if (!result) {
+    // TODO(niuchl): throw an exception.
+    return JNI_FALSE;
+  }
+  
+  return was_async ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_google_ai_edge_litert_CompiledModel_nativeRunAsyncBySignature(
+    JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
+    jstring signature, jlongArray input_buffers, jlongArray output_buffers,
+    jboolean async_execution_mode) {
+  auto compiled_model = CreateCompileModel(compiled_model_handle, model_handle);
+
+  auto num_inputs = env->GetArrayLength(input_buffers);
+  AUTO_CLEANUP_JNI_LONG_ARRAY(env, input_buffers);
+  std::vector<litert::TensorBuffer> input_buffer_vector;
+  input_buffer_vector.reserve(num_inputs);
+  for (int i = 0; i < num_inputs; ++i) {
+    auto litert_tensor_buffer =
+        reinterpret_cast<LiteRtTensorBuffer>(input_buffers_array[i]);
+    input_buffer_vector.push_back(
+        litert::TensorBuffer(litert_tensor_buffer, /*owned=*/false));
+  }
+
+  auto num_outputs = env->GetArrayLength(output_buffers);
+  AUTO_CLEANUP_JNI_LONG_ARRAY(env, output_buffers);
+  std::vector<litert::TensorBuffer> output_buffer_vector;
+  output_buffer_vector.reserve(num_outputs);
+  for (int i = 0; i < num_outputs; ++i) {
+    auto litert_tensor_buffer =
+        reinterpret_cast<LiteRtTensorBuffer>(output_buffers_array[i]);
+    output_buffer_vector.push_back(
+        litert::TensorBuffer(litert_tensor_buffer, /*owned=*/false));
+  }
+
+  AUTO_CLEANUP_JNI_STRING(env, signature);
+  bool was_async = false;
+  auto result = compiled_model.RunAsync(
+      signature_str, input_buffer_vector, output_buffer_vector, 
+      async_execution_mode, &was_async);
+  
+  if (!result) {
+    // TODO(niuchl): throw an exception.
+    return JNI_FALSE;
+  }
+  
+  return was_async ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT void JNICALL
 Java_com_google_ai_edge_litert_CompiledModel_nativeDestroy(JNIEnv* env,
                                                            jclass clazz,
