@@ -23,6 +23,7 @@ android_library(
         "//third_party/java/androidx/recyclerview",
         "//litert/kotlin/sample_apps/LiteRTClassify:res",
         "//litert/kotlin/sample_apps/LiteRTClassify/java/org/tensorflow/lite/examples/classification/litert",
+        "//litert/kotlin/sample_apps/LiteRTClassify/java/org/tensorflow/lite/examples/classification/test",
         "//litert/kotlin/sample_apps/LiteRTClassify/java/org/tensorflow/lite/examples/classification/ui",
         "//litert/kotlin/sample_apps/LiteRTClassify/java/org/tensorflow/lite/examples/classification/util",
         "//litert/kotlin/sample_apps/LiteRTClassify/java/org/tensorflow/lite/examples/classification/viewmodel",

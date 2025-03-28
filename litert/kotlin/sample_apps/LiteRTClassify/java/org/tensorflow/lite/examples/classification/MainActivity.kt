@@ -18,6 +18,7 @@ package org.tensorflow.lite.examples.classification
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
@@ -26,6 +27,8 @@ import android.support.v7.app.AppCompatActivity
 import android.support.v7.widget.RecyclerView
 import android.util.Log
 import android.util.Size
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
@@ -42,6 +45,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
 import java.util.concurrent.Executors
 import org.tensorflow.lite.examples.classification.litert.Classifier
+import org.tensorflow.lite.examples.classification.test.LiteRtTestActivity
 import org.tensorflow.lite.examples.classification.ui.RecognitionAdapter
 import org.tensorflow.lite.examples.classification.util.YuvToRgbConverter
 import org.tensorflow.lite.examples.classification.viewmodel.Recognition
@@ -109,6 +113,21 @@ class MainActivity : AppCompatActivity() {
     recogViewModel.recognitionList.observe(this, Observer { viewAdapter.submitList(it) })
 
     imageClassifier = Classifier(this, "FlowerModel.tflite", "labels.txt")
+  }
+
+  override fun onCreateOptionsMenu(menu: Menu): Boolean {
+    menuInflater.inflate(R.menu.main_menu, menu)
+    return true
+  }
+
+  override fun onOptionsItemSelected(item: MenuItem): Boolean {
+    return when (item.itemId) {
+      R.id.menu_run_tests -> {
+        startActivity(Intent(this, LiteRtTestActivity::class.java))
+        true
+      }
+      else -> super.onOptionsItemSelected(item)
+    }
   }
 
   override fun onDestroy() {
