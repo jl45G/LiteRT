@@ -226,7 +226,7 @@ android_instrumentation_test(
     name = "litert_kotlin_api_advanced_emulator_test",
     target_device = "//tools/mobile/devices/android/generic_phone:android_21_x86",
     test_app = ":litert_test_app",
-    test_class = "com.google.ai.edge.litert.LiteRTAdvancedTest",
+    test_class = "com.google.ai.edge.litert.LiteRtAdvancedTest",
 )
 
 android_library(

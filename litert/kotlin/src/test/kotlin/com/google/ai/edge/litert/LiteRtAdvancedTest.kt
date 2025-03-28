@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
  * - litert/cc/litert_compiled_model_integration_test.cc
  */
 @RunWith(JUnit4::class)
-class LiteRTAdvancedTest {
+class LiteRtAdvancedTest {
 
   private var context: Context? = null
 
