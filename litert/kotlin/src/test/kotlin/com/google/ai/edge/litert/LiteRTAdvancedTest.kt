@@ -206,7 +206,10 @@ class LiteRTAdvancedTest {
 
     // Verify the data was correctly written
     val readData = tensorBuffer.readFloat()
-    assertThat(readData).usingExactEquality().containsExactly(*testInputTensors[0]).inOrder()
+    assertThat(readData.size).isEqualTo(testInputTensors[0].size)
+    for (i in readData.indices) {
+      assertThat(readData[i]).isEqualTo(testInputTensors[0][i])
+    }
 
     // Update the direct buffer and verify changes reflect in tensor buffer
     directBuf.rewind()
@@ -221,7 +224,10 @@ class LiteRTAdvancedTest {
     // Verify the updated values
     val updatedData = tensorBuffer.readFloat()
     val expectedData = testInputTensors[0].map { it * 2 }.toFloatArray()
-    assertThat(updatedData).usingExactEquality().containsExactly(*expectedData).inOrder()
+    assertThat(updatedData.size).isEqualTo(expectedData.size)
+    for (i in updatedData.indices) {
+      assertThat(updatedData[i]).isEqualTo(expectedData[i])
+    }
 
     // Clean up
     tensorBuffer.close()
@@ -260,7 +266,9 @@ class LiteRTAdvancedTest {
 
     // Verify data is still accessible after lock is released
     val data = tensor.readFloat()
-    assertThat(data).usingExactEquality().containsExactly(3.14f, 2.71f).inOrder()
+    assertThat(data.size).isEqualTo(2)
+    assertThat(data[0]).isEqualTo(3.14f)
+    assertThat(data[1]).isEqualTo(2.71f)
 
     // Clean up
     tensor.close()
@@ -295,7 +303,10 @@ class LiteRTAdvancedTest {
 
         // Verify output
         val output = outputBuffers[0].readFloat()
-        assertThat(output).usingExactEquality().containsExactly(*testOutputTensor).inOrder()
+        assertThat(output.size).isEqualTo(testOutputTensor.size)
+        for (i in output.indices) {
+          assertThat(output[i]).isEqualTo(testOutputTensor[i])
+        }
 
         // Clean up buffers
         inputBuffers.forEach { it.close() }
