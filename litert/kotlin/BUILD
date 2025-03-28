@@ -187,7 +187,10 @@ android_binary(
 android_library(
     name = "litert_kotlin_api_test_lib",
     testonly = True,
-    srcs = ["src/test/kotlin/com/google/ai/edge/litert/LiteRtTest.kt"],
+    srcs = [
+        "src/test/kotlin/com/google/ai/edge/litert/LiteRtTest.kt",
+        "src/test/kotlin/com/google/ai/edge/litert/LiteRTAdvancedTest.kt",
+    ],
     deps = [
         ":litert_kotlin_api",
         "//third_party/android/androidx_test/core",
@@ -217,6 +220,13 @@ android_instrumentation_test(
     target_device = "//tools/mobile/devices/android/generic_phone:android_21_x86",
     test_app = ":litert_test_app",
     test_class = "com.google.ai.edge.litert.LiteRtTest",
+)
+
+android_instrumentation_test(
+    name = "litert_kotlin_api_advanced_emulator_test",
+    target_device = "//tools/mobile/devices/android/generic_phone:android_21_x86",
+    test_app = ":litert_test_app",
+    test_class = "com.google.ai.edge.litert.LiteRTAdvancedTest",
 )
 
 android_library(
