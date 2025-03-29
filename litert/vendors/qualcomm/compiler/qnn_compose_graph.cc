@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 #include "litert/vendors/qualcomm/compiler/qnn_compose_graph.h"
 
 #include <alloca.h>
@@ -511,12 +510,15 @@ LiteRtStatus ConvertOp(
       int32_t dilation_h_factor;
       LITERT_RETURN_IF_ERROR(
           LiteRtGetConv2dDilationWOption(litert_op.Get(), &dilation_h_factor));
+      uint32_t fused_activation;
+      LITERT_RETURN_IF_ERROR(LiteRtGetConv2dFusedActivationOption(
+          litert_op.Get(), &fused_activation));
 
       ::qnn::PaddingType qnn_padding;
       LITERT_RETURN_IF_ERROR(ConvertPaddingType(padding, qnn_padding));
       op_wrappers = ::qnn::BuildConv2dOp(
           tensor_pool, input_tensors, output_tensors, stride_h, stride_w,
-          dilation_h_factor, dilation_w_factor, qnn_padding);
+          dilation_h_factor, dilation_w_factor, fused_activation, qnn_padding);
       break;
     }
     case LiteRtOpCode::kLiteRtOpCodeTflDepthwiseConv2d: {
@@ -535,12 +537,15 @@ LiteRtStatus ConvertOp(
       int32_t dilation_h_factor;
       LITERT_RETURN_IF_ERROR(LiteRtGetDepthwiseConv2dDilationHOptions(
           litert_op.Get(), &dilation_h_factor));
+      uint32_t fused_activation;
+      LITERT_RETURN_IF_ERROR(LiteRtGetDepthwiseConv2dFusedActivationOption(
+          litert_op.Get(), &fused_activation));
 
       ::qnn::PaddingType qnn_padding;
       LITERT_RETURN_IF_ERROR(ConvertPaddingType(padding, qnn_padding));
       op_wrappers = ::qnn::BuildDepthwiseConv2dOp(
           tensor_pool, input_tensors, output_tensors, stride_h, stride_w,
-          dilation_h_factor, dilation_w_factor, qnn_padding);
+          dilation_h_factor, dilation_w_factor, fused_activation, qnn_padding);
       break;
     }
     case LiteRtOpCode::kLiteRtOpCodeTflAveragePool2d: {
@@ -667,8 +672,7 @@ LiteRtStatus MapGraph(QnnManager& qnn, Qnn_ContextHandle_t context_handle,
     dump.clear();
     Dump(*op.Get(), dump);
     std::string s = dump.str();
-    LITERT_LOG(LITERT_INFO, "%s", s.data());
-
+    LITERT_LOG(LITERT_VERBOSE, "%s", s.data());
     std::vector<::qnn::TensorWrapperRef> input_tensors;
     for (const auto& input : op.Inputs()) {
       if (const auto it = litert_tensor_to_wrapper.find(input.Get());
@@ -703,6 +707,11 @@ LiteRtStatus MapGraph(QnnManager& qnn, Qnn_ContextHandle_t context_handle,
   // Insert all tensors into Qnn graph and update the id of Qnn_Tensor_t inside.
   tensor_pool.ForEach(
       [&qnn, &graph_mapper](::qnn::TensorWrapper& tensor_wrapper) {
+        // TODO(chunhsue): Use compile interface to get useQInt16AsQUint16.
+        constexpr bool useQInt16AsQUint16 = true;
+        if constexpr (useQInt16AsQUint16) {
+          tensor_wrapper.ConvertQint16ToQuint16();
+        }
         qnn.Api()->tensorCreateGraphTensor(graph_mapper.QnnGraph(),
                                            &tensor_wrapper.GetQnnTensor());
       });
