@@ -1,8 +1,8 @@
 // Copyright (c) Qualcomm Innovation Center, Inc.
 // All Rights Reserved.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_QUANTIZE_PARAMS_WRAPPER_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_QUANTIZE_PARAMS_WRAPPER_H_
+#ifndef ODML_LITERT_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_QUANTIZE_PARAMS_WRAPPER_H_
+#define ODML_LITERT_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_QUANTIZE_PARAMS_WRAPPER_H_
 
 #include <cstdint>
 #include <variant>
@@ -37,6 +37,12 @@ class ScaleOffsetQuantizeParamsWrapper final {
   ScaleOffsetQuantizeParamsWrapper(ScaleOffsetQuantizeParamsWrapper&&);
 
   void CloneTo(Qnn_QuantizeParams_t& dst);
+  float GetScale() const {
+    return qnn_quantize_param_.scaleOffsetEncoding.scale;
+  }
+  std::int32_t GetZeroPoint() const {
+    return -1 * qnn_quantize_param_.scaleOffsetEncoding.offset;
+  }
 
  private:
   Qnn_QuantizeParams_t qnn_quantize_param_ = QNN_QUANTIZE_PARAMS_INIT;
@@ -59,6 +65,8 @@ class AxisScaleOffsetQuantizeParamsWrapper final {
   std::int32_t GetAxis() const;
 
   void SetAxis(const std::int32_t axis);
+  void GetScales(std::vector<float>& scales) const;
+  void GetZeroPoints(std::vector<std::int32_t>& zero_points) const;
 
  private:
   Qnn_QuantizeParams_t qnn_quantize_param_ = QNN_QUANTIZE_PARAMS_INIT;
@@ -72,4 +80,4 @@ using QuantizeParamsWrapperVariant =
 
 }  // namespace qnn
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_QUANTIZE_PARAMS_WRAPPER_H_
+#endif  // ODML_LITERT_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_QUANTIZE_PARAMS_WRAPPER_H_

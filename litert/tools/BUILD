@@ -89,6 +89,10 @@ litert_cc_bin_with_qnn(
         "//litert/vendors/google_tensor/compiler:google_tensor_compiler_plugin_so",
         "//litert/vendors/qualcomm/compiler:qnn_compiler_plugin_so",
         "//litert/vendors/mediatek/compiler:compiler_plugin_so",
+        # TODO: b/407046837 - Remove the comment once we are able to add the deps in OSS.
+        # copybara:uncomment_begin(google-only)
+        # "//third_party/neuro_pilot:latest/host/lib/libneuron_adapter.so",
+        # copybara:uncomment_end
     ],
     export_litert_only = 1,
     include_system = 1,
@@ -213,6 +217,7 @@ cc_library(
         "//litert/cc:litert_tensor_buffer",
         "@org_tensorflow//tensorflow/lite/c:c_api_types",
         "@org_tensorflow//tensorflow/lite/c:common",
+        "@org_tensorflow//tensorflow/lite/tools:command_line_flags",
         "@org_tensorflow//tensorflow/lite/tools:utils",
         "@org_tensorflow//tensorflow/lite/tools/benchmark:benchmark_model_lib",
         "@org_tensorflow//tensorflow/lite/tools/benchmark:benchmark_params",
@@ -277,5 +282,27 @@ cc_library(
         ":benchmark_litert_model",
         "@org_tensorflow//tensorflow/lite/c:c_api_types",
         "@org_tensorflow//tensorflow/lite/tools:logging",
+    ],
+)
+
+cc_library(
+    name = "benchmark_stripped_litert_model",
+    srcs = ["benchmark_stripped_litert_model.cc"],
+    hdrs = ["benchmark_stripped_litert_model.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":benchmark_litert_model",
+        "@flatbuffers//:runtime_cc",
+        "//litert/cc:litert_buffer_ref",
+        "//litert/cc:litert_model",
+        "@org_tensorflow//tensorflow/lite:model_builder",
+        "@org_tensorflow//tensorflow/lite/c:c_api_types",
+        "@org_tensorflow//tensorflow/lite/c:common",
+        "@org_tensorflow//tensorflow/lite/tools:logging",
+        "@org_tensorflow//tensorflow/lite/tools/benchmark:benchmark_params",
+        "@org_tensorflow//tensorflow/lite/tools/strip_buffers:stripping_lib",
+        # copybara:uncomment_begin(google-only)
+        # "//third_party/odml/infra/ml_drift_delegate/litert:ml_drift_cl_accelerator",  # buildcleaner: keep
+        # copybara:uncomment_end
     ],
 )
