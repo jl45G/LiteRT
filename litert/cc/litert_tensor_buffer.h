@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_TENSOR_BUFFER_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_TENSOR_BUFFER_H_
+#ifndef ODML_LITERT_LITERT_CC_LITERT_TENSOR_BUFFER_H_
+#define ODML_LITERT_LITERT_CC_LITERT_TENSOR_BUFFER_H_
 
 #include <cstddef>
 #include <cstring>
@@ -142,10 +142,10 @@ class TensorBuffer
 #endif
   }
 
-  Expected<cl_mem> GetOpenClBuffer() const {
+  Expected<cl_mem> GetOpenClMemory() const {
 #if LITERT_HAS_OPENCL_SUPPORT
     cl_mem cl_mem;
-    LITERT_RETURN_IF_ERROR(LiteRtGetTensorBufferOpenClBuffer(Get(), &cl_mem));
+    LITERT_RETURN_IF_ERROR(LiteRtGetTensorBufferOpenClMemory(Get(), &cl_mem));
     return cl_mem;
 #else
     return litert::Unexpected(kLiteRtStatusErrorRuntimeFailure,
@@ -347,4 +347,4 @@ class TensorBufferScopedLock {
 
 }  // namespace litert
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_TENSOR_BUFFER_H_
+#endif  // ODML_LITERT_LITERT_CC_LITERT_TENSOR_BUFFER_H_

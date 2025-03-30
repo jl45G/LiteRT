@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_ACCELERATOR_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_ACCELERATOR_H_
+#ifndef ODML_LITERT_LITERT_RUNTIME_ACCELERATOR_H_
+#define ODML_LITERT_LITERT_RUNTIME_ACCELERATOR_H_
 
 #include <cstddef>
 #include <memory>
@@ -65,7 +65,10 @@ struct LiteRtAcceleratorT {
   // Used void* instead of TfLiteOpaqueDelegate* to avoid TFLite dependency.
   void (*DestroyDelegate)(void* delegate);
 
+  LiteRtStatus (*IsTfLiteDelegateResponsibleForJitCompilation)(
+      LiteRtAcceleratorT* accelerator, bool* does_jit_compilation);
+
   // NOLINTEND(*-readability-class-member-naming)
 };
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_ACCELERATOR_H_
+#endif  // ODML_LITERT_LITERT_RUNTIME_ACCELERATOR_H_

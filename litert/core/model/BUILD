@@ -43,7 +43,7 @@ cc_library(
         "//litert/core:build_stamp",
         "//litert/core/util:flatbuffer_tools",
         "@org_tensorflow//tensorflow/compiler/mlir/lite/core:model_builder_base",
-        "@org_tensorflow//tensorflow/lite/core/c:c_api_types",
+        "@org_tensorflow//tensorflow/lite/core/c:private_c_api_types",
     ],
 )
 
@@ -259,7 +259,6 @@ cc_library(
     srcs = ["model_graph.cc"],
     hdrs = [
         "model_graph.h",
-        "//litert/cc:litert_consts.h",
     ],
     deps = [
         ":model",
@@ -269,6 +268,7 @@ cc_library(
         "//litert/c:litert_logging",
         "//litert/c:litert_op_code",
         "//litert/cc:litert_buffer_ref",
+        "//litert/cc:litert_consts",
         "//litert/cc:litert_detail",
         "//litert/cc:litert_expected",
     ],
@@ -332,7 +332,7 @@ cc_test(
         "@org_tensorflow//tensorflow/lite:model_builder",
         "@org_tensorflow//tensorflow/lite/c:c_api_opaque",
         "@org_tensorflow//tensorflow/lite/c:common",
-        "@org_tensorflow//tensorflow/lite/core:cc_api_stable",
+        "@org_tensorflow//tensorflow/lite/core:private_cc_api_stable",
         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
     ],
 )
