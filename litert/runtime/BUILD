@@ -35,7 +35,8 @@ cc_library(
         "//litert/c:litert_event_type",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
-        "//litert/runtime/opencl:cl_event",
+        "@opencl_headers",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:opencl_wrapper",
     ],
 )
 
@@ -48,7 +49,7 @@ cc_library(
         "gl_buffer.cc",
         "gl_texture.cc",
         "ion_buffer.cc",
-        "open_cl_buffer.cc",
+        "open_cl_memory.cc",
         "tensor_buffer.cc",
     ],
     hdrs = [
@@ -59,7 +60,7 @@ cc_library(
         "gl_buffer.h",
         "gl_texture.h",
         "ion_buffer.h",
-        "open_cl_buffer.h",
+        "open_cl_memory.h",
         "tensor_buffer.h",
         "tensor_buffer_requirements.h",
         "//litert/c:litert_event.h",
@@ -88,11 +89,11 @@ cc_library(
         "//litert/cc:litert_macros",
         "//litert/cc:litert_tensor_buffer_utils",
         "//litert/core/util:tensor_type_util",
-        "//litert/runtime/opencl:buffer",
-        "//litert/runtime/opencl:cl_command_queue",
-        "//litert/runtime/opencl:cl_context",
-        "//litert/runtime/opencl:opencl_wrapper",
         "@opencl_headers",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:buffer",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_command_queue",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_context",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:opencl_wrapper",
     ] + gles_deps() + select({
         "@org_tensorflow//tensorflow:android": [
             "@org_tensorflow//tensorflow/lite/delegates/gpu/gl:gl_buffer",
@@ -117,14 +118,15 @@ cc_library(
     deps = [
         "//litert/c:litert_any",
         "//litert/c:litert_common",
+        "//litert/c:litert_environment_options",
         "//litert/c:litert_logging",
         "//litert/cc:litert_expected",
         "//litert/core:environment",
-        "//litert/runtime/opencl:cl_command_queue",
-        "//litert/runtime/opencl:cl_context",
-        "//litert/runtime/opencl:cl_device",
-        "//litert/runtime/opencl:opencl_wrapper",
         "@opencl_headers",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_command_queue",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_context",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_device",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:opencl_wrapper",
     ],
 )
 
@@ -146,8 +148,8 @@ cc_test(
         # "@ml_drift//ml_drift/cl:opencl_wrapper",
         # copybara:uncomment_end
         "//litert/c:litert_environment",
+        "//litert/c:litert_environment_options",
         "//litert/cc:litert_any",
-        "//litert/runtime/opencl:opencl_wrapper",
     ],
 )
 
@@ -217,6 +219,7 @@ cc_library(
         "//litert/c:litert_logging",
         "//litert/c:litert_model",
         "//litert/c:litert_tensor_buffer",
+        "//litert/c:litert_tensor_buffer_types",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_event",
         "//litert/cc:litert_expected",
@@ -236,7 +239,7 @@ cc_library(
         "@org_tensorflow//tensorflow/lite:model_builder",
         "@org_tensorflow//tensorflow/lite/c:c_api_opaque",
         "@org_tensorflow//tensorflow/lite/c:common",
-        "@org_tensorflow//tensorflow/lite/core:cc_api_stable",
+        "@org_tensorflow//tensorflow/lite/core:private_cc_api_stable",
         "@org_tensorflow//tensorflow/lite/delegates/utils:simple_opaque_delegate",
         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
     ],
@@ -268,6 +271,7 @@ cc_test(
         "//litert/c:litert_environment",
         "//litert/c:litert_model",
         "//litert/c:litert_tensor_buffer",
+        "//litert/c:litert_tensor_buffer_types",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_tensor_buffer",
