@@ -25,6 +25,7 @@ BUILD_FLAGS=(
     "--config=bulk_test_cpu"
     "--config=disable_tf_lite_py"
     "--test_lang_filters=${TEST_LANG_FILTERS}"
+    "--keep_going"
   )
 
 # Add Bazel --config flags based on kokoro injected env ie. --config=public_cache
@@ -113,15 +114,16 @@ LITERT_EXCLUDED_TARGETS=(
         "-//litert/c:litert_compiled_model_test"
         "-//litert/c:litert_compiled_model_shared_lib_test"
         "-//litert/cc:litert_compiled_model_test"
+        # Requires mGPU environment.
+        "-//litert/cc:litert_environment_test"
         "-//litert/compiler/plugin:algo_test"
         "-//litert/runtime:compiled_model_test"
-        "-//litert/runtime:environment_test"
+        "-//litert/runtime:gpu_environment_test"
         "-//litert/runtime/compiler:jit_compilation_mediatek_test"
         "-//litert/runtime/compiler:jit_compilation_qualcomm_test"
-        "-//litert/runtime/dispatch:dispatch_delegate_google_tensor_test"
-        "-//litert/runtime/dispatch:dispatch_delegate_mediatek_test"
-        "-//litert/runtime/dispatch:dispatch_delegate_qualcomm_test"
         "-//litert/tools:apply_plugin_test"
+        # TODO: b/407376374 - Mobilenet is larger than copybara size limit.
+        "-//litert/tools:benchmark_litert_model_test"
         "-//litert/tools:dump_test"
         "-//litert/tools:tool_display_test"
         "-//litert/vendors/cc:convert_graph_test"
