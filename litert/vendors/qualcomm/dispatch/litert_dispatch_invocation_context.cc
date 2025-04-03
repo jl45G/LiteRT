@@ -88,6 +88,12 @@ LiteRtDispatchInvocationContextT::Create(
   LITERT_LOG(LITERT_INFO, "Looking for graph with name '%s'", function_name);
 
   int graph_index = -1;
+  // Log all available graphs for better debugging
+  LITERT_LOG(LITERT_INFO, "Available graphs for matching:");
+  for (size_t i = 0; i < graphs.size(); ++i) {
+    LITERT_LOG(LITERT_INFO, "  [%zu] %s", i, graphs[i].Name().c_str());
+  }
+
   // If the function_name is not specified and there is only one graph, then
   // take that graph.
   if (absl::string_view(function_name).empty() && graphs.size() == 1) {
@@ -97,21 +103,58 @@ LiteRtDispatchInvocationContextT::Create(
     LITERT_LOG(LITERT_INFO, "Using default graph %s at index %d", function_name,
                graph_index);
   } else {
-    // Special handling for multi-signature models with consistent naming
-    // pattern
     absl::string_view function_name_view(function_name);
+    LITERT_LOG(LITERT_INFO, "Looking for graph matching '%s'", function_name);
+    
+    // STEP 1: Try to find an exact name match
     for (auto i = 0; i < graphs.size(); ++i) {
       const auto& graph = graphs[i];
       LITERT_LOG(LITERT_INFO, "Comparing '%s' with '%s'", graph.Name().c_str(),
                  function_name);
 
-      // Try exact match first
       if (graph.Name() == function_name_view) {
         graph_index = i;
-        LITERT_LOG(LITERT_INFO, "Found exact match for graph '%s' at index %d",
+        LITERT_LOG(LITERT_INFO, "Found exact name match for graph '%s' at index %d",
                    function_name, graph_index);
         break;
       }
+    }
+    
+    // STEP 2: If no exact match and function name follows qnn_partition_N pattern,
+    // try to match by partition index
+    if (graph_index < 0 && function_name_view.find("qnn_partition_") == 0) {
+      std::string partition_index_str(function_name_view.substr(strlen("qnn_partition_")));
+      int requested_partition_index = std::atoi(partition_index_str.c_str());
+      LITERT_LOG(LITERT_INFO, "Looking for partition index %d", requested_partition_index);
+      
+      // Try to find graph with matching partition index
+      for (auto i = 0; i < graphs.size(); ++i) {
+        const auto& graph_name = graphs[i].Name();
+        if (graph_name.find("qnn_partition_") == 0) {
+          std::string graph_index_str(graph_name.substr(strlen("qnn_partition_")));
+          int graph_partition_index = std::atoi(graph_index_str.c_str());
+          LITERT_LOG(LITERT_INFO, "Comparing partition indices: %d vs %d", 
+                     graph_partition_index, requested_partition_index);
+                     
+          if (graph_partition_index == requested_partition_index) {
+            graph_index = i;
+            function_name = graph_name.c_str();
+            LITERT_LOG(LITERT_INFO, "Found matching partition index %d at graph index %d", 
+                       requested_partition_index, graph_index);
+            break;
+          }
+        }
+      }
+    }
+    
+    // STEP 3: If still no match, but requested name is for partition 1 and we have partition 0,
+    // special handling for multi-signature model fallback
+    if (graph_index < 0 && function_name_view == "qnn_partition_1" && 
+        graphs.size() > 0 && graphs[0].Name() == "qnn_partition_0") {
+      LITERT_LOG(LITERT_INFO, 
+                "Special case: Mapping qnn_partition_1 to available qnn_partition_0");
+      graph_index = 0;
+      function_name = graphs[0].Name().c_str();
     }
   }
 

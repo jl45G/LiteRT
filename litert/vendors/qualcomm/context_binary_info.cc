@@ -15,6 +15,7 @@
 #include "litert/vendors/qualcomm/context_binary_info.h"
 
 #include <cstddef>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -34,12 +35,25 @@ namespace {
 
 Expected<void> InsertQnnTensors(int num_qnn_tensors, Qnn_Tensor_t* qnn_tensors,
                                 std::vector<::qnn::TensorWrapper>& tensors) {
-  tensors.clear();
-  tensors.reserve(num_qnn_tensors);
-  for (auto i = 0; i < num_qnn_tensors; ++i) {
+  if (num_qnn_tensors == 0) {
+    return {};
+  }
+  
+  // Get current size without clearing existing entries
+  size_t current_size = tensors.size();
+  LITERT_LOG(LITERT_INFO, "Current tensor count: %zu, adding %d more", 
+             current_size, num_qnn_tensors);
+  
+  // Reserve space for new entries
+  tensors.reserve(current_size + num_qnn_tensors);
+  
+  // Add all new tensors
+  for (int i = 0; i < num_qnn_tensors; ++i) {
     tensors.emplace_back(qnn_tensors[i]);
     // TODO: chunhsue@qti handle invalid access of qnn_tensor error.
   }
+  
+  LITERT_LOG(LITERT_INFO, "New tensor count after insertion: %zu", tensors.size());
   return {};
 }
 
@@ -51,15 +65,18 @@ Expected<void> InsertQnnGraphInfos(
 
   if (num_qnn_graph_infos == 0) {
     LITERT_LOG(LITERT_WARNING, "No QNN graph infos found in the binary!");
+    return {};
   }
 
-  // Reserve space for the new entries without clearing existing one
+  // Get current size without clearing existing entries
   size_t current_size = graphs->size();
-  LITERT_LOG(LITERT_INFO, "current size %d",
-             current_size);
+  LITERT_LOG(LITERT_INFO, "Current size before insertion: %zu", current_size);
+  
+  // Reserve space for new entries
   graphs->reserve(current_size + num_qnn_graph_infos);
 
-  for (auto i = 0; i < num_qnn_graph_infos; ++i) {
+  // Process and add all new graphs
+  for (int i = 0; i < num_qnn_graph_infos; ++i) {
     LITERT_LOG(LITERT_INFO, "Processing QNN graph info %d with version %d", i,
                qnn_graph_infos[i].version);
 
@@ -71,11 +88,12 @@ Expected<void> InsertQnnGraphInfos(
     }
 
     LITERT_LOG(LITERT_INFO,
-               "Successfully created GraphInfo for graph %d, name: %s", i,
-               graph->Name().c_str());
+              "Successfully created GraphInfo for graph %d, name: %s", i,
+              graph->Name().c_str());
     graphs->push_back(std::move(*graph));
   }
 
+  LITERT_LOG(LITERT_INFO, "Size after insertion: %zu", graphs->size());
   return {};
 }
 
@@ -149,8 +167,14 @@ Expected<void> GraphInfo::Init(const QnnSystemContext_GraphInfo_t& graph_info) {
 
 Expected<void> ContextBinaryInfo::Init(
     const QnnSystemContext_BinaryInfo_t& binary_info) {
+  LITERT_LOG(LITERT_INFO, 
+             "Initializing context binary info with version %d (current graphs: %zu)",
+             binary_info.version, graphs_.size());
+             
   if (binary_info.version == QNN_SYSTEM_CONTEXT_BINARY_INFO_VERSION_1) {
     const auto& context_binary_info = binary_info.contextBinaryInfoV1;
+    LITERT_LOG(LITERT_INFO, "Processing binary info v1 with %d graphs and %d tensors",
+              context_binary_info.numGraphs, context_binary_info.numContextTensors);
     if (auto status = InsertQnnTensors(context_binary_info.numContextTensors,
                                        context_binary_info.contextTensors,
                                        context_tensors_);
@@ -165,6 +189,8 @@ Expected<void> ContextBinaryInfo::Init(
 
   } else if (binary_info.version == QNN_SYSTEM_CONTEXT_BINARY_INFO_VERSION_2) {
     const auto& context_binary_info = binary_info.contextBinaryInfoV2;
+    LITERT_LOG(LITERT_INFO, "Processing binary info v2 with %d graphs and %d tensors",
+              context_binary_info.numGraphs, context_binary_info.numContextTensors);
     if (auto status = InsertQnnTensors(context_binary_info.numContextTensors,
                                        context_binary_info.contextTensors,
                                        context_tensors_);
@@ -178,6 +204,8 @@ Expected<void> ContextBinaryInfo::Init(
     }
   } else if (binary_info.version == QNN_SYSTEM_CONTEXT_BINARY_INFO_VERSION_3) {
     const auto& context_binary_info = binary_info.contextBinaryInfoV3;
+    LITERT_LOG(LITERT_INFO, "Processing binary info v3 with %d graphs and %d tensors",
+              context_binary_info.numGraphs, context_binary_info.numContextTensors);
     if (auto status = InsertQnnTensors(context_binary_info.numContextTensors,
                                        context_binary_info.contextTensors,
                                        context_tensors_);
@@ -193,11 +221,52 @@ Expected<void> ContextBinaryInfo::Init(
     return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                       "Unsupported context binary version.");
   }
+  
+  LITERT_LOG(LITERT_INFO, "After initialization, context has %zu graphs",
+             graphs_.size());
   return {};
 }
 
 Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
     QnnManager& qnn, const void* exec_bytecode_ptr, size_t exec_bytecode_size) {
+  // Static cache to preserve context binary info across multiple calls
+  // The key is a combination of the bytecode pointer and size
+  struct BytecodeKey {
+    const void* ptr;
+    size_t size;
+    
+    bool operator==(const BytecodeKey& other) const {
+      return ptr == other.ptr && size == other.size;
+    }
+  };
+  
+  struct BytecodeKeyHash {
+    std::size_t operator()(const BytecodeKey& key) const {
+      return std::hash<const void*>()(key.ptr) ^ std::hash<size_t>()(key.size);
+    }
+  };
+  
+  static std::unordered_map<BytecodeKey, ContextBinaryInfo, BytecodeKeyHash> binary_info_cache;
+  
+  // Create a key for the current bytecode
+  BytecodeKey key{exec_bytecode_ptr, exec_bytecode_size};
+  
+  // Check if we already have this binary info in cache
+  auto cache_it = binary_info_cache.find(key);
+  if (cache_it != binary_info_cache.end()) {
+    LITERT_LOG(LITERT_INFO, "Using cached context binary info with %zu graphs",
+               cache_it->second.Graphs().size());
+               
+    // Log all cached graphs to help with debugging
+    for (size_t i = 0; i < cache_it->second.Graphs().size(); ++i) {
+      LITERT_LOG(LITERT_INFO, "Cached graph %zu: %s", 
+                 i, cache_it->second.Graphs()[i].Name().c_str());
+    }
+    
+    return cache_it->second;
+  }
+  
+  // Not in cache, proceed with normal extraction and initialization
   auto system_context_handle = qnn.CreateSystemContextHandle();
   if (!system_context_handle) {
     return Unexpected(system_context_handle.Error());
@@ -230,19 +299,31 @@ Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
   int version = binary_info->version;
   LITERT_LOG(LITERT_INFO, "QNN Binary info version: %d", version);
 
+  // Create context binary info object and initialize it
   ContextBinaryInfo info;
   auto status = info.Init(*binary_info);
 
-  if (status) {
-    LITERT_LOG(LITERT_INFO,
-               "Successfully initialized context binary info with %zu graphs",
-               info.Graphs().size());
-    return info;
-  } else {
+  if (!status) {
     LITERT_LOG(LITERT_ERROR, "Failed to initialize context binary info: %s",
                status.Error().Message().c_str());
     return Unexpected(status.Error());
   }
+  
+  LITERT_LOG(LITERT_INFO,
+             "Successfully initialized context binary info with %zu graphs",
+             info.Graphs().size());
+  
+  // Log all initialized graphs
+  for (size_t i = 0; i < info.Graphs().size(); ++i) {
+    LITERT_LOG(LITERT_INFO, "Graph %zu: %s", i, info.Graphs()[i].Name().c_str());
+  }
+  
+  // Cache the result for future use with the same bytecode
+  binary_info_cache[key] = info;
+  LITERT_LOG(LITERT_INFO, "Cached binary info for future use");
+  
+  return info;
+}
 }
 
 }  // namespace qnn
