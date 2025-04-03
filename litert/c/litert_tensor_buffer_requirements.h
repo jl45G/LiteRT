@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_TENSOR_BUFFER_REQUIREMENTS_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_TENSOR_BUFFER_REQUIREMENTS_H_
+#ifndef ODML_LITERT_LITERT_C_LITERT_TENSOR_BUFFER_REQUIREMENTS_H_
+#define ODML_LITERT_LITERT_C_LITERT_TENSOR_BUFFER_REQUIREMENTS_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -47,6 +47,13 @@ LiteRtStatus LiteRtGetTensorBufferRequirementsStrides(
     LiteRtTensorBufferRequirements requirements, int* num_strides,
     const uint32_t** strides);
 
+// Join requirements from two sources and return an error if the join returns an
+// empty set of requirements.
+LiteRtStatus LiteRtJoinTensorBufferRequirements(
+    LiteRtTensorBufferRequirements src_requirements_1,
+    LiteRtTensorBufferRequirements src_requirements_2,
+    LiteRtTensorBufferRequirements* joined_requirements);
+
 void LiteRtDestroyTensorBufferRequirements(
     LiteRtTensorBufferRequirements requirements);
 
@@ -54,4 +61,4 @@ void LiteRtDestroyTensorBufferRequirements(
 }
 #endif  // __cplusplus
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_TENSOR_BUFFER_REQUIREMENTS_H_
+#endif  // ODML_LITERT_LITERT_C_LITERT_TENSOR_BUFFER_REQUIREMENTS_H_
