@@ -15,7 +15,7 @@
 #include "litert/vendors/qualcomm/context_binary_info.h"
 
 #include <cstddef>
-#include <unordered_map>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -229,41 +229,25 @@ Expected<void> ContextBinaryInfo::Init(
 
 Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
     QnnManager& qnn, const void* exec_bytecode_ptr, size_t exec_bytecode_size) {
-  // Static cache to preserve context binary info across multiple calls
-  // The key is a combination of the bytecode pointer and size
-  struct BytecodeKey {
-    const void* ptr;
-    size_t size;
-    
-    bool operator==(const BytecodeKey& other) const {
-      return ptr == other.ptr && size == other.size;
-    }
-  };
+  // Use a simpler caching approach with a static pointer to preserve 
+  // context binary info across multiple calls
+  static const void* last_exec_bytecode_ptr = nullptr;
+  static size_t last_exec_bytecode_size = 0;
+  static std::unique_ptr<ContextBinaryInfo> cached_info = nullptr;
   
-  struct BytecodeKeyHash {
-    std::size_t operator()(const BytecodeKey& key) const {
-      return std::hash<const void*>()(key.ptr) ^ std::hash<size_t>()(key.size);
-    }
-  };
-  
-  static std::unordered_map<BytecodeKey, ContextBinaryInfo, BytecodeKeyHash> binary_info_cache;
-  
-  // Create a key for the current bytecode
-  BytecodeKey key{exec_bytecode_ptr, exec_bytecode_size};
-  
-  // Check if we already have this binary info in cache
-  auto cache_it = binary_info_cache.find(key);
-  if (cache_it != binary_info_cache.end()) {
+  // Check if we already have cached info for this bytecode
+  if (cached_info && last_exec_bytecode_ptr == exec_bytecode_ptr && 
+      last_exec_bytecode_size == exec_bytecode_size) {
     LITERT_LOG(LITERT_INFO, "Using cached context binary info with %zu graphs",
-               cache_it->second.Graphs().size());
+               cached_info->Graphs().size());
                
     // Log all cached graphs to help with debugging
-    for (size_t i = 0; i < cache_it->second.Graphs().size(); ++i) {
+    for (size_t i = 0; i < cached_info->Graphs().size(); ++i) {
       LITERT_LOG(LITERT_INFO, "Cached graph %zu: %s", 
-                 i, cache_it->second.Graphs()[i].Name().c_str());
+                 i, cached_info->Graphs()[i].Name().c_str());
     }
     
-    return cache_it->second;
+    return *cached_info;
   }
   
   // Not in cache, proceed with normal extraction and initialization
@@ -300,8 +284,8 @@ Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
   LITERT_LOG(LITERT_INFO, "QNN Binary info version: %d", version);
 
   // Create context binary info object and initialize it
-  ContextBinaryInfo info;
-  auto status = info.Init(*binary_info);
+  auto new_info = std::make_unique<ContextBinaryInfo>();
+  auto status = new_info->Init(*binary_info);
 
   if (!status) {
     LITERT_LOG(LITERT_ERROR, "Failed to initialize context binary info: %s",
@@ -311,18 +295,21 @@ Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
   
   LITERT_LOG(LITERT_INFO,
              "Successfully initialized context binary info with %zu graphs",
-             info.Graphs().size());
+             new_info->Graphs().size());
   
   // Log all initialized graphs
-  for (size_t i = 0; i < info.Graphs().size(); ++i) {
-    LITERT_LOG(LITERT_INFO, "Graph %zu: %s", i, info.Graphs()[i].Name().c_str());
+  for (size_t i = 0; i < new_info->Graphs().size(); ++i) {
+    LITERT_LOG(LITERT_INFO, "Graph %zu: %s", i, new_info->Graphs()[i].Name().c_str());
   }
   
-  // Cache the result for future use with the same bytecode
-  binary_info_cache[key] = info;
+  // Update the cache
+  last_exec_bytecode_ptr = exec_bytecode_ptr;
+  last_exec_bytecode_size = exec_bytecode_size;
+  cached_info = std::move(new_info);
+  
   LITERT_LOG(LITERT_INFO, "Cached binary info for future use");
   
-  return info;
+  return *cached_info;
 }
 }
 
