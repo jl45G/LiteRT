@@ -32,12 +32,13 @@
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
+#include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
 #include "litert/core/model/model.h"
-#include "litert/runtime/open_cl_buffer.h"
+#include "litert/runtime/open_cl_memory.h"
 #include "litert/runtime/tensor_buffer.h"
 #include "litert/runtime/tensor_buffer_requirements.h"
 #include "litert/test/common.h"
@@ -412,8 +413,8 @@ TEST(CompiledModelTest, UseOpenCLBuffer) {
   GTEST_SKIP() << "GPU tests are not supported In msan";
 #endif
 
-  if (!litert::internal::OpenClBuffer::IsSupported()) {
-    GTEST_SKIP() << "OpenCL buffers are not supported on this platform; "
+  if (!litert::internal::OpenClMemory::IsSupported()) {
+    GTEST_SKIP() << "OpenCL memory is not supported on this platform; "
                     "skipping the test";
   }
   // Environment setup.
@@ -486,18 +487,18 @@ TEST(CompiledModelTest, UseOpenCLBuffer) {
   LITERT_ASSERT_OK_AND_ASSIGN(
       std::vector<LiteRtTensorBuffer> input_buffers,
       CreateInputBuffersOfType(*model, signature_key,
-                               kLiteRtTensorBufferTypeOpenCl,
+                               kLiteRtTensorBufferTypeOpenClBuffer,
                                sizeof(float) * kTestInput0Size));
 
   LITERT_ASSERT_OK_AND_ASSIGN(
       std::vector<LiteRtTensorBuffer> output_buffers,
       CreateOutputBuffersOfType(*model, signature_key,
-                                kLiteRtTensorBufferTypeOpenCl,
+                                kLiteRtTensorBufferTypeOpenClBuffer,
                                 sizeof(float) * kTestOutputSize));
 
   // Fill model inputs.
   LiteRtTensorBuffer& input_0_buffer = input_buffers[0];
-  EXPECT_EQ(input_0_buffer->buffer_type(), kLiteRtTensorBufferTypeOpenCl);
+  EXPECT_EQ(input_0_buffer->buffer_type(), kLiteRtTensorBufferTypeOpenClBuffer);
   {
     TensorBuffer opencl_buffer(input_0_buffer, /*owned=*/false);
     opencl_buffer.Write<float>(

@@ -13,11 +13,11 @@
 # limitations under the License.
 
 load("//litert/build_common:litert_build_defs.bzl", "gtest_main_no_heapcheck_deps")
-load("//litert/build_common:special_rule.bzl", "gles_deps", "gles_linkopts", "lite_rt_friends")
+load("//litert/build_common:special_rule.bzl", "gles_deps", "gles_linkopts")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:__subpackages__"],
+    default_visibility = ["//litert:litert_internal_users"],
 )
 
 cc_library(
@@ -35,8 +35,15 @@ cc_library(
         "//litert/c:litert_event_type",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
-        "//litert/runtime/opencl:cl_event",
+        "@opencl_headers",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:opencl_wrapper",
     ],
+)
+
+cc_library(
+    name = "metrics",
+    hdrs = ["metrics.h"],
+    deps = ["//litert/c:litert_any"],
 )
 
 cc_library(
@@ -48,8 +55,9 @@ cc_library(
         "gl_buffer.cc",
         "gl_texture.cc",
         "ion_buffer.cc",
-        "open_cl_buffer.cc",
+        "open_cl_memory.cc",
         "tensor_buffer.cc",
+        "tensor_buffer_requirements.cc",
     ],
     hdrs = [
         "ahwb_buffer.h",
@@ -59,7 +67,7 @@ cc_library(
         "gl_buffer.h",
         "gl_texture.h",
         "ion_buffer.h",
-        "open_cl_buffer.h",
+        "open_cl_memory.h",
         "tensor_buffer.h",
         "tensor_buffer_requirements.h",
         "//litert/c:litert_event.h",
@@ -88,11 +96,12 @@ cc_library(
         "//litert/cc:litert_macros",
         "//litert/cc:litert_tensor_buffer_utils",
         "//litert/core/util:tensor_type_util",
-        "//litert/runtime/opencl:buffer",
-        "//litert/runtime/opencl:cl_command_queue",
-        "//litert/runtime/opencl:cl_context",
-        "//litert/runtime/opencl:opencl_wrapper",
+        "//litert/core/util:to_string",
         "@opencl_headers",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:buffer",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_command_queue",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_context",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:opencl_wrapper",
     ] + gles_deps() + select({
         "@org_tensorflow//tensorflow:android": [
             "@org_tensorflow//tensorflow/lite/delegates/gpu/gl:gl_buffer",
@@ -117,14 +126,15 @@ cc_library(
     deps = [
         "//litert/c:litert_any",
         "//litert/c:litert_common",
+        "//litert/c:litert_environment_options",
         "//litert/c:litert_logging",
         "//litert/cc:litert_expected",
         "//litert/core:environment",
-        "//litert/runtime/opencl:cl_command_queue",
-        "//litert/runtime/opencl:cl_context",
-        "//litert/runtime/opencl:cl_device",
-        "//litert/runtime/opencl:opencl_wrapper",
         "@opencl_headers",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_command_queue",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_context",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:cl_device",
+        "@org_tensorflow//tensorflow/lite/delegates/gpu/cl:opencl_wrapper",
     ],
 )
 
@@ -146,8 +156,8 @@ cc_test(
         # "@ml_drift//ml_drift/cl:opencl_wrapper",
         # copybara:uncomment_end
         "//litert/c:litert_environment",
+        "//litert/c:litert_environment_options",
         "//litert/cc:litert_any",
-        "//litert/runtime/opencl:opencl_wrapper",
     ],
 )
 
@@ -164,7 +174,9 @@ cc_library(
         "//litert/cc:litert_detail",
         "//litert/cc:litert_element_type",
         "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
+        "//litert/core/util:tensor_type_util",
         "@org_tensorflow//tensorflow/lite/c:c_api",
         "@org_tensorflow//tensorflow/lite/c:c_api_opaque",
         "@org_tensorflow//tensorflow/lite/c:c_api_types",
@@ -176,11 +188,9 @@ cc_library(
     name = "external_litert_buffer_context",
     srcs = ["external_litert_buffer_context.cc"],
     hdrs = ["external_litert_buffer_context.h"],
-    visibility = [
-        "//litert:__subpackages__",
-    ] + lite_rt_friends(),
     deps = [
         ":tfl_utils",
+        "@com_google_absl//absl/strings:str_format",
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
         "//litert/c:litert_model",
@@ -204,6 +214,7 @@ cc_library(
         ":accelerator_model_compilation_data",
         ":compilation_options",
         ":external_litert_buffer_context",
+        ":metrics",
         ":tensor_buffer",
         "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -215,8 +226,10 @@ cc_library(
         "//litert/c:litert_common",
         "//litert/c:litert_compilation_options",
         "//litert/c:litert_logging",
+        "//litert/c:litert_metrics",
         "//litert/c:litert_model",
         "//litert/c:litert_tensor_buffer",
+        "//litert/c:litert_tensor_buffer_types",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_event",
         "//litert/cc:litert_expected",
@@ -235,8 +248,9 @@ cc_library(
         "@org_tensorflow//tensorflow/lite:framework",
         "@org_tensorflow//tensorflow/lite:model_builder",
         "@org_tensorflow//tensorflow/lite/c:c_api_opaque",
+        "@org_tensorflow//tensorflow/lite/c:c_api_types_opaque_delegate",
         "@org_tensorflow//tensorflow/lite/c:common",
-        "@org_tensorflow//tensorflow/lite/core:cc_api_stable",
+        "@org_tensorflow//tensorflow/lite/core:private_cc_api_stable",
         "@org_tensorflow//tensorflow/lite/delegates/utils:simple_opaque_delegate",
         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
     ],
@@ -268,6 +282,7 @@ cc_test(
         "//litert/c:litert_environment",
         "//litert/c:litert_model",
         "//litert/c:litert_tensor_buffer",
+        "//litert/c:litert_tensor_buffer_types",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_tensor_buffer",
@@ -372,6 +387,7 @@ cc_library(
     name = "accelerator",
     hdrs = ["accelerator.h"],
     deps = [
+        ":metrics",
         "//litert/c:litert_accelerator_compilation_options",
         "//litert/c:litert_common",
     ],
