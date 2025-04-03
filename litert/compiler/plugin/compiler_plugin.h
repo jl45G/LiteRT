@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_COMPILER_PLUGIN_COMPILER_PLUGIN_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_COMPILER_PLUGIN_COMPILER_PLUGIN_H_
+#ifndef ODML_LITERT_LITERT_COMPILER_PLUGIN_COMPILER_PLUGIN_H_
+#define ODML_LITERT_LITERT_COMPILER_PLUGIN_COMPILER_PLUGIN_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -151,9 +151,9 @@ class CompilerPlugin {
 // Higher level functions for applying plugin to graph.
 //===---------------------------------------------------------------------------
 
-// Dispatch op references and their subgraph to be compiled.
-using PartitionResult =
-    std::pair<std::vector<LiteRtOp>, typename LiteRtSubgraphT::Alloc>;
+// Dispatch op references and their subgraph to be compiled contained within a
+// new model. op[i]'s body is models ith subgraph.
+using PartitionResult = std::pair<std::vector<LiteRtOp>, LiteRtModelT>;
 
 // Applies just the partition phase of the plugin on the model. Returns
 // references newly allocated subgraphs removed from input and their
@@ -199,4 +199,4 @@ Expected<ApplyPluginsResult> ApplyPlugins(
 
 }  // namespace litert::internal
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_COMPILER_PLUGIN_COMPILER_PLUGIN_H_
+#endif  // ODML_LITERT_LITERT_COMPILER_PLUGIN_COMPILER_PLUGIN_H_

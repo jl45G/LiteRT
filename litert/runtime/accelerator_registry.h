@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_ACCELERATOR_REGISTRY_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_ACCELERATOR_REGISTRY_H_
+#ifndef ODML_LITERT_LITERT_RUNTIME_ACCELERATOR_REGISTRY_H_
+#define ODML_LITERT_LITERT_RUNTIME_ACCELERATOR_REGISTRY_H_
 
 #include <cstddef>
 #include <memory>
-#include <string>
-#include <utility>
 #include <vector>
 
 #include "litert/c/litert_common.h"
@@ -80,12 +78,21 @@ class AcceleratorRegistry {
   auto end() { return accelerators_.end(); }
 
  private:
-  std::vector<Ptr> accelerators_;
+  // Warning: the order of these members is VERY important. When the
+  // accelerators are destroyed they call into functions that are in their
+  // libraries. This means that the libraries must be released AFTER the
+  // accelerators are.
+  //
+  // Remember that C++'s order of destruction is the reverse of the order of
+  // construction (which is the same as the order of declaration for class
+  // fields).
+
   // Some accelerators are loaded as shared libraries. This list keeps these
   // libraries loaded while the environment uses them.
   std::vector<SharedLibrary> accelerator_shared_libraries_;
+  std::vector<Ptr> accelerators_;
 };
 
 }  // namespace litert::internal
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_ACCELERATOR_REGISTRY_H_
+#endif  // ODML_LITERT_LITERT_RUNTIME_ACCELERATOR_REGISTRY_H_

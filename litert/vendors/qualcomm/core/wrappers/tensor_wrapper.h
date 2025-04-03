@@ -1,8 +1,8 @@
 // Copyright (c) Qualcomm Innovation Center, Inc. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_TENSOR_WRAPPER_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_TENSOR_WRAPPER_H_
+#ifndef ODML_LITERT_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_TENSOR_WRAPPER_H_
+#define ODML_LITERT_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_TENSOR_WRAPPER_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -38,8 +38,14 @@ inline constexpr Qnn_DataType_t GetQnnDataType(const bool is_quant) {
     return is_quant ? QNN_DATATYPE_UFIXED_POINT_32 : QNN_DATATYPE_UINT_32;
   } else if constexpr (std::is_same_v<T, std::int32_t>) {
     return is_quant ? QNN_DATATYPE_SFIXED_POINT_32 : QNN_DATATYPE_INT_32;
+  } else if constexpr (std::is_same_v<T, std::uint64_t>) {
+    return QNN_DATATYPE_UINT_64;
+  } else if constexpr (std::is_same_v<T, std::int64_t>) {
+    return QNN_DATATYPE_INT_64;
   } else if constexpr (std::is_same_v<T, float>) {
     return QNN_DATATYPE_FLOAT_32;
+  } else if constexpr (std::is_same_v<T, double>) {
+    return QNN_DATATYPE_FLOAT_64;
   } else {
     static_assert(always_false<T>, "Uknown C++ type");
   }
@@ -96,6 +102,8 @@ class TensorWrapper final {
                          const std::vector<std::uint32_t>& dimentions,
                          std::uint32_t bytes, const void* data);
 
+  TensorWrapper(const Qnn_Tensor_t& qnn_tensor);
+
   TensorWrapper(const TensorWrapper& other);
 
   TensorWrapper(TensorWrapper&& other);
@@ -120,10 +128,20 @@ class TensorWrapper final {
 
   QuantizeParamsWrapperVariant& GetQuantParams() { return quantize_params_; };
 
-  const bool IsQuant() const {
+  bool IsQuant() const {
     return !std::holds_alternative<UndefinedQuantizeParamsWrapper>(
         quantize_params_);
   };
+
+  bool IsPerTensorQuant() const {
+    return std::holds_alternative<ScaleOffsetQuantizeParamsWrapper>(
+        quantize_params_);
+  }
+
+  bool IsPerChannelQuant() const {
+    return std::holds_alternative<AxisScaleOffsetQuantizeParamsWrapper>(
+        quantize_params_);
+  }
 
   bool IsPerTensorQuantWithOffsetDiff(const TensorWrapper& rhs) const;
 
@@ -132,17 +150,20 @@ class TensorWrapper final {
            GetDataType() == QNN_DATATYPE_UFIXED_POINT_8;
   }
 
+  // TODO: rename IsQuant16 or IsQuantU16
   bool IsQuant16() const {
     return GetDataType() == QNN_DATATYPE_SFIXED_POINT_16 ||
            GetDataType() == QNN_DATATYPE_UFIXED_POINT_16;
+  }
+
+  bool IsQuantU16() const {
+    return GetDataType() == QNN_DATATYPE_UFIXED_POINT_16;
   }
 
   bool IsF32() const { return GetDataType() == QNN_DATATYPE_FLOAT_32; }
   bool IsF16() const { return GetDataType() == QNN_DATATYPE_FLOAT_16; }
 
   Qnn_DataType_t GetDataType() const;
-
-  void SetDataType(Qnn_DataType_t data_type);
 
   bool IsSubgraphInput() const {
     return GetTensorType() == QNN_TENSOR_TYPE_APP_WRITE;
@@ -281,10 +302,21 @@ class TensorWrapper final {
 
   size_t GetTensorBytes() const;
 
+  void ConvertQint16ToQuint16();
+
  private:
   Qnn_TensorType_t GetTensorType() const;
 
+  void SetDataType(Qnn_DataType_t data_type) {
+    qnn_tensor_.v2.dataType = data_type;
+  }
+
   void SetDataBy(std::uint32_t bytes, const void* data);
+
+  bool HasStaticData() const {
+    return qnn_tensor_.v2.clientBuf.dataSize != 0 &&
+           qnn_tensor_.v2.clientBuf.data != nullptr;
+  }
 
   Qnn_Tensor_t qnn_tensor_{.version = QNN_TENSOR_VERSION_2,
                            .v2 = QNN_TENSOR_V2_INIT};
@@ -310,9 +342,8 @@ std::optional<absl::Span<const T>> TensorWrapper::GetStaticTensorData() const {
     return std::nullopt;
   }
 
-  if (qnn_tensor_.v2.clientBuf.dataSize == 0 ||
-      qnn_tensor_.v2.clientBuf.data == nullptr) {
-    QNN_LOG_ERROR("Empty StaticTensorData.");
+  if (!HasStaticData()) {
+    QNN_LOG_ERROR("Empty static tensor data.");
     return std::nullopt;
   }
 
@@ -332,4 +363,4 @@ std::optional<absl::Span<const T>> TensorWrapper::GetStaticTensorData() const {
 }
 }  // namespace qnn
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_TENSOR_WRAPPER_H_
+#endif  // ODML_LITERT_LITERT_VENDORS_QUALCOMM_CORE_WRAPPERS_TENSOR_WRAPPER_H_
