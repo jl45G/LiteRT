@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_COMPILED_MODEL_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_COMPILED_MODEL_H_
+#ifndef ODML_LITERT_LITERT_C_LITERT_COMPILED_MODEL_H_
+#define ODML_LITERT_LITERT_C_LITERT_COMPILED_MODEL_H_
 
 #include <stddef.h>
 
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_compilation_options.h"
 #include "litert/c/litert_environment.h"
+#include "litert/c/litert_metrics.h"
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
@@ -129,8 +130,16 @@ LiteRtStatus LiteRtRunCompiledModelAsync(
 
 void LiteRtDestroyCompiledModel(LiteRtCompiledModel compiled_model);
 
+// Start collection of HW-specific metrics at a specific level of detail (>= 0).
+LiteRtStatus LiteRtCompiledModelStartMetricsCollection(
+    LiteRtCompiledModel compiled_model, int detail_level);
+
+// Stop collection of HW-specific metrics and report the collected metrics.
+LiteRtStatus LiteRtCompiledModelStopMetricsCollection(
+    LiteRtCompiledModel compiled_model, LiteRtMetrics metrics);
+
 #ifdef __cplusplus
 }
 #endif  // __cplusplus
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_COMPILED_MODEL_H_
+#endif  // ODML_LITERT_LITERT_C_LITERT_COMPILED_MODEL_H_

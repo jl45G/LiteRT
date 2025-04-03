@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_TENSOR_BUFFER_TYPES_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_TENSOR_BUFFER_TYPES_H_
+#ifndef ODML_LITERT_LITERT_C_LITERT_TENSOR_BUFFER_TYPES_H_
+#define ODML_LITERT_LITERT_C_LITERT_TENSOR_BUFFER_TYPES_H_
 
 typedef enum {
   kLiteRtTensorBufferTypeUnknown = 0,
@@ -22,9 +22,16 @@ typedef enum {
   kLiteRtTensorBufferTypeIon = 3,
   kLiteRtTensorBufferTypeDmaBuf = 4,
   kLiteRtTensorBufferTypeFastRpc = 5,
-  kLiteRtTensorBufferTypeOpenCl = 6,
-  kLiteRtTensorBufferTypeGlBuffer = 7,
-  kLiteRtTensorBufferTypeGlTexture = 8,
+  kLiteRtTensorBufferTypeGlBuffer = 6,
+  kLiteRtTensorBufferTypeGlTexture = 7,
+
+  // 10-19 are reserved for OpenCL memory objects.
+  kLiteRtTensorBufferTypeOpenClBuffer = 10,
+  kLiteRtTensorBufferTypeOpenClBufferFp16 = 11,
+  kLiteRtTensorBufferTypeOpenClTexture = 12,
+  kLiteRtTensorBufferTypeOpenClTextureFp16 = 13,
+  kLiteRtTensorBufferTypeOpenClImageBuffer = 14,
+  kLiteRtTensorBufferTypeOpenClImageBufferFp16 = 15,
 } LiteRtTensorBufferType;
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_TENSOR_BUFFER_TYPES_H_
+#endif  // ODML_LITERT_LITERT_C_LITERT_TENSOR_BUFFER_TYPES_H_
