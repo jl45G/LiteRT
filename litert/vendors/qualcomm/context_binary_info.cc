@@ -231,14 +231,19 @@ Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
     QnnManager& qnn, const void* exec_bytecode_ptr, size_t exec_bytecode_size) {
   // Use a simpler caching approach with a static pointer to preserve 
   // context binary info across multiple calls
+  // Static cache to preserve context binary info across multiple calls
+  // We use a ptr+size combination as the cache key to recognize the same bytecode
   static const void* last_exec_bytecode_ptr = nullptr;
   static size_t last_exec_bytecode_size = 0;
   static std::unique_ptr<ContextBinaryInfo> cached_info = nullptr;
   
-  // Check if we already have cached info for this bytecode
+  // Always extract new binary info even if bytecode pointer matches
+  // This ensures we capture all graphs, not just the ones we've seen before
+  std::unique_ptr<ContextBinaryInfo> existing_info = nullptr;
+  
   if (cached_info && last_exec_bytecode_ptr == exec_bytecode_ptr && 
       last_exec_bytecode_size == exec_bytecode_size) {
-    LITERT_LOG(LITERT_INFO, "Using cached context binary info with %zu graphs",
+    LITERT_LOG(LITERT_INFO, "Found cached context binary info with %zu graphs",
                cached_info->Graphs().size());
                
     // Log all cached graphs to help with debugging
@@ -247,7 +252,8 @@ Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
                  i, cached_info->Graphs()[i].Name().c_str());
     }
     
-    return *cached_info;
+    // Save the existing cache so we can merge with new info later
+    existing_info = std::move(cached_info);
   }
   
   // Not in cache, proceed with normal extraction and initialization
@@ -276,7 +282,8 @@ Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
     return Unexpected(kLiteRtStatusErrorRuntimeFailure, "Null binary info");
   }
 
-  LITERT_LOG(LITERT_INFO, "Successfully extracted QNN binary info (size: %zu)",
+  LITERT_LOG(LITERT_INFO, 
+             "Successfully extracted QNN binary info (size: %zu, this is the structure size, not content size)",
              binary_info_size);
 
   // Log binary info version
@@ -300,6 +307,32 @@ Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
   // Log all initialized graphs
   for (size_t i = 0; i < new_info->Graphs().size(); ++i) {
     LITERT_LOG(LITERT_INFO, "Graph %zu: %s", i, new_info->Graphs()[i].Name().c_str());
+  }
+  
+  // If we have existing info, merge it with the new info
+  if (existing_info) {
+    LITERT_LOG(LITERT_INFO, "Merging existing cache (%zu graphs) with new info (%zu graphs)",
+               existing_info->Graphs().size(), new_info->Graphs().size());
+               
+    // Copy graphs from existing info that aren't in the new info
+    for (const auto& existing_graph : existing_info->Graphs()) {
+      bool found = false;
+      for (const auto& new_graph : new_info->Graphs()) {
+        if (existing_graph.Name() == new_graph.Name()) {
+          found = true;
+          break;
+        }
+      }
+      
+      if (!found) {
+        LITERT_LOG(LITERT_INFO, "Adding graph %s from existing cache", 
+                  existing_graph.Name().c_str());
+        new_info->graphs_.push_back(existing_graph);
+      }
+    }
+    
+    LITERT_LOG(LITERT_INFO, "After merging, context has %zu graphs", 
+              new_info->Graphs().size());
   }
   
   // Update the cache

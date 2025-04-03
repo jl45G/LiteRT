@@ -55,6 +55,11 @@ class ContextBinaryInfo {
  private:
   ContextBinaryInfo() = default;
   Expected<void> Init(const QnnSystemContext_BinaryInfo_t& binary_info);
+  
+  // Make graphs_ accessible to static Create() for merging
+  friend Expected<ContextBinaryInfo> ContextBinaryInfo::Create(QnnManager& qnn,
+                                           const void* exec_bytecode_ptr,
+                                           size_t exec_bytecode_size);
   std::vector<GraphInfo> graphs_;
   std::vector<::qnn::TensorWrapper> context_tensors_;
 };
