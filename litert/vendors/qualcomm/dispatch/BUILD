@@ -16,7 +16,7 @@ load("//litert/build_common:litert_build_defs.bzl", "copy_file", "litert_dynamic
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:__subpackages__"],
+    default_visibility = ["//litert:litert_internal_users"],
 )
 
 litert_dynamic_lib(
@@ -57,13 +57,18 @@ litert_dynamic_lib(
     deps = [
         "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
+        # TODO: Remove this dependency.
         "//litert/core/util:tensor_type_util",
         "//litert/vendors/c:litert_dispatch_c_api",
         "//litert/vendors/qualcomm:common",
         "//litert/vendors/qualcomm:context_binary_info",
         "//litert/vendors/qualcomm:qnn_manager",
+        "//litert/vendors/qualcomm/core/utils:miscs",
+        "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
         # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
     ],
 )
@@ -86,9 +91,6 @@ cc_test(
     srcs = [
         "dispatch_api_qualcomm_test.cc",
     ],
-    data = [
-        ":dispatch_api_so",
-    ],
     linkopts = select({
         "@org_tensorflow//tensorflow:android": ["-landroid"],
         "//conditions:default": [],
@@ -100,16 +102,20 @@ cc_test(
         "notap",
     ],
     deps = [
+        ":dispatch_api",
         "@com_google_googletest//:gtest_main",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/types:span",
         "//litert/c:litert_common",
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_any",
-        "//litert/core:filesystem",
+        "//litert/core:filesystem_testonly",
         "//litert/test:common",
         "//litert/test:simple_model_npu",
         "//litert/vendors/c:litert_dispatch_c_api",
+        "//litert/vendors/qualcomm/core/utils:miscs",
+        "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
     ],
 )

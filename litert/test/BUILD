@@ -17,9 +17,7 @@ load("//litert/build_common:tfl_model_gen.bzl", "tfl_model_gen")
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
     default_visibility = [
-        # copybara:uncomment "@mediapipe//mediapipe/calculators/tensor:__subpackages__",
-        # copybara:uncomment "//third_party/odml/litert:__subpackages__",
-        "//litert:__subpackages__",
+        "//litert:litert_stable_abi_users",
     ],
 )
 
@@ -58,7 +56,7 @@ cc_library(
         "@org_tensorflow//tensorflow/lite:framework",
         "@org_tensorflow//tensorflow/lite/c:c_api_opaque",
         "@org_tensorflow//tensorflow/lite/c:common",
-        "@org_tensorflow//tensorflow/lite/core:cc_api_stable",
+        "@org_tensorflow//tensorflow/lite/core:private_cc_api_stable",
         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
         "@local_tsl//tsl/platform",
     ],
@@ -87,6 +85,7 @@ cc_library(
         "testdata/simple_model_test_vectors.h",
     ],
     data = [
+        "testdata/simple_add_uint16_qualcomm.bin",
         "testdata/simple_model_google_tensor.bin",
         "testdata/simple_model_mtk.bin",
         "testdata/simple_model_npu.tflite",
@@ -109,7 +108,6 @@ cc_library(
         "testdata/simple_cascade_model_npu.tflite",
         "testdata/simple_model_google_tensor.bin",
         "testdata/simple_model_mtk.bin",
-        "testdata/simple_model_qualcomm.bin",
     ],
     deps = [
         "//litert/c:litert_model",
