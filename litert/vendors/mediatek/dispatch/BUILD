@@ -16,7 +16,7 @@ load("//litert/build_common:litert_build_defs.bzl", "copy_file", "litert_dynamic
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:__subpackages__"],
+    default_visibility = ["//litert:litert_internal_users"],
 )
 
 litert_dynamic_lib(
@@ -43,7 +43,7 @@ litert_dynamic_lib(
         "@org_tensorflow//tensorflow:android": ["-landroid"],
         "//conditions:default": [],
     }) + [
-        "-Wl,-soname=libLiteRtDispatch_GoogleTensor.so",
+        "-Wl,-soname=libLiteRtDispatch_Mediatek.so",
         "-Wl,-lc++abi",
     ],
     shared_lib_name = "dispatch_api_so",
@@ -66,7 +66,6 @@ litert_dynamic_lib(
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/core:dynamic_loading",
-        "//litert/core/util:tensor_type_util",
         "//litert/vendors/c:litert_dispatch_c_api",
         "//litert/vendors/mediatek:neuron_adapter_api",
         "//litert/vendors/mediatek/schema:mediatek_litert_schema",
@@ -91,9 +90,6 @@ cc_test(
     srcs = [
         "dispatch_api_mediatek_test.cc",
     ],
-    data = [
-        ":dispatch_api_so",
-    ],
     linkopts = select({
         "@org_tensorflow//tensorflow:android": ["-landroid"],
         "//conditions:default": [],
@@ -105,7 +101,12 @@ cc_test(
         "nosan",
         "notap",
     ],
+    target_compatible_with = select({
+        "@platforms//os:android": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
+        ":dispatch_api",
         "@com_google_googletest//:gtest_main",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:absl_log",

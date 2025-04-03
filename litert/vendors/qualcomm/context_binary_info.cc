@@ -21,8 +21,8 @@
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/vendors/qualcomm/core/wrappers/tensor_wrapper.h"
 #include "litert/vendors/qualcomm/qnn_manager.h"
-#include "litert/vendors/qualcomm/qnn_tensor.h"
 #include "third_party/qairt/latest/include/QNN/QnnCommon.h"
 #include "third_party/qairt/latest/include/QNN/QnnTypes.h"
 #include "third_party/qairt/latest/include/QNN/System/QnnSystemContext.h"
@@ -33,15 +33,12 @@ namespace qnn {
 namespace {
 
 Expected<void> InsertQnnTensors(int num_qnn_tensors, Qnn_Tensor_t* qnn_tensors,
-                                std::vector<QnnTensor>* tensors) {
-  tensors->clear();
-  tensors->reserve(num_qnn_tensors);
+                                std::vector<::qnn::TensorWrapper>& tensors) {
+  tensors.clear();
+  tensors.reserve(num_qnn_tensors);
   for (auto i = 0; i < num_qnn_tensors; ++i) {
-    auto tensor = QnnTensor::Create(qnn_tensors[i]);
-    if (!tensor) {
-      return Unexpected(tensor.Error());
-    }
-    tensors->push_back(std::move(*tensor));
+    tensors.emplace_back(qnn_tensors[i]);
+    // TODO: chunhsue@qti handle invalid access of qnn_tensor error.
   }
   return {};
 }
@@ -49,13 +46,33 @@ Expected<void> InsertQnnTensors(int num_qnn_tensors, Qnn_Tensor_t* qnn_tensors,
 Expected<void> InsertQnnGraphInfos(
     int num_qnn_graph_infos, QnnSystemContext_GraphInfo_t* qnn_graph_infos,
     std::vector<GraphInfo>* graphs) {
-  graphs->clear();
-  graphs->reserve(num_qnn_graph_infos);
+  LITERT_LOG(LITERT_INFO, "Inserting %d QNN graph info(s)",
+             num_qnn_graph_infos);
+
+  if (num_qnn_graph_infos == 0) {
+    LITERT_LOG(LITERT_WARNING, "No QNN graph infos found in the binary!");
+  }
+
+  // Reserve space for the new entries without clearing existing one
+  size_t current_size = graphs->size();
+  LITERT_LOG(LITERT_INFO, "current size %d",
+             current_size);
+  graphs->reserve(current_size + num_qnn_graph_infos);
+
   for (auto i = 0; i < num_qnn_graph_infos; ++i) {
+    LITERT_LOG(LITERT_INFO, "Processing QNN graph info %d with version %d", i,
+               qnn_graph_infos[i].version);
+
     auto graph = GraphInfo::Create(qnn_graph_infos[i]);
     if (!graph) {
+      LITERT_LOG(LITERT_ERROR, "Failed to create GraphInfo for graph %d: %s", i,
+                 graph.Error().Message().c_str());
       return Unexpected(graph.Error());
     }
+
+    LITERT_LOG(LITERT_INFO,
+               "Successfully created GraphInfo for graph %d, name: %s", i,
+               graph->Name().c_str());
     graphs->push_back(std::move(*graph));
   }
 
@@ -82,12 +99,12 @@ Expected<void> GraphInfo::Init(const QnnSystemContext_GraphInfo_t& graph_info) {
     LITERT_LOG(LITERT_INFO, "Found qnn graph: %s", name_.c_str());
 
     if (auto status = InsertQnnTensors(graph_info_.numGraphInputs,
-                                       graph_info_.graphInputs, &inputs_);
+                                       graph_info_.graphInputs, inputs_);
         !status) {
       return Unexpected(status.Error());
     }
     if (auto status = InsertQnnTensors(graph_info_.numGraphOutputs,
-                                       graph_info_.graphOutputs, &outputs_);
+                                       graph_info_.graphOutputs, outputs_);
         !status) {
       return Unexpected(status.Error());
     }
@@ -98,12 +115,12 @@ Expected<void> GraphInfo::Init(const QnnSystemContext_GraphInfo_t& graph_info) {
     LITERT_LOG(LITERT_INFO, "Found qnn graph: %s", name_.c_str());
 
     if (auto status = InsertQnnTensors(graph_info_.numGraphInputs,
-                                       graph_info_.graphInputs, &inputs_);
+                                       graph_info_.graphInputs, inputs_);
         !status) {
       return Unexpected(status.Error());
     }
     if (auto status = InsertQnnTensors(graph_info_.numGraphOutputs,
-                                       graph_info_.graphOutputs, &outputs_);
+                                       graph_info_.graphOutputs, outputs_);
         !status) {
       return Unexpected(status.Error());
     }
@@ -113,12 +130,12 @@ Expected<void> GraphInfo::Init(const QnnSystemContext_GraphInfo_t& graph_info) {
     LITERT_LOG(LITERT_INFO, "Found qnn graph: %s", name_.c_str());
 
     if (auto status = InsertQnnTensors(graph_info_.numGraphInputs,
-                                       graph_info_.graphInputs, &inputs_);
+                                       graph_info_.graphInputs, inputs_);
         !status) {
       return Unexpected(status.Error());
     }
     if (auto status = InsertQnnTensors(graph_info_.numGraphOutputs,
-                                       graph_info_.graphOutputs, &outputs_);
+                                       graph_info_.graphOutputs, outputs_);
         !status) {
       return Unexpected(status.Error());
     }
@@ -136,7 +153,7 @@ Expected<void> ContextBinaryInfo::Init(
     const auto& context_binary_info = binary_info.contextBinaryInfoV1;
     if (auto status = InsertQnnTensors(context_binary_info.numContextTensors,
                                        context_binary_info.contextTensors,
-                                       &context_tensors_);
+                                       context_tensors_);
         !status) {
       return Unexpected(status.Error());
     }
@@ -150,7 +167,7 @@ Expected<void> ContextBinaryInfo::Init(
     const auto& context_binary_info = binary_info.contextBinaryInfoV2;
     if (auto status = InsertQnnTensors(context_binary_info.numContextTensors,
                                        context_binary_info.contextTensors,
-                                       &context_tensors_);
+                                       context_tensors_);
         !status) {
       return Unexpected(status.Error());
     }
@@ -163,7 +180,7 @@ Expected<void> ContextBinaryInfo::Init(
     const auto& context_binary_info = binary_info.contextBinaryInfoV3;
     if (auto status = InsertQnnTensors(context_binary_info.numContextTensors,
                                        context_binary_info.contextTensors,
-                                       &context_tensors_);
+                                       context_tensors_);
         !status) {
       return Unexpected(status.Error());
     }
@@ -186,6 +203,10 @@ Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
     return Unexpected(system_context_handle.Error());
   }
 
+  LITERT_LOG(LITERT_INFO,
+             "Extracting QNN binary info from bytecode (size: %zu)",
+             exec_bytecode_size);
+
   const QnnSystemContext_BinaryInfo_t* binary_info = nullptr;
   Qnn_ContextBinarySize_t binary_info_size = 0;
   if (auto status = qnn.SystemApi()->systemContextGetBinaryInfo(
@@ -202,12 +223,24 @@ Expected<ContextBinaryInfo> ContextBinaryInfo::Create(
     return Unexpected(kLiteRtStatusErrorRuntimeFailure, "Null binary info");
   }
 
+  LITERT_LOG(LITERT_INFO, "Successfully extracted QNN binary info (size: %zu)",
+             binary_info_size);
+
+  // Log binary info version
+  int version = binary_info->version;
+  LITERT_LOG(LITERT_INFO, "QNN Binary info version: %d", version);
+
   ContextBinaryInfo info;
   auto status = info.Init(*binary_info);
 
   if (status) {
+    LITERT_LOG(LITERT_INFO,
+               "Successfully initialized context binary info with %zu graphs",
+               info.Graphs().size());
     return info;
   } else {
+    LITERT_LOG(LITERT_ERROR, "Failed to initialize context binary info: %s",
+               status.Error().Message().c_str());
     return Unexpected(status.Error());
   }
 }

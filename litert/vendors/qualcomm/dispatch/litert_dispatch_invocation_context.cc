@@ -14,18 +14,26 @@
 
 #include "litert/vendors/qualcomm/dispatch/litert_dispatch_invocation_context.h"
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <utility>
 #include <vector>
 
 #include "absl/strings/string_view.h"  // from @com_google_absl
+#include "absl/types/span.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
+#include "litert/c/litert_tensor_buffer_types.h"
+#include "litert/cc/litert_expected.h"
+#include "litert/cc/litert_macros.h"
 #include "litert/core/util/tensor_type_util.h"
 #include "litert/vendors/c/litert_dispatch.h"
 #include "litert/vendors/qualcomm/context_binary_info.h"
+#include "litert/vendors/qualcomm/core/utils/miscs.h"
 #include "litert/vendors/qualcomm/dispatch/litert_dispatch_device_context.h"
 #include "litert/vendors/qualcomm/qnn_manager.h"
 #include "third_party/qairt/latest/include/QNN/QnnCommon.h"
@@ -49,7 +57,10 @@ LiteRtDispatchInvocationContextT::LiteRtDispatchInvocationContextT(
       graph_index_(graph_index),
       graph_handle_(graph_handle),
       inputs_(context_binary_info.Graphs()[graph_index].Inputs()),
-      outputs_(context_binary_info.Graphs()[graph_index].Outputs()) {}
+      outputs_(context_binary_info.Graphs()[graph_index].Outputs()) {
+  input_buffer_handles_.resize(inputs_.size());
+  output_buffer_handles_.resize(outputs_.size());
+}
 
 Expected<LiteRtDispatchInvocationContextT::Ptr>
 LiteRtDispatchInvocationContextT::Create(
@@ -69,6 +80,13 @@ LiteRtDispatchInvocationContextT::Create(
     return Unexpected(kLiteRtStatusErrorRuntimeFailure, "No graph found");
   }
 
+  LITERT_LOG(LITERT_INFO, "Found %zu graph(s) in the model", graphs.size());
+  for (size_t i = 0; i < graphs.size(); ++i) {
+    LITERT_LOG(LITERT_INFO, "Graph %zu: %s", i, graphs[i].Name().c_str());
+  }
+
+  LITERT_LOG(LITERT_INFO, "Looking for graph with name '%s'", function_name);
+
   int graph_index = -1;
   // If the function_name is not specified and there is only one graph, then
   // take that graph.
@@ -76,18 +94,42 @@ LiteRtDispatchInvocationContextT::Create(
     graph_index = 0;
     const auto& graph = graphs[graph_index];
     function_name = graph.Name().c_str();
+    LITERT_LOG(LITERT_INFO, "Using default graph %s at index %d", function_name,
+               graph_index);
   } else {
+    // Special handling for multi-signature models with consistent naming
+    // pattern
+    absl::string_view function_name_view(function_name);
     for (auto i = 0; i < graphs.size(); ++i) {
       const auto& graph = graphs[i];
-      if (graph.Name() == absl::string_view(function_name)) {
+      LITERT_LOG(LITERT_INFO, "Comparing '%s' with '%s'", graph.Name().c_str(),
+                 function_name);
+
+      // Try exact match first
+      if (graph.Name() == function_name_view) {
         graph_index = i;
+        LITERT_LOG(LITERT_INFO, "Found exact match for graph '%s' at index %d",
+                   function_name, graph_index);
         break;
       }
     }
   }
+
   if (graph_index < 0) {
-    return Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                      "Function name not found");
+    // Handle the case where no exact match was found
+    // For multi-signature models, use the first graph as a fallback
+    if (graphs.size() > 0) {
+      graph_index = 0;
+      function_name = graphs[graph_index].Name().c_str();
+      LITERT_LOG(
+          LITERT_INFO,
+          "No exact match found. Falling back to first graph '%s' at index %d",
+          function_name, graph_index);
+    } else {
+      LITERT_LOG(LITERT_ERROR, "Function name '%s' not found", function_name);
+      return Unexpected(kLiteRtStatusErrorRuntimeFailure,
+                        "Function name not found");
+    }
   }
 
   auto configs = QnnManager::DefaultContextConfigs();
@@ -169,7 +211,8 @@ Expected<void> LiteRtDispatchInvocationContextT::AttachInput(
   }
 
   auto& tensor = inputs_[graph_input_index];
-  return AttachBuffer(tensor.Tensor(), tensor_buffer_handle);
+  input_buffer_handles_[graph_input_index] = tensor_buffer_handle;
+  return AttachBuffer(tensor.GetQnnTensor(), tensor_buffer_handle);
 }
 
 Expected<void> LiteRtDispatchInvocationContextT::AttachOutput(
@@ -180,7 +223,8 @@ Expected<void> LiteRtDispatchInvocationContextT::AttachOutput(
   }
 
   auto& tensor = outputs_[graph_output_index];
-  return AttachBuffer(tensor.Tensor(), tensor_buffer_handle);
+  output_buffer_handles_[graph_output_index] = tensor_buffer_handle;
+  return AttachBuffer(tensor.GetQnnTensor(), tensor_buffer_handle);
 }
 
 Expected<void> LiteRtDispatchInvocationContextT::AttachBuffer(
@@ -211,21 +255,25 @@ Expected<void> LiteRtDispatchInvocationContextT::AttachBuffer(
     return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                       "Unsupported QNN tensor version");
   }
-
   return {};
 }
 
 Expected<void> LiteRtDispatchInvocationContextT::Execute() {
+  for (int i = 0; i < inputs_.size(); ++i) {
+    if (inputs_[i].IsQuantU16()) {
+      ConvertToUint16(input_buffer_handles_[i], inputs_[i].GetTensorBytes());
+    }
+  }
   const size_t num_ins = inputs_.size();
   LITERT_STACK_ARRAY(Qnn_Tensor_t, inputs, num_ins, QNN_TENSOR_INIT);
   for (size_t i = 0; i < num_ins; ++i) {
-    *(inputs + i) = inputs_.at(i).Tensor();
+    *(inputs + i) = inputs_.at(i).GetQnnTensor();
   }
 
   const size_t num_outs = outputs_.size();
   LITERT_STACK_ARRAY(Qnn_Tensor_t, outputs, num_outs, QNN_TENSOR_INIT);
   for (size_t i = 0; i < num_outs; ++i) {
-    *(outputs + i) = outputs_.at(i).Tensor();
+    *(outputs + i) = outputs_.at(i).GetQnnTensor();
   }
 
   if (auto status = qnn_manager_.Api()->graphExecute(
@@ -235,6 +283,56 @@ Expected<void> LiteRtDispatchInvocationContextT::Execute() {
     return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                       "Failed to execute graph");
   }
+  for (int i = 0; i < outputs_.size(); ++i) {
+    if (outputs_[i].IsQuantU16()) {
+      ConvertToInt16(output_buffer_handles_[i], outputs_[i].GetTensorBytes());
+    }
+  }
+  return {};
+}
 
+Expected<void> LiteRtDispatchInvocationContextT::ConvertToUint16(
+    LiteRtTensorBufferHandle tensor_buffer_handle, size_t bytes) {
+  auto tensor_buffer = device_context_.GetTensorBuffer(tensor_buffer_handle);
+  if (!tensor_buffer) {
+    return Unexpected(tensor_buffer.Error());
+  }
+  void* mem_addr;
+  if (auto status = LiteRtLockTensorBuffer(*tensor_buffer, &mem_addr);
+      status != kLiteRtStatusOk) {
+    return Unexpected(status, "Failed to lock the tensor buffer");
+  }
+  auto int16_data = absl::MakeSpan(static_cast<const std::int16_t*>(mem_addr),
+                                   bytes / sizeof(std::int16_t));
+  std::vector<std::uint16_t> uint16_data;
+  qnn::ConvertDataFromInt16toUInt16(int16_data, uint16_data);
+  std::memcpy(mem_addr, uint16_data.data(), bytes);
+  if (auto status = LiteRtUnlockTensorBuffer(*tensor_buffer);
+      status != kLiteRtStatusOk) {
+    return Unexpected(status, "Failed to unlock the tensor buffer");
+  }
+  return {};
+}
+
+Expected<void> LiteRtDispatchInvocationContextT::ConvertToInt16(
+    LiteRtTensorBufferHandle tensor_buffer_handle, size_t bytes) {
+  auto tensor_buffer = device_context_.GetTensorBuffer(tensor_buffer_handle);
+  if (!tensor_buffer) {
+    return Unexpected(tensor_buffer.Error());
+  }
+  void* mem_addr;
+  if (auto status = LiteRtLockTensorBuffer(*tensor_buffer, &mem_addr);
+      status != kLiteRtStatusOk) {
+    return Unexpected(status, "Failed to lock the tensor buffer");
+  }
+  auto uint16_data = absl::MakeSpan(static_cast<const std::uint16_t*>(mem_addr),
+                                    bytes / sizeof(std::int16_t));
+  std::vector<std::int16_t> int16_data;
+  qnn::ConvertDataFromUInt16toInt16(uint16_data, int16_data);
+  std::memcpy(mem_addr, int16_data.data(), bytes);
+  if (auto status = LiteRtUnlockTensorBuffer(*tensor_buffer);
+      status != kLiteRtStatusOk) {
+    return Unexpected(status, "Failed to unlock the tensor buffer");
+  }
   return {};
 }

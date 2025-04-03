@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
+#ifndef ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
+#define ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
 
 #include <vector>
 
+#include "litert/c/litert_logging.h"
 #include "litert/cc/litert_expected.h"
 
 namespace litert::qnn {
@@ -32,27 +33,55 @@ class Registry {
       if (!entry.used) {
         entry.value = value;
         entry.used = true;
+        LITERT_LOG(LITERT_INFO,
+                   "Registered value in existing slot %d, handle: %p", i,
+                   static_cast<H>(i));
         return static_cast<H>(i);
       }
     }
     // Grow the set of entries.
     H handle = static_cast<H>(entries_.size());
     entries_.emplace_back(value);
+    LITERT_LOG(LITERT_INFO, "Registered value in new slot %zu, handle: %p",
+               entries_.size() - 1, handle);
     return handle;
   }
 
   Expected<void> Unregister(H handle) {
+    LITERT_LOG(LITERT_INFO, "Unregistering handle %p (registry size: %zu)",
+               handle, entries_.size());
+
     if (handle < 0 || handle >= entries_.size()) {
+      LITERT_LOG(LITERT_ERROR,
+                 "Failed to unregister handle %p: out of range [0,%zu)", handle,
+                 entries_.size());
       return Unexpected(kLiteRtStatusErrorNotFound, "Unexpected handle");
     }
+
+    if (!entries_[handle].used) {
+      LITERT_LOG(LITERT_WARNING, "Handle %p is already unregistered", handle);
+    }
+
     entries_[handle].used = false;
+    LITERT_LOG(LITERT_INFO, "Successfully unregistered handle %p", handle);
     return {};
   }
 
   Expected<V*> Get(H handle) {
+    LITERT_LOG(LITERT_INFO, "Getting handle %p (registry size: %zu)", handle,
+               entries_.size());
+
     if (handle < 0 || handle >= entries_.size()) {
+      LITERT_LOG(LITERT_ERROR, "Failed to get handle %p: out of range [0,%zu)",
+                 handle, entries_.size());
       return Unexpected(kLiteRtStatusErrorNotFound, "Unexpected handle");
     }
+
+    if (!entries_[handle].used) {
+      LITERT_LOG(LITERT_WARNING, "Getting unused handle %p", handle);
+    }
+
+    LITERT_LOG(LITERT_INFO, "Successfully got handle %p", handle);
     return &entries_[handle].value;
   }
 
@@ -68,4 +97,4 @@ class Registry {
 
 }  // namespace litert::qnn
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
+#endif  // ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_

@@ -12,21 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//litert/build_common:special_rule.bzl", "lite_rt_friends")
+load("//litert/build_common:litert_build_defs.bzl", "cc_library_with_testonly_vis")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
     default_visibility = [
-        "//litert:__subpackages__",
-    ] + lite_rt_friends(),
+        "//litert:litert_internal_users",
+    ],
 )
 
-cc_library(
+cc_library_with_testonly_vis(
     name = "model",
     srcs = ["model.cc"],
     hdrs = [
         "model.h",
         "//litert/c:litert_model_hdrs",
+    ],
+    vis = [
+        "//litert:litert_internal_users",
+        # TODO: This needs to be removed.
+        "//litert/vendors/qualcomm/compiler:__pkg__",
     ],
     deps = [
         ":buffer_manager",
@@ -43,7 +48,7 @@ cc_library(
         "//litert/core:build_stamp",
         "//litert/core/util:flatbuffer_tools",
         "@org_tensorflow//tensorflow/compiler/mlir/lite/core:model_builder_base",
-        "@org_tensorflow//tensorflow/lite/core/c:c_api_types",
+        "@org_tensorflow//tensorflow/lite/core/c:private_c_api_types",
     ],
 )
 
@@ -254,12 +259,11 @@ cc_test(
     ],
 )
 
-cc_library(
+cc_library_with_testonly_vis(
     name = "model_graph",
     srcs = ["model_graph.cc"],
     hdrs = [
         "model_graph.h",
-        "//litert/cc:litert_consts.h",
     ],
     deps = [
         ":model",
@@ -269,6 +273,7 @@ cc_library(
         "//litert/c:litert_logging",
         "//litert/c:litert_op_code",
         "//litert/cc:litert_buffer_ref",
+        "//litert/cc:litert_consts",
         "//litert/cc:litert_detail",
         "//litert/cc:litert_expected",
     ],
@@ -332,7 +337,7 @@ cc_test(
         "@org_tensorflow//tensorflow/lite:model_builder",
         "@org_tensorflow//tensorflow/lite/c:c_api_opaque",
         "@org_tensorflow//tensorflow/lite/c:common",
-        "@org_tensorflow//tensorflow/lite/core:cc_api_stable",
+        "@org_tensorflow//tensorflow/lite/core:private_cc_api_stable",
         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
     ],
 )

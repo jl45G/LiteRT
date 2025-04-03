@@ -36,6 +36,8 @@ ABSL_FLAG(std::string, graph, "", "Model filename to use for testing.");
 ABSL_FLAG(std::string, dispatch_library_dir, "",
           "Path to the dispatch library.");
 ABSL_FLAG(bool, use_gpu, false, "Use GPU Accelerator.");
+ABSL_FLAG(int, signature_index, 0,
+          "Index of the signature to run (default: 0).");
 
 namespace litert {
 namespace {
@@ -74,26 +76,58 @@ Expected<void> RunModel() {
                           CompiledModel::Create(env, model, accelerator));
 
   LITERT_ASSIGN_OR_RETURN(auto signatures, model.GetSignatures());
-  size_t signature_index = 0;
+  ABSL_LOG(INFO) << "Model has " << signatures.size() << " signature(s)";
+  for (size_t i = 0; i < signatures.size(); ++i) {
+    ABSL_LOG(INFO) << "Signature " << i << ":  << signatures[i]";
+  }
+
+  // Use the signature index from command line flag
+  size_t signature_index = absl::GetFlag(FLAGS_signature_index);
+  if (signature_index >= signatures.size()) {
+    ABSL_LOG(WARNING) << "Specified signature index " << signature_index
+                      << " is out of range. Using signature 0 instead.";
+    signature_index = 0;
+  }
+  ABSL_LOG(INFO) << "Using signature index: " << signature_index;
 
   ABSL_LOG(INFO) << "Prepare input buffers";
-
-  LITERT_ASSIGN_OR_RETURN(auto input_buffers,
-                          compiled_model.CreateInputBuffers(signature_index));
+  auto input_buffers_result =
+      compiled_model.CreateInputBuffers(signature_index);
+  if (!input_buffers_result) {
+    ABSL_LOG(ERROR) << "Failed to create input buffers: "
+                    << input_buffers_result.Error().Message();
+    ABSL_LOG(INFO) << "Attempting to use signature 0 as fallback";
+    signature_index = 0;
+    input_buffers_result = compiled_model.CreateInputBuffers(signature_index);
+    if (!input_buffers_result) {
+      return input_buffers_result.Error();
+    }
+  }
+  auto input_buffers = std::move(*input_buffers_result);
 
   ABSL_LOG(INFO) << "Prepare output buffers";
+  auto output_buffers_result =
+      compiled_model.CreateOutputBuffers(signature_index);
+  if (!output_buffers_result) {
+    ABSL_LOG(ERROR) << "Failed to create output buffers: "
+                    << output_buffers_result.Error().Message();
+    return output_buffers_result.Error();
+  }
+  auto output_buffers = std::move(*output_buffers_result);
 
-  LITERT_ASSIGN_OR_RETURN(auto output_buffers,
-                          compiled_model.CreateOutputBuffers(signature_index));
-
-  ABSL_LOG(INFO) << "Run model";
+  ABSL_LOG(INFO) << "Run model with signature index " << signature_index;
   uint64_t start = tflite::profiling::time::NowMicros();
   auto status =
       compiled_model.Run(signature_index, input_buffers, output_buffers);
   uint64_t end = tflite::profiling::time::NowMicros();
   LITERT_LOG(LITERT_INFO, "Run took %lu microseconds", end - start);
 
-  ABSL_LOG(INFO) << "Model run completed";
+  if (!status) {
+    ABSL_LOG(ERROR) << "Model run failed: " << status.Error().Message();
+    return status.Error();
+  }
+
+  ABSL_LOG(INFO) << "Model run completed successfully";
 
   return status;
 }

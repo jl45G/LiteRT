@@ -1,3 +1,4 @@
+
 // Copyright 2024 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +33,6 @@
 #include "litert/vendors/qualcomm/compiler/IR/qnn_op.h"
 #include "litert/vendors/qualcomm/compiler/legalizations/quantize_op_legalization.h"
 #include "third_party/qairt/latest/include/QNN/QnnTypes.h"
-
 namespace litert {
 namespace {
 
@@ -42,6 +42,15 @@ using ::testing::Values;
 // TODO: Add support and uncomment these models.
 const auto kSupportedOps =
                   Values(
+                    "simple_transpose_conv_op.tflite",
+                    "simple_cumsum.tflite",
+                    "simple_floor_div.tflite",
+                    "simple_gather_nd.tflite",
+                    "simple_logistic.tflite",
+                    "simple_max_pool_2d.tflite",
+                    "simple_not_equal.tflite",
+                    "simple_pad.tflite",
+                    "simple_pad_v2.tflite",
                     "rms_norm_composite.tflite",
                     "simple_add_op.tflite",
                     "simple_div_op.tflite",
@@ -94,13 +103,13 @@ const auto kSupportedOps =
                     kRMSNormModel,
                     kSDPAModel,
                     kAttentionModel,
-                    kTransformerBlockModel
-                    // kQSimpleMul16x16Model,
-                    // kQMulAdd16x16Model,
-                    // kQQueryEinsum16x8Model,
-                    // kQKeyEinsum16x8Model,
-                    // kQVauleEinsum16x8Model,
-                    // kQAttnVecEinsum16x8Model
+                    kTransformerBlockModel,
+                    kQSimpleMul16x16Model,
+                    kQMulAdd16x16Model,
+                    kQQueryEinsum16x8Model,
+                    kQKeyEinsum16x8Model,
+                    kQVauleEinsum16x8Model,
+                    kQAttnVecEinsum16x8Model
                     );
 
 const auto kSupportedSocModels = Values(
