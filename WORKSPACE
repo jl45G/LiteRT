@@ -128,3 +128,7 @@ load(
 )
 
 nccl_configure(name = "local_config_nccl")
+
+load("//third_party/tqdm:workspace.bzl", tqdm = "repo")
+
+tqdm()
