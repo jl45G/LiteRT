@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//litert/build_common:litert_build_defs.bzl", "copy_file", "litert_dynamic_lib")
+load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:__subpackages__"],
+    default_visibility = ["//litert:litert_internal_users"],
 )
 
 litert_dynamic_lib(
@@ -67,23 +67,10 @@ litert_dynamic_lib(
         "//litert/c:litert_any",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_expected",
+        # TODO: Remove this dependency.
         "//litert/core/util:tensor_type_util",
         "//litert/vendors/c:litert_dispatch_c_api",
     ],
-)
-
-# This is cc_library target for `libLiteRtDispatch_GoogleTensor.so`.
-cc_library(
-    name = "dispatch_api_shared_lib",
-    srcs = [":dispatch_api_so"],
-    visibility = ["//visibility:public"],
-)
-
-# Copies the shared library so that it is available for use in test data as libLiteRtDispatch_GoogleTensor.so.
-copy_file(
-    name = "copy_dispatch_api_so",
-    src = "//litert/vendors/google_tensor/dispatch:dispatch_api_so",
-    target = "libLiteRtDispatch_GoogleTensor.so",
 )
 
 cc_test(
@@ -111,7 +98,7 @@ cc_test(
         "//litert/c:litert_common",
         "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_any",
-        "//litert/core:filesystem",
+        "//litert/core:filesystem_testonly",
         "//litert/test:common",
         "//litert/test:simple_model_npu",
         "//litert/vendors/c:litert_dispatch_c_api",
@@ -145,7 +132,7 @@ cc_test(
         "//litert/c:litert_event",
         "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_any",
-        "//litert/core:filesystem",
+        "//litert/core:filesystem_testonly",
         "//litert/test:common",
         "//litert/test:simple_model_npu",
         "//litert/vendors/c:litert_dispatch_c_api",

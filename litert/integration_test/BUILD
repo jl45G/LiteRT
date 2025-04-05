@@ -12,12 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//litert/build_common:tfl_model_gen.bzl", "tfl_model_gen")
-load("//litert/integration_test:run_on_device.bzl", "litert_integration_test")
+load("//testing/integration/guitar/build_defs:guitar_workflow.bzl", "guitar", "guitar_workflow_test")  # copybara:strip
+load("//litert/google:litert_guitar.bzl", "litert_cpu_mh_guitar_test", "litert_pixel_9_mh_guitar_test", "litert_qualcomm_mh_guitar_test")  # copybara:strip
+load("//litert/integration_test:litert_device.bzl", "device_rlocation", "litert_device_test", "litert_integration_test")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:__subpackages__"],
+    default_visibility = ["//litert:litert_stable_abi_users"],
+)
+
+sh_binary(
+    name = "run_on_device_driver_OSS",
+    srcs = ["run_on_device_driver_OSS.sh"],
+)
+
+# Internal test to validate the macros and underlying shell scripts.
+litert_device_test(
+    name = "tools_test",
+    srcs = ["smoketests/tools_test.cc"],
+    backend_id = "cpu",
+    copts = ["-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1"],
+    data = ["//litert/integration_test/models:single_op"],
+    exec_args = ["--models_dir={}".format(device_rlocation("//litert/integration_test/models:single_op"))],
+    deps = [
+        "@com_google_googletest//:gtest_main",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+    ],
 )
 
 # C++ TEST SCAFFOLD ################################################################################
@@ -26,7 +47,7 @@ cc_test(
     name = "gen_device_test",
     srcs = ["gen_device_test.cc"],
     copts = ["-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1"],
-    data = [":single_op_models"],
+    data = ["//litert/integration_test/models:single_op"],
     linkopts = select({
         "@org_tensorflow//tensorflow:android": ["-landroid"],
         "//conditions:default": [],
@@ -67,43 +88,42 @@ cc_library(
     ],
 )
 
-# TEST MODELS ######################################################################################
-
-filegroup(
-    name = "classic_ml_models",
-    srcs = glob(["classic_ml_models/*.tflite"]),
-)
-
-tfl_model_gen(
-    name = "single_op_models",
-    srcs = glob(["single_op_models/*.mlir"]),
-    subdir = "single_op_models",
-)
-
-filegroup(
-    name = "pre_compiled_models",
-    srcs = glob(["pre_compiled_models/*.tflite"]),
-)
-
 # ON DEVICE INTEGRATION TESTS ######################################################################
 
 # NOTE: Everything here should be built with -c opt --config=android_arm64.
 
-sh_binary(
-    name = "run_on_device_driver_OSS",
-    srcs = ["run_on_device_driver_OSS.sh"],
-)
+# CPU ----------------------------------------------------------------------------------------------
 
 litert_integration_test(
     name = "single_op_device_tests_cpu",
-    hw = "cpu",
-    models = ":single_op_models",
+    backend_id = "cpu",
+    models = "//litert/integration_test/models:single_op",
+)
+
+litert_integration_test(
+    name = "classic_ml_device_tests_cpu",
+    backend_id = "cpu",
+    models = "//litert/integration_test/models:classic_ml",
+)
+
+# QUALCOMM -----------------------------------------------------------------------------------------
+
+litert_device_test(
+    name = "qnn_smoketest",
+    srcs = ["smoketests/qnn_smoketest.cc"],
+    backend_id = "qualcomm",
+    deps = [
+        "@com_google_googletest//:gtest_main",
+        "//litert/cc:litert_shared_library",
+        "//litert/vendors/qualcomm:common",
+        "//litert/vendors/qualcomm:qnn_manager",
+    ],
 )
 
 litert_integration_test(
     name = "single_op_device_tests_qualcomm_JIT",
-    hw = "qualcomm",
-    models = ":single_op_models",
+    backend_id = "qualcomm",
+    models = "//litert/integration_test/models:single_op",
     skips = [
         "greater_f32",  # TODO: lukeboyer - Investigate (segfault).
         "less_f32",  # TODO: lukeboyer - Investigate (segfault).
@@ -111,19 +131,153 @@ litert_integration_test(
 )
 
 litert_integration_test(
-    name = "classic_ml_device_tests_cpu",
-    hw = "cpu",
-    models = ":classic_ml_models",
-)
-
-litert_integration_test(
     name = "classic_ml_device_tests_qualcomm_JIT",
-    hw = "qualcomm",
-    models = ":classic_ml_models",
+    backend_id = "qualcomm",
+    models = "//litert/integration_test/models:classic_ml",
 )
 
 litert_integration_test(
     name = "pre_compiled_device_tests_qualcomm",
-    hw = "qualcomm",
-    models = ":pre_compiled_models",
+    backend_id = "qualcomm",
+    models = "//litert/integration_test/models:pre_compiled",
 )
+
+# copybara:strip_begin(google-only)
+# GOOGLE-ONLY ######################################################################################
+
+# (doc) Running with MobileHarness -----------------------------------------------------------------
+
+# FLAGS
+#
+# Executing any of the above with mobile harness requires the following flags:
+# ```
+# --config=android_arm64 \
+# --copt="-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1" \
+# --cache_test_results=no \
+# --test_output=streamed \
+# --notest_loasd \
+# --test_arg=--allocation_exit_strategy=FAIL_FAST_NO_MATCH
+# ```
+#
+# The following can be copied into your blazerc to set these with --config=litert_mh
+# ```
+# build:litert_mh --config=android_arm64
+# build:litert_mh --notest_loasd
+# build:litert_mh --copt="-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1"
+# build:litert_mh --cache_test_results=no
+# build:litert_mh --test_output=streamed
+# build:litert_mh --test_arg=--allocation_exit_strategy=FAIL_FAST_NO_MATCH
+# build:litert_mh --compilation_mode=opt`
+#```
+
+# MH PERMISSIONS
+#
+# By default, mh tests will run as the user `odml-device-lab`
+# https://mobileharness-fe.corp.google.com/devicelistview?filter=owner%3Aodml-device-lab
+#
+# If you are not included in this group, or it does not have access to a device you need, please
+# reach out to the litert team.
+
+# Guitar GOOGLE TENSOR ------------------------------------------------------------------------------
+
+guitar_workflow_test(
+    name = "litert_guitar_device_tests_small_google_tensor",
+    auto_deps = [
+        ":google_tensor_smoketest",
+    ],
+    integration_test = guitar.IntegrationTest(
+        tests = [
+            litert_pixel_9_mh_guitar_test(
+                targets = [":google_tensor_smoketest"],
+            ),
+        ],
+    ),
+    tags = [
+        "external",
+        "guitar",
+        "manual",
+        "notap",
+    ],
+)
+
+# Guitar QUALCOMM ----------------------------------------------------------------------------------
+
+# TODO: Figure out where unit tests should go. Finalize how the various tests are grouped.
+
+guitar_workflow_test(
+    name = "litert_guitar_device_tests_small_qualcomm",
+    auto_deps = [
+        ":qnn_smoketest",
+        "//litert/vendors/qualcomm:qnn_manager_device_test",
+    ],
+    integration_test = guitar.IntegrationTest(
+        tests = [
+            litert_qualcomm_mh_guitar_test(
+                targets = [
+                    ":qnn_smoketest",
+                    "//litert/vendors/qualcomm:qnn_manager_device_test",
+                ],
+            ),
+        ],
+    ),
+    tags = [
+        "external",
+        "guitar",
+        "manual",
+        "notap",
+    ],
+)
+
+guitar_workflow_test(
+    name = "litert_guitar_device_integration_tests_qualcomm",
+    auto_deps = [
+        ":single_op_device_tests_qualcomm_JIT",
+        ":class_ml_device_tests_qualcomm_JIT",
+        ":pre_compiled_device_tests_qualcomm",
+    ],
+    integration_test = guitar.IntegrationTest(
+        tests = [
+            litert_qualcomm_mh_guitar_test(
+                targets = [
+                    ":single_op_device_tests_qualcomm_JIT",
+                    ":class_ml_device_tests_qualcomm_JIT",
+                    ":pre_compiled_device_tests_qualcomm",
+                ],
+            ),
+        ],
+    ),
+    tags = [
+        "external",
+        "guitar",
+        "manual",
+        "notap",
+    ],
+)
+
+# Guitar CPU ---------------------------------------------------------------------------------------
+
+guitar_workflow_test(
+    name = "litert_guitar_device_integration_tests_cpu",
+    auto_deps = [
+        ":single_op_device_tests_cpu",
+        ":classic_ml_device_tests_cpu",
+    ],
+    integration_test = guitar.IntegrationTest(
+        tests = [
+            litert_cpu_mh_guitar_test(
+                targets = [
+                    ":single_op_device_tests_cpu",
+                    ":classic_ml_device_tests_cpu",
+                ],
+            ),
+        ],
+    ),
+    tags = [
+        "external",
+        "guitar",
+        "manual",
+        "notap",
+    ],
+)
+
+# copybara:strip_end

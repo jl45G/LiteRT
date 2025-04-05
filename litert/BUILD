@@ -18,3 +18,58 @@ package(
         "//litert:__subpackages__",
     ],
 )
+
+# VISIBILITY #######################################################################################
+
+package_group(
+    name = "litert_internal_users",
+    packages = [
+        # Self packages.
+        "//litert/c/...",
+        "//litert/cc/...",
+        "//litert/compiler/...",
+        "//litert/core/...",
+        "//litert/google/...",
+        "//litert/integration_test/...",
+        "//litert/kotlin/...",
+        "//litert/python/...",
+        "//litert/runtime/...",
+        "//litert/test/...",
+        "//litert/tools/...",
+        # Users with access to core internal apis.
+        "//third_party/odml/infra/ml_drift_delegate/...",  # copybara:strip
+        "//third_party/odml/infra/genai/conversion/...",  # copybara:strip
+        "//third_party/darwinn/tflite/...",  # copybara:strip
+        "//third_party/darwinn/litert/...",  # copybara:strip
+    ],
+)
+
+package_group(
+    name = "litert_stable_abi_users",
+    includes = [
+        ":litert_internal_users",
+    ],
+    packages = [
+        "//java/com/google/android/apps/photos/...",  # copybara:strip
+        "@mediapipe//mediapipe/calculators/tensor/...",  # copybara:strip
+        "//third_party/odml/infra/genai/inference/...",  # copybara:strip
+        "//litert/vendors/...",
+        "//third_party/odml/litert/llm/...",  # copybara:strip
+    ],
+)
+
+package_group(
+    name = "litert_python_internal_users",
+    packages = [
+        "//litert/python/...",
+        "//third_party/py/ai_edge_torch/aot/...",  # copybara:strip
+    ],
+)
+
+package_group(
+    name = "litert_python_users",
+    includes = [
+        ":litert_internal_users",
+    ],
+    packages = [],
+)
