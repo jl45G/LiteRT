@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_LAYOUT_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_LAYOUT_H_
+#ifndef ODML_LITERT_LITERT_C_LITERT_LAYOUT_H_
+#define ODML_LITERT_LITERT_C_LITERT_LAYOUT_H_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -34,7 +34,7 @@ typedef struct {
   // less than 0. Everything from [rank, LITERT_MAX_RANK) is undefined.
   int32_t dimensions[LITERT_TENSOR_MAX_RANK];
 
-  // Strides for a nomimal NWHC layout. NULL if unused.
+  // Strides for a nominal NWHC layout. NULL if unused.
   const uint32_t* strides;
 } LiteRtLayout;
 
@@ -42,4 +42,4 @@ typedef struct {
 }
 #endif  // __cplusplus
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_LAYOUT_H_
+#endif  // ODML_LITERT_LITERT_C_LITERT_LAYOUT_H_

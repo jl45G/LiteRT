@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("//litert/integration_test:litert_device.bzl", "litert_device_test")
 load("//litert/vendors/qualcomm:qualcomm_build_defs.bzl", "litert_cc_bin_with_qnn")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:__subpackages__"],
+    default_visibility = ["//litert:litert_internal_users"],
 )
 
 cc_library(
@@ -86,9 +87,13 @@ litert_cc_bin_with_qnn(
         # "//platforms/darwinn/compiler:compiler_api_wrapper",
         # copybara:uncomment_end
         "//litert/vendors/examples:example_plugin_so",
-        "//litert/vendors/google_tensor/compiler:google_tensor_compiler_plugin_so",
-        "//litert/vendors/qualcomm/compiler:qnn_compiler_plugin_so",
-        "//litert/vendors/mediatek/compiler:compiler_plugin_so",
+        # TODO: b/407046837 - Remove the comment once we are able to add the deps in OSS.
+        # copybara:uncomment_begin(google-only)
+        # "//litert/vendors/google_tensor/compiler:google_tensor_compiler_plugin_so",
+        # "//litert/vendors/qualcomm/compiler:qnn_compiler_plugin_so",
+        # "//litert/vendors/mediatek/compiler:compiler_plugin_so",
+        # "//third_party/neuro_pilot:latest/host/lib/libneuron_adapter.so",
+        # copybara:uncomment_end
     ],
     export_litert_only = 1,
     include_system = 1,
@@ -165,6 +170,9 @@ cc_library(
     name = "dump",
     srcs = ["dump.cc"],
     hdrs = ["dump.h"],
+    # TODO: Either refactor this code to be in cc/ or setup to only build in debug mode.
+    # Then, we can remove this visibility.
+    visibility = ["//litert:litert_stable_abi_users"],
     deps = [
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
@@ -209,10 +217,12 @@ cc_library(
         "//litert/cc:litert_compilation_options",
         "//litert/cc:litert_compiled_model",
         "//litert/cc:litert_environment",
+        "//litert/cc:litert_expected",
         "//litert/cc:litert_model",
         "//litert/cc:litert_tensor_buffer",
         "@org_tensorflow//tensorflow/lite/c:c_api_types",
         "@org_tensorflow//tensorflow/lite/c:common",
+        "@org_tensorflow//tensorflow/lite/tools:command_line_flags",
         "@org_tensorflow//tensorflow/lite/tools:utils",
         "@org_tensorflow//tensorflow/lite/tools/benchmark:benchmark_model_lib",
         "@org_tensorflow//tensorflow/lite/tools/benchmark:benchmark_params",
@@ -235,7 +245,7 @@ cc_test(
             # copybara:uncomment_begin(google-only)
             # "//third_party/odml/infra/ml_drift_delegate/litert:ml_drift_cl_accelerator",  # buildcleaner: keep
             # copybara:uncomment_end
-            "@org_tensorflow//tensorflow/lite/core/c:c_api_types",
+            "@org_tensorflow//tensorflow/lite/core/c:private_c_api_types",
             "@org_tensorflow//tensorflow/lite/tools/benchmark:benchmark_model_lib",
             "@org_tensorflow//tensorflow/lite/tools/benchmark:benchmark_params",
         ],
@@ -277,5 +287,52 @@ cc_library(
         ":benchmark_litert_model",
         "@org_tensorflow//tensorflow/lite/c:c_api_types",
         "@org_tensorflow//tensorflow/lite/tools:logging",
+    ],
+)
+
+cc_library(
+    name = "benchmark_stripped_litert_model",
+    srcs = ["benchmark_stripped_litert_model.cc"],
+    hdrs = ["benchmark_stripped_litert_model.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":benchmark_litert_model",
+        "@flatbuffers//:runtime_cc",
+        "//litert/cc:litert_buffer_ref",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_model",
+        "@org_tensorflow//tensorflow/lite:model_builder",
+        "@org_tensorflow//tensorflow/lite/c:c_api_types",
+        "@org_tensorflow//tensorflow/lite/c:common",
+        "@org_tensorflow//tensorflow/lite/tools:logging",
+        "@org_tensorflow//tensorflow/lite/tools/benchmark:benchmark_params",
+        "@org_tensorflow//tensorflow/lite/tools/strip_buffers:stripping_lib",
+        # copybara:uncomment_begin(google-only)
+        # "//third_party/odml/infra/ml_drift_delegate/litert:ml_drift_cl_accelerator",  # buildcleaner: keep
+        # copybara:uncomment_end
+    ],
+)
+
+litert_device_test(
+    name = "benchmark_litert_model_qualcomm_test",
+    srcs = ["benchmark_litert_model_qualcomm_test.cc"],
+    backend_id = "qualcomm",
+    data = [
+        "//litert/test:testdata/simple_add_op_qc_v75_precompiled.tflite",
+    ],
+    deps = [
+        ":benchmark_litert_model",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
+        "//litert/c:litert_runtime_c_api_shared_lib",
+        "//litert/cc:litert_compilation_options",
+        "//litert/cc:litert_compiled_model",
+        "//litert/cc:litert_environment",
+        "//litert/cc:litert_model",
+        "//litert/cc:litert_tensor_buffer",
+        "//litert/test:common",
     ],
 )
