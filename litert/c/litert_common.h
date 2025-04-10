@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_COMMON_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_COMMON_H_
+#ifndef ODML_LITERT_LITERT_C_LITERT_COMMON_H_
+#define ODML_LITERT_LITERT_C_LITERT_COMMON_H_
 
 #include <stddef.h>
 
@@ -22,7 +22,9 @@ extern "C" {
 #endif  // __cplusplus
 
 // Declares canonical opaque type.
-#define LITERT_DEFINE_HANDLE(name) typedef struct name##T* name
+#define LITERT_DEFINE_HANDLE(name) \
+  typedef struct name##T* name;    \
+  typedef const struct name##T* name##Const
 
 #if __ANDROID_API__ >= 26
 #define LITERT_HAS_AHWB_SUPPORT 1
@@ -72,6 +74,13 @@ typedef struct LiteRtApiVersion {
   int minor;
   int patch;
 } LiteRtApiVersion;
+
+// Compares `v1` and `v2`.
+//
+// Returns 0 if they are the same, a negative number if v1 < v2 and a positive
+// number if v1 > v2.
+int LiteRtCompareApiVersion(LiteRtApiVersion version,
+                            LiteRtApiVersion reference);
 
 typedef enum {
   kLiteRtStatusOk = 0,
@@ -136,4 +145,4 @@ typedef size_t LiteRtParamIndex;
 }
 #endif  // __cplusplus
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_COMMON_H_
+#endif  // ODML_LITERT_LITERT_C_LITERT_COMMON_H_

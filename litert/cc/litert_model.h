@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_MODEL_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_MODEL_H_
+#ifndef ODML_LITERT_LITERT_CC_LITERT_MODEL_H_
+#define ODML_LITERT_LITERT_CC_LITERT_MODEL_H_
 
 #include <algorithm>
 #include <cstddef>
@@ -74,6 +74,12 @@ class Weights : public internal::NonOwnedHandle<LiteRtWeights> {
  public:
   explicit Weights(LiteRtWeights weights)
       : internal::NonOwnedHandle<LiteRtWeights>(weights) {}
+
+  int32_t BufferId() const {
+    int32_t buffer_id;
+    internal::AssertOk(LiteRtGetWeightsBufferId, Get(), &buffer_id);
+    return buffer_id;
+  }
 
   absl::Span<const uint8_t> Bytes() const {
     size_t size;
@@ -470,4 +476,4 @@ struct SerializationOptions {
 
 }  // namespace litert
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_MODEL_H_
+#endif  // ODML_LITERT_LITERT_CC_LITERT_MODEL_H_

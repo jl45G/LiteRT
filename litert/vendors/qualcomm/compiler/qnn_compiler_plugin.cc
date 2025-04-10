@@ -1,3 +1,4 @@
+
 // Copyright 2024 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,6 +12,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// Copyright (c) Qualcomm Innovation Center, Inc. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 #include <stdio.h>
 
@@ -30,12 +34,11 @@
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_model.h"
-#include "litert/c/litert_op_code.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
-#include "litert/core/model/model.h"
 #include "litert/vendors/c/litert_compiler_plugin.h"
 #include "litert/vendors/qualcomm/compiler/qnn_compose_graph.h"
+#include "litert/vendors/qualcomm/core/schema/soc_table.h"
 #include "litert/vendors/qualcomm/core/tensor_pool.h"
 #include "litert/vendors/qualcomm/core/wrappers/op_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/tensor_wrapper.h"
@@ -56,74 +59,27 @@ namespace {
 
 constexpr char kPluginManufacturer[] = "Qualcomm";
 constexpr LiteRtParamIndex kDefaultPartitionIndex = 0;
-
-// clang-format off
-constexpr std::pair<const char*, QnnHtpDevice_Arch_t> kPluginSocModels[] = {
-    {"V68", QNN_HTP_DEVICE_ARCH_V68},
-    {"V69", QNN_HTP_DEVICE_ARCH_V69},
-    {"V73", QNN_HTP_DEVICE_ARCH_V73},
-    {"V75", QNN_HTP_DEVICE_ARCH_V75},
-    {"V79", QNN_HTP_DEVICE_ARCH_V79},
-};
-
-constexpr const char* kSocModelsSupportsWeightSharing[] = {
-  "V73",
-  "V75",
-  "V79",
-};
-
-constexpr LiteRtOpCode kSupportedOps[] = {
-  kLiteRtOpCodeTflAdd,
-  kLiteRtOpCodeTflDiv,
-  kLiteRtOpCodeTflMul,
-  kLiteRtOpCodeTflRsqrt,
-  kLiteRtOpCodeTflSlice,
-  kLiteRtOpCodeTflSelect,
-  kLiteRtOpCodeTflSelectV2,
-  kLiteRtOpCodeTflSub,
-  kLiteRtOpCodeTflTanh,
-  kLiteRtOpCodeTflBatchMatmul,
-  kLiteRtOpCodeTflReshape,
-  kLiteRtOpCodeTflSum,
-  kLiteRtOpCodeTflConcatenation,
-  kLiteRtOpCodeTflSoftmax,
-  kLiteRtOpCodeTflCast,
-  kLiteRtOpCodeTflTranspose,
-  kLiteRtOpCodeTflSin,
-  kLiteRtOpCodeTflCos,
-  kLiteRtOpCodeTflFullyConnected,
-  kLiteRtOpCodeTflEmbeddingLookup,
-  kLiteRtOpCodeTflLogicalAnd,
-  kLiteRtOpCodeTflLess,
-  kLiteRtOpCodeTflGreater,
-  kLiteRtOpCodeTflGelu,
-  kLiteRtOpCodeTflDynamicUpdateSlice,
-  kLiteRtOpCodeTflPack,
-  kLiteRtOpCodeTflQuantize,
-};
-// clang-format on
+constexpr LiteRtParamIndex kDefaultPartitionNum = 1;
 
 static constexpr absl::string_view kEntryPointNameFmt = "qnn_partition_%d";
 
-constexpr auto kNumPluginSocModels =
-    sizeof(kPluginSocModels) / sizeof(kPluginSocModels[0]);
-
-std::optional<QnnHtpDevice_Arch_t> FindSocModel(
-    absl::string_view soc_model_name) {
-  std::optional<QnnHtpDevice_Arch_t> soc_model;
-  for (auto i = 0; i < kNumPluginSocModels; ++i) {
-    if (soc_model_name == kPluginSocModels[i].first) {
-      soc_model = kPluginSocModels[i].second;
+std::optional<::qnn::SocInfo> FindSocModel(absl::string_view soc_model_name) {
+  std::optional<::qnn::SocInfo> soc_model;
+  for (auto i = 0; i < ::qnn::kNumSocInfos; ++i) {
+    if (soc_model_name == ::qnn::kSocInfos[i].soc_name) {
+      soc_model = ::qnn::kSocInfos[i];
       break;
     }
   }
   return soc_model;
 }
 
-bool IsWeightSharingSupported(absl::string_view soc_model_name) {
-  return std::find(std::begin(kSocModelsSupportsWeightSharing),
-                   std::end(kSocModelsSupportsWeightSharing),
-                   soc_model_name) != std::end(kSocModelsSupportsWeightSharing);
+bool IsWeightSharingSupported(::qnn::DspArch dsp_arch) {
+#ifdef __ANDROID__
+  return false;
+#else
+  return dsp_arch >= ::qnn::DspArch::V73;
+#endif
 }
 
 }  // namespace
@@ -158,7 +114,7 @@ LiteRtStatus LiteRtGetNumCompilerPluginSupportedSocModels(
   if (!compiler_plugin || !num_supported_soc_models) {
     return kLiteRtStatusErrorInvalidArgument;
   }
-  *num_supported_soc_models = kNumPluginSocModels;
+  *num_supported_soc_models = ::qnn::kNumSocInfos;
   return kLiteRtStatusOk;
 }
 
@@ -167,10 +123,10 @@ LiteRtStatus LiteRtGetCompilerPluginSupportedSocModel(
     const char** soc_model_name) {
   if (!compiler_plugin || !soc_model_name) {
     return kLiteRtStatusErrorInvalidArgument;
-  } else if (soc_model_idx < 0 || soc_model_idx >= kNumPluginSocModels) {
+  } else if (soc_model_idx < 0 || soc_model_idx >= ::qnn::kNumSocInfos) {
     return kLiteRtStatusErrorInvalidArgument;
   }
-  *soc_model_name = kPluginSocModels[soc_model_idx].first;
+  *soc_model_name = ::qnn::kSocInfos[soc_model_idx].soc_name;
   return kLiteRtStatusOk;
 }
 
@@ -181,6 +137,9 @@ LiteRtStatus LiteRtGetCompilerPluginSupportedSocModel(
 struct LiteRtCompiledResultT {
   std::vector<std::vector<char>> context_bin;
   std::vector<std::string> graph_names;
+  // byte_code_index[i] is the index of the byte code in context_bin that
+  // corresponds to the i-th call.
+  std::vector<size_t> byte_code_index;
 };
 
 LiteRtStatus LiteRtGetCompiledResultByteCode(
@@ -207,7 +166,7 @@ LiteRtStatus LiteRtGetCompiledResultCallInfo(
 
   *call_info = compiled_result->graph_names.at(call_idx).data();
   *call_info_size = compiled_result->graph_names.at(call_idx).size();
-  *byte_code_idx = 0;
+  *byte_code_idx = compiled_result->byte_code_index[call_idx];
 
   return kLiteRtStatusOk;
 }
@@ -273,9 +232,9 @@ LiteRtStatus LiteRtCompilerPluginPartition(LiteRtCompilerPlugin compiler_plugin,
   ::litert::Subgraph graph(subgraph);
 
   auto backend_configs = QnnManager::DefaultBackendConfigs();
-  // TODO: pass soc_model as parameter
-  auto qnn_manager = QnnManager::Create(backend_configs, std::nullopt,
-                                        {QNN_HTP_DEVICE_ARCH_V75});
+  auto qnn_manager =
+      QnnManager::Create(backend_configs, std::nullopt,
+                         soc_model ? FindSocModel(soc_model) : std::nullopt);
   if (!qnn_manager) {
     LITERT_LOG(LITERT_ERROR, "%s", qnn_manager.Error().Message().data());
     return qnn_manager.Error().Status();
@@ -304,6 +263,13 @@ LiteRtStatus LiteRtCompilerPluginPartition(LiteRtCompilerPlugin compiler_plugin,
     std::vector<::qnn::OpWrapper> op_wrappers;
     LITERT_RETURN_IF_ERROR(litert::qnn::ConvertOp(
         op, tensor_pool, input_tensors, output_tensors, op_wrappers));
+    tensor_pool.ForEach([](::qnn::TensorWrapper& tensor_wrapper) {
+      // TODO(chunhsue): Use compile interface to get useQInt16AsQUint16.
+      constexpr bool useQInt16AsQUint16 = true;
+      if constexpr (useQInt16AsQUint16) {
+        tensor_wrapper.ConvertQint16ToQuint16();
+      }
+    });
     // Empty op_wrappers means the op is not supported by QNN.
     if (op_wrappers.empty()) {
       continue;
@@ -336,7 +302,7 @@ LiteRtStatus LiteRtCompilerPluginCompile(
 
   auto opt_soc_model = soc_model ? FindSocModel(soc_model) : std::nullopt;
   if (opt_soc_model) {
-    LITERT_LOG(LITERT_ERROR, "Compiling QNN architecture: %d", *opt_soc_model);
+    LITERT_LOG(LITERT_INFO, "Compiling QNN SoC model: %s", soc_model);
   } else if (soc_model) {
     LITERT_LOG(LITERT_ERROR, "Unexpected SoC model: %s", soc_model);
     return kLiteRtStatusErrorInvalidArgument;
@@ -347,6 +313,7 @@ LiteRtStatus LiteRtCompilerPluginCompile(
   // separate subgraph that maps to a single Dispatch Op in the compiled the
   // model.
   result->context_bin.resize(num_partitions);
+  result->byte_code_index.resize(num_partitions);
 
   // Initialize SDK and load qnn shared libraries.
   LITERT_LOG(LITERT_INFO, "%s", "Creating QNN manager");
@@ -377,12 +344,12 @@ LiteRtStatus LiteRtCompilerPluginCompile(
     for (const auto& op : model.Subgraph(partition_idx)->Ops()) {
       for (const auto& input : op.Inputs()) {
         if (input.IsConstant()) {
-          auto buffer_id = input.Weights().Get()->GetBufferId();
+          auto buffer_id = input.Weights().BufferId();
           auto it = weight_sharing_map.find(buffer_id);
           if (it != weight_sharing_map.end()) {
-            if (input.Weights().Get()->Buffer().Size() >= largest_weight_size) {
+            if (input.Weights().Bytes().size() >= largest_weight_size) {
               context_handle_idx = it->second;
-              largest_weight_size = input.Weights().Get()->Buffer().Size();
+              largest_weight_size = input.Weights().Bytes().size();
             }
           }
         }
@@ -395,9 +362,12 @@ LiteRtStatus LiteRtCompilerPluginCompile(
       LITERT_LOG(LITERT_INFO, "%s", "Creating context handle");
       // We enable weight sharing by default, this could lead to issue when
       // support legacy SoC.
-      // TODO: use option to control weight sharing.
+      // TODO(jiunkaiy): use option to control weight sharing.
       auto context_configs = QnnManager::WeightSharingContextConfigs();
-      if (!IsWeightSharingSupported(soc_model)) {
+      // Disable weight sharing if we have only one partition or SoC doesn't
+      // support weight sharing.
+      if (num_partitions == kDefaultPartitionNum ||
+          !IsWeightSharingSupported(opt_soc_model.value().dsp_arch)) {
         context_configs = QnnManager::DefaultContextConfigs();
       }
       auto context_handle =
@@ -415,7 +385,7 @@ LiteRtStatus LiteRtCompilerPluginCompile(
     for (const auto& op : model.Subgraph(partition_idx)->Ops()) {
       for (const auto& input : op.Inputs()) {
         if (input.IsConstant()) {
-          auto buffer_id = input.Weights().Get()->GetBufferId();
+          auto buffer_id = input.Weights().BufferId();
           weight_sharing_map[buffer_id] = context_handle_idx;
         }
       }
@@ -424,7 +394,9 @@ LiteRtStatus LiteRtCompilerPluginCompile(
     // Compose graphs.
     LITERT_LOG(LITERT_INFO, "%s", "Composing graph");
     std::string& entry_point_name = result->graph_names.emplace_back();
+    result->byte_code_index[partition_idx] = context_handle_idx;
     entry_point_name = absl::StrFormat(kEntryPointNameFmt, partition_idx);
+    LITERT_LOG(LITERT_INFO, "Entry point name: %s", entry_point_name.c_str());
     LiteRtSubgraph partition = model.Subgraph(partition_idx)->Get();
     LITERT_RETURN_IF_ERROR(litert::qnn::ComposeGraph(
         **qnn_manager, context_handles[context_handle_idx].get(), partition,

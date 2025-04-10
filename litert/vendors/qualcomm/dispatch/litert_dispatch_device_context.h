@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_DISPATCH_LITERT_DISPATCH_DEVICE_CONTEXT_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_DISPATCH_LITERT_DISPATCH_DEVICE_CONTEXT_H_
+#ifndef ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_LITERT_DISPATCH_DEVICE_CONTEXT_H_
+#define ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_LITERT_DISPATCH_DEVICE_CONTEXT_H_
 
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/cc/litert_expected.h"
@@ -60,6 +60,9 @@ class LiteRtDispatchDeviceContextT {
     Qnn_MemHandle_t qnn_mem_handle = nullptr;
     explicit TensorBufferRegistryEntry(LiteRtTensorBuffer tensor_buffer_)
         : tensor_buffer(tensor_buffer_) {}
+    bool operator==(const TensorBufferRegistryEntry& other) const {
+      return tensor_buffer == other.tensor_buffer;
+    }
   };
 
   using TensorBufferRegistry = litert::qnn::Registry<LiteRtTensorBufferHandle,
@@ -76,4 +79,4 @@ class LiteRtDispatchDeviceContextT {
   LiteRtDispatchInvocationContextT* invocation_context_ = nullptr;
 };
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_DISPATCH_LITERT_DISPATCH_DEVICE_CONTEXT_H_
+#endif  // ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_LITERT_DISPATCH_DEVICE_CONTEXT_H_

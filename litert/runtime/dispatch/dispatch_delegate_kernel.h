@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_DISPATCH_DISPATCH_DELEGATE_KERNEL_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_DISPATCH_DISPATCH_DELEGATE_KERNEL_H_
+#ifndef ODML_LITERT_LITERT_RUNTIME_DISPATCH_DISPATCH_DELEGATE_KERNEL_H_
+#define ODML_LITERT_LITERT_RUNTIME_DISPATCH_DISPATCH_DELEGATE_KERNEL_H_
 
 #include <cstddef>
 #include <memory>
@@ -21,7 +21,9 @@
 #include <utility>
 #include <vector>
 
+#include "litert/c/litert_common.h"
 #include "litert/c/litert_dispatch_delegate.h"
+#include "litert/c/litert_metrics.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_tensor_buffer.h"
@@ -55,6 +57,10 @@ class DispatchDelegateKernel
 
   TfLiteStatus Eval(TfLiteOpaqueContext* context,
                     TfLiteOpaqueNode* node) override;
+
+  LiteRtStatus StartMetricsCollection(int detail_level);
+
+  Expected<LiteRtMetricsT> StopMetricsCollection();
 
  private:
   DispatchDelegateKernel(const LiteRtDispatchDelegateOptions& options,
@@ -118,4 +124,4 @@ class DispatchDelegateKernel
 
 }  // namespace litert::internal
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_DISPATCH_DISPATCH_DELEGATE_KERNEL_H_
+#endif  // ODML_LITERT_LITERT_RUNTIME_DISPATCH_DISPATCH_DELEGATE_KERNEL_H_
