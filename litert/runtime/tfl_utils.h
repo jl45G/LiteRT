@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_TFL_UTILS_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_TFL_UTILS_H_
+#ifndef ODML_LITERT_LITERT_RUNTIME_TFL_UTILS_H_
+#define ODML_LITERT_LITERT_RUNTIME_TFL_UTILS_H_
 
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_model.h"
@@ -27,6 +27,10 @@ Expected<ElementType> ConvertElementType(TfLiteType tfl_type);
 Expected<RankedTensorType> ConvertTensorType(
     const TfLiteOpaqueTensor* tfl_opaque_tensor);
 
+// Return the size (in bytes) necessary to store a given TFL tensor's numeric
+// data.
+Expected<size_t> GetTensorSize(const TfLiteOpaqueTensor* tfl_opaque_tensor);
+
 }  // namespace litert::internal
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_TFL_UTILS_H_
+#endif  // ODML_LITERT_LITERT_RUNTIME_TFL_UTILS_H_

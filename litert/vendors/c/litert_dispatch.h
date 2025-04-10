@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_C_LITERT_DISPATCH_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_C_LITERT_DISPATCH_H_
+#ifndef ODML_LITERT_LITERT_VENDORS_C_LITERT_DISPATCH_H_
+#define ODML_LITERT_LITERT_VENDORS_C_LITERT_DISPATCH_H_
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -22,6 +22,7 @@
 #include "litert/c/litert_any.h"
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_event.h"
+#include "litert/c/litert_metrics.h"
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
@@ -58,11 +59,6 @@ typedef struct LiteRtDispatchOption {
   const char* name;
   LiteRtAny value;
 } LiteRtDispatchOption;
-
-typedef struct LiteRtMetric {
-  const char* name;
-  LiteRtAny value;
-} LiteRtMetric;
 
 typedef struct LiteRtMemBuffer {
   int fd;  // File descriptor for an mmapped buffer, -1 if unused.
@@ -210,6 +206,10 @@ LiteRtStatus LiteRtDispatchAttachInputEvent(
     LiteRtDispatchInvocationContext invocation_context, int graph_input_index,
     LiteRtEvent input_event);
 
+// Run an invocation context asynchronously. The user must pass a sufficiently
+// large output_events array, where this function will return newly created
+// LiteRtEvents, one for each invocation context output. The caller takes
+// ownership for the LiteRtEvents returned in output_events.
 LiteRtStatus LiteRtDispatchInvokeAsync(
     LiteRtDispatchInvocationContext invocation_context, int num_output_events,
     LiteRtEvent* output_events);
@@ -306,4 +306,4 @@ LiteRtStatus LiteRtDispatchInvocationContextCreateFromGraph(
 }
 #endif  // __cplusplus
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_C_LITERT_DISPATCH_H_
+#endif  // ODML_LITERT_LITERT_VENDORS_C_LITERT_DISPATCH_H_
