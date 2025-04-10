@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 #include "litert/vendors/qualcomm/compiler/qnn_compose_graph.h"
 
 #include <alloca.h>
@@ -36,13 +35,14 @@
 #include "litert/cc/litert_element_type.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
-#include "litert/core/model/model.h"
 #include "litert/tools/dump.h"
 #include "litert/vendors/qualcomm/common.h"
 #include "litert/vendors/qualcomm/compiler/graph_mapper.h"
+#include "litert/vendors/qualcomm/core/builders/broadcast_to_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/cast_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/concatenation_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/conv2d_op_builder.h"
+#include "litert/vendors/qualcomm/core/builders/cumsum_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/depthwise_conv2d_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/dynamic_update_slice_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/elementwise_op_builder.h"
@@ -50,13 +50,16 @@
 #include "litert/vendors/qualcomm/core/builders/fully_connected_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/fully_connected_op_builder_htp.h"
 #include "litert/vendors/qualcomm/core/builders/gather_op_builder.h"
+#include "litert/vendors/qualcomm/core/builders/gathernd_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/gelu_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/hard_swish_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/leaky_relu_op_builder.h"
+#include "litert/vendors/qualcomm/core/builders/logistic_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/matmul_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/mean_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/pack_op_builder.h"
+#include "litert/vendors/qualcomm/core/builders/pad_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/pool2d_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/quantize_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/reduce_op_builder.h"
@@ -71,8 +74,10 @@
 #include "litert/vendors/qualcomm/core/builders/spatial_transform_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/split_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/tanh_op_builder.h"
+#include "litert/vendors/qualcomm/core/builders/transpose_conv_op_builder.h"
 #include "litert/vendors/qualcomm/core/builders/transpose_op_builder.h"
 #include "litert/vendors/qualcomm/core/common.h"
+#include "litert/vendors/qualcomm/core/utils/miscs.h"
 #include "litert/vendors/qualcomm/core/wrappers/op_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/quantize_params_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/tensor_wrapper.h"
@@ -194,8 +199,14 @@ LiteRtStatus ConvertTensor(const litert::Tensor& litert_tensor,
   switch (litert_tensor.QTypeId()) {
     case kLiteRtQuantizationPerTensor: {
       const auto per_tensor_quant = litert_tensor.PerTensorQuantization();
-      quantize_params.emplace<::qnn::ScaleOffsetQuantizeParamsWrapper>(
-          per_tensor_quant.scale, per_tensor_quant.zero_point);
+      if (ranked_tensor_type->ElementType() == litert::ElementType::Int4) {
+        quantize_params.emplace<::qnn::BwScaleOffsetQuantizeParamsWrapper>(
+            ::qnn::kQuantBitWidth4, per_tensor_quant.scale,
+            per_tensor_quant.zero_point);
+      } else {
+        quantize_params.emplace<::qnn::ScaleOffsetQuantizeParamsWrapper>(
+            per_tensor_quant.scale, per_tensor_quant.zero_point);
+      }
       break;
     }
     case kLiteRtQuantizationPerChannel: {
@@ -205,12 +216,21 @@ LiteRtStatus ConvertTensor(const litert::Tensor& litert_tensor,
       for (size_t i = 0; i < zero_points.size(); ++i) {
         zero_points[i] = per_channel_quant.zero_points[i];
       }
-      quantize_params.emplace<::qnn::AxisScaleOffsetQuantizeParamsWrapper>(
-          per_channel_quant.quantized_dimension,
-          absl::Span<const float>{per_channel_quant.scales,
-                                  per_channel_quant.num_channels},
-          absl::Span<const std::int32_t>{zero_points.data(),
-                                         zero_points.size()});
+      if (ranked_tensor_type->ElementType() == litert::ElementType::Int4) {
+        quantize_params.emplace<::qnn::BwAxisScaleOffsetQuantizeParamsWrapper>(
+            ::qnn::kQuantBitWidth4, per_channel_quant.quantized_dimension,
+            absl::Span<const float>{per_channel_quant.scales,
+                                    per_channel_quant.num_channels},
+            absl::Span<const std::int32_t>{zero_points.data(),
+                                           zero_points.size()});
+      } else {
+        quantize_params.emplace<::qnn::AxisScaleOffsetQuantizeParamsWrapper>(
+            per_channel_quant.quantized_dimension,
+            absl::Span<const float>{per_channel_quant.scales,
+                                    per_channel_quant.num_channels},
+            absl::Span<const std::int32_t>{zero_points.data(),
+                                           zero_points.size()});
+      }
       break;
     }
     case kLiteRtQuantizationBlockWise: {
@@ -277,6 +297,11 @@ LiteRtStatus ConvertOp(
     case LiteRtOpCode::kLiteRtOpCodeTflLogicalAnd: {
       op_wrappers = ::qnn::BuildElementwiseAndOp(tensor_pool, input_tensors,
                                                  output_tensors);
+      break;
+    }
+    case LiteRtOpCode::kLiteRtOpCodeTflBroadcastTo: {
+      op_wrappers =
+          ::qnn::BuildBroadcastToOp(tensor_pool, input_tensors, output_tensors);
       break;
     }
     case LiteRtOpCode::kLiteRtOpCodeTflCos: {
@@ -348,6 +373,16 @@ LiteRtStatus ConvertOp(
                                                      output_tensors);
       break;
     }
+    case LiteRtOpCode::kLiteRtOpCodeTflFloorDiv: {
+      op_wrappers = ::qnn::BuildElementwiseFloorDivOp(
+          tensor_pool, input_tensors, output_tensors);
+      break;
+    }
+    case LiteRtOpCode::kLiteRtOpCodeTflNotEqual: {
+      op_wrappers = ::qnn::BuildElementwiseNotEqualOp(
+          tensor_pool, input_tensors, output_tensors);
+      break;
+    }
     case LiteRtOpCode::kLiteRtOpCodeTflEmbeddingLookup: {
       op_wrappers = ::qnn::BuildEmbeddingLookupOp(tensor_pool, input_tensors,
                                                   output_tensors);
@@ -395,6 +430,11 @@ LiteRtStatus ConvertOp(
     case LiteRtOpCode::kLiteRtOpCodeTflRelu6: {
       op_wrappers =
           ::qnn::BuildRelu6Op(tensor_pool, input_tensors, output_tensors);
+      break;
+    }
+    case LiteRtOpCode::kLiteRtOpCodeTflLogistic: {
+      op_wrappers =
+          ::qnn::BuildLogisticOp(tensor_pool, input_tensors, output_tensors);
       break;
     }
     case LiteRtOpCode::kLiteRtOpCodeTflBatchMatmul: {
@@ -511,12 +551,33 @@ LiteRtStatus ConvertOp(
       int32_t dilation_h_factor;
       LITERT_RETURN_IF_ERROR(
           LiteRtGetConv2dDilationWOption(litert_op.Get(), &dilation_h_factor));
+      uint32_t fused_activation;
+      LITERT_RETURN_IF_ERROR(LiteRtGetConv2dFusedActivationOption(
+          litert_op.Get(), &fused_activation));
 
       ::qnn::PaddingType qnn_padding;
       LITERT_RETURN_IF_ERROR(ConvertPaddingType(padding, qnn_padding));
       op_wrappers = ::qnn::BuildConv2dOp(
           tensor_pool, input_tensors, output_tensors, stride_h, stride_w,
-          dilation_h_factor, dilation_w_factor, qnn_padding);
+          dilation_h_factor, dilation_w_factor, fused_activation, qnn_padding);
+      break;
+    }
+    case LiteRtOpCode::kLiteRtOpCodeTflTransposeConv: {
+      uint32_t padding;
+      LITERT_RETURN_IF_ERROR(
+          LiteRtGetTransposeConvPaddingOption(litert_op.Get(), &padding));
+      int32_t stride_w;
+      LITERT_RETURN_IF_ERROR(
+          LiteRtGetTransposeConvStrideWOption(litert_op.Get(), &stride_w));
+      int32_t stride_h;
+      LITERT_RETURN_IF_ERROR(
+          LiteRtGetTransposeConvStrideHOption(litert_op.Get(), &stride_h));
+
+      ::qnn::PaddingType qnn_padding;
+      LITERT_RETURN_IF_ERROR(ConvertPaddingType(padding, qnn_padding));
+      op_wrappers = ::qnn::BuildTransposeConvOp(tensor_pool, input_tensors,
+                                                output_tensors, stride_h,
+                                                stride_w, qnn_padding);
       break;
     }
     case LiteRtOpCode::kLiteRtOpCodeTflDepthwiseConv2d: {
@@ -535,12 +596,15 @@ LiteRtStatus ConvertOp(
       int32_t dilation_h_factor;
       LITERT_RETURN_IF_ERROR(LiteRtGetDepthwiseConv2dDilationHOptions(
           litert_op.Get(), &dilation_h_factor));
+      uint32_t fused_activation;
+      LITERT_RETURN_IF_ERROR(LiteRtGetDepthwiseConv2dFusedActivationOption(
+          litert_op.Get(), &fused_activation));
 
       ::qnn::PaddingType qnn_padding;
       LITERT_RETURN_IF_ERROR(ConvertPaddingType(padding, qnn_padding));
       op_wrappers = ::qnn::BuildDepthwiseConv2dOp(
           tensor_pool, input_tensors, output_tensors, stride_h, stride_w,
-          dilation_h_factor, dilation_w_factor, qnn_padding);
+          dilation_h_factor, dilation_w_factor, fused_activation, qnn_padding);
       break;
     }
     case LiteRtOpCode::kLiteRtOpCodeTflAveragePool2d: {
@@ -563,6 +627,30 @@ LiteRtStatus ConvertOp(
       ::qnn::PaddingType qnn_padding;
       LITERT_RETURN_IF_ERROR(ConvertPaddingType(padding, qnn_padding));
       op_wrappers = ::qnn::BuildAveragePoolOp(
+          tensor_pool, input_tensors, output_tensors, stride_h, stride_w,
+          filter_height, filter_width, qnn_padding);
+      break;
+    }
+    case LiteRtOpCode::kLiteRtOpCodeTflMaxPool2d: {
+      uint32_t padding;
+      LITERT_RETURN_IF_ERROR(
+          LiteRtGetMaxPool2dPaddingOption(litert_op.Get(), &padding));
+      int32_t stride_w;
+      LITERT_RETURN_IF_ERROR(
+          LiteRtGetMaxPool2dStrideWOption(litert_op.Get(), &stride_w));
+      int32_t stride_h;
+      LITERT_RETURN_IF_ERROR(
+          LiteRtGetMaxPool2dStrideHOption(litert_op.Get(), &stride_h));
+      int32_t filter_width;
+      LITERT_RETURN_IF_ERROR(
+          LiteRtGetMaxPool2dFilterWidthOption(litert_op.Get(), &filter_width));
+      int32_t filter_height;
+      LITERT_RETURN_IF_ERROR(LiteRtGetMaxPool2dFilterHeightOption(
+          litert_op.Get(), &filter_height));
+
+      ::qnn::PaddingType qnn_padding;
+      LITERT_RETURN_IF_ERROR(ConvertPaddingType(padding, qnn_padding));
+      op_wrappers = ::qnn::BuildMaxPoolOp(
           tensor_pool, input_tensors, output_tensors, stride_h, stride_w,
           filter_height, filter_width, qnn_padding);
       break;
@@ -621,6 +709,33 @@ LiteRtStatus ConvertOp(
                                                 half_pixel_centers);
       break;
     }
+    case LiteRtOpCode::kLiteRtOpCodeTflPad:
+    case LiteRtOpCode::kLiteRtOpCodeTflPadv2: {
+      op_wrappers =
+          ::qnn::BuildPadOp(tensor_pool, input_tensors, output_tensors);
+      break;
+    }
+    case LiteRtOpCode::kLiteRtOpCodeTflCumsum: {
+      bool exclusive;
+      LITERT_RETURN_IF_ERROR(
+          LiteRtGetCumsumExclusiveOption(litert_op.Get(), &exclusive));
+      bool reverse;
+      LITERT_RETURN_IF_ERROR(
+          LiteRtGetCumsumReverseOption(litert_op.Get(), &reverse));
+      op_wrappers = ::qnn::BuildCumsumOp(tensor_pool, input_tensors,
+                                         output_tensors, exclusive, reverse);
+      break;
+    }
+    case LiteRtOpCode::kLiteRtOpCodeTflGatherNd: {
+      op_wrappers =
+          ::qnn::BuildGatherNdOp(tensor_pool, input_tensors, output_tensors);
+      break;
+    }
+    case LiteRtOpCode::kLiteRtOpCodeTflPow: {
+      op_wrappers = ::qnn::BuildElementwisePower(tensor_pool, input_tensors,
+                                                 output_tensors);
+      break;
+    }
     default: {
       LITERT_LOG(LITERT_ERROR,
                  "LiteRT Op Code: %d is not supported in Qualcomm Compiler.",
@@ -667,8 +782,7 @@ LiteRtStatus MapGraph(QnnManager& qnn, Qnn_ContextHandle_t context_handle,
     dump.clear();
     Dump(*op.Get(), dump);
     std::string s = dump.str();
-    LITERT_LOG(LITERT_INFO, "%s", s.data());
-
+    LITERT_LOG(LITERT_VERBOSE, "%s", s.data());
     std::vector<::qnn::TensorWrapperRef> input_tensors;
     for (const auto& input : op.Inputs()) {
       if (const auto it = litert_tensor_to_wrapper.find(input.Get());
@@ -703,6 +817,11 @@ LiteRtStatus MapGraph(QnnManager& qnn, Qnn_ContextHandle_t context_handle,
   // Insert all tensors into Qnn graph and update the id of Qnn_Tensor_t inside.
   tensor_pool.ForEach(
       [&qnn, &graph_mapper](::qnn::TensorWrapper& tensor_wrapper) {
+        // TODO(chunhsue): Use compile interface to get useQInt16AsQUint16.
+        constexpr bool useQInt16AsQUint16 = true;
+        if constexpr (useQInt16AsQUint16) {
+          tensor_wrapper.ConvertQint16ToQuint16();
+        }
         qnn.Api()->tensorCreateGraphTensor(graph_mapper.QnnGraph(),
                                            &tensor_wrapper.GetQnnTensor());
       });

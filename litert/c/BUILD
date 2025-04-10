@@ -1,13 +1,24 @@
-# copybara:uncomment_begin(google-only)
-# load("//devtools/deps/check:deps_check.bzl", "check_dependencies")
-# 
-# copybara:uncomment_end
+# Copyright 2024 Google LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# copybara:uncomment load("//devtools/deps/check:deps_check.bzl", "check_dependencies")
 load("//litert/build_common:litert_build_defs.bzl", "copy_file", "export_lrt_runtime_only_linkopt", "export_lrt_runtime_only_script")
 load("//litert/build_common:special_rule.bzl", "gles_deps", "gles_headers", "gles_linkopts")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//visibility:public"],
+    default_visibility = ["//litert:litert_stable_abi_users"],
 )
 
 cc_library(
@@ -28,6 +39,17 @@ cc_test(
 cc_library(
     name = "litert_any",
     hdrs = ["litert_any.h"],
+)
+
+cc_library(
+    name = "litert_metrics",
+    srcs = ["litert_metrics.cc"],
+    hdrs = ["litert_metrics.h"],
+    deps = [
+        ":litert_any",
+        ":litert_common",
+        "//litert/runtime:metrics",
+    ],
 )
 
 cc_library(
@@ -115,7 +137,7 @@ cc_library(
         "@com_google_absl//absl/strings:string_view",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_macros",
-        "@org_tensorflow//tensorflow/lite/core/c:c_api_types",
+        "@org_tensorflow//tensorflow/lite/core/c:private_c_api_types",
     ],
 )
 
@@ -129,10 +151,11 @@ cc_library(
         ":litert_op_code",
         "@com_google_absl//absl/strings:string_view",
         "//litert/cc:litert_buffer_ref",
+        "//litert/cc:litert_macros",
         "//litert/core/model",
         "//litert/core/model:model_load",
         "//litert/core/model:model_serialize",
-        "@org_tensorflow//tensorflow/lite/core/c:c_api_types",
+        "@org_tensorflow//tensorflow/lite/core/c:private_c_api_types",
     ],
 )
 
@@ -245,6 +268,7 @@ cc_library(
         ":litert_tensor_buffer_types",
         "@com_google_absl//absl/types:span",
         "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
         "//litert/runtime:tensor_buffer",
         "@opencl_headers",
     ] + gles_deps(),
@@ -263,6 +287,7 @@ cc_test(
         ":litert_common",
         ":litert_model",
         ":litert_tensor_buffer",
+        ":litert_tensor_buffer_types",
         "@com_google_googletest//:gtest_main",
         "//litert/cc:litert_layout",
         "//litert/runtime:tensor_buffer",
@@ -291,7 +316,9 @@ cc_library(
         "litert_dispatch_delegate.h",
     ],
     deps = [
+        ":litert_common",
         ":litert_environment_options",
+        ":litert_metrics",
         "//litert/runtime/dispatch:dispatch_delegate",
         "//litert/vendors/c:litert_dispatch_c_api",
         "@org_tensorflow//tensorflow/lite/c:c_api",
@@ -341,8 +368,10 @@ cc_library(
         ":litert_compilation_options",
         ":litert_environment",
         ":litert_logging",
+        ":litert_metrics",
         ":litert_model",
         ":litert_tensor_buffer",
+        "//litert/cc:litert_macros",
         "//litert/runtime:compiled_model",
         "@org_tensorflow//tensorflow/lite/c:c_api_types",
     ],
@@ -413,7 +442,11 @@ cc_test(
         ":litert_common",
         ":litert_environment",
         "@com_google_googletest//:gtest_main",
+        "@com_google_absl//absl/strings:string_view",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
         "//litert/runtime:accelerator",
+        "//litert/test:matchers",
     ],
 )
 
@@ -448,10 +481,17 @@ cc_library(
         ":litert_accelerator",
         ":litert_accelerator_compilation_options",
         ":litert_common",
+        ":litert_metrics",
         "//litert/cc:litert_expected",
         "//litert/core:environment",
         "//litert/runtime:accelerator",
     ],
+)
+
+cc_library(
+    name = "litert_platform_support",
+    hdrs = ["litert_platform_support.h"],
+    deps = [":litert_common"],
 )
 
 cc_test(
@@ -493,6 +533,7 @@ LITERT_C_API_COMMON_DEPS = [
     ":litert_environment",
     ":litert_layout",
     ":litert_logging",
+    ":litert_metrics",
     ":litert_model",
     ":litert_op_code",
     ":litert_options",
@@ -535,9 +576,11 @@ cc_library(
         ":litert_event_type.h",
         ":litert_layout.h",
         ":litert_logging.h",
+        ":litert_metrics.h",
         ":litert_model.h",
         ":litert_op_code.h",
         ":litert_options.h",
+        ":litert_platform_support.h",
         ":litert_tensor_buffer.h",
         ":litert_tensor_buffer_requirements.h",
         ":litert_tensor_buffer_types.h",
@@ -546,7 +589,7 @@ cc_library(
         "@org_tensorflow//tensorflow/lite:builtin_ops.h",
         # Neeeded for litert/c/litert_model.h
         "@org_tensorflow//tensorflow/lite/c:tensorflowlite_c_api_hdrs_filegroup",
-        "@org_tensorflow//tensorflow/lite/core/c:headers_filegroup",
+        "@org_tensorflow//tensorflow/lite/c:tensorflowlite_c_impl_hdrs_filegroup",
     ],  # Export all header files (.h) in this directory
     deps = [
         "@opencl_headers",

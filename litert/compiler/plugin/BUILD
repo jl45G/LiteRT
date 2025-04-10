@@ -14,7 +14,7 @@
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:__subpackages__"],
+    default_visibility = ["//litert:litert_internal_users"],
 )
 
 cc_library(
@@ -34,7 +34,6 @@ cc_library(
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
         "//litert/cc:litert_buffer_ref",
-        "//litert/cc:litert_detail",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
@@ -46,9 +45,6 @@ cc_library(
         "//litert/core:filesystem",
         "//litert/core:version",
         "//litert/core/model",
-        "//litert/core/model:buffer_manager",
-        "//litert/core/model:ir_allocator",
-        "//litert/core/util:flatbuffer_tools",
         "//litert/vendors/c:litert_compiler_plugin",
         "//litert/vendors/c:litert_compiler_plugin_api",
     ],

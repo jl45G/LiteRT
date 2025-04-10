@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
+#ifndef ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
+#define ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
 
 #include <vector>
 
@@ -25,6 +25,12 @@ template <typename H, typename V>
 class Registry {
  public:
   Expected<H> Register(const V& value) {
+    // Check if the value is already registered.
+    for (auto i = 0; i < entries_.size(); ++i) {
+      if (entries_[i].used && (entries_[i].value == value)) {
+        return static_cast<H>(i);
+      }
+    }
     // TODO: improve this linear search by keeping an index to the first unused
     // element.
     for (auto i = 0; i < entries_.size(); ++i) {
@@ -68,4 +74,4 @@ class Registry {
 
 }  // namespace litert::qnn
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_
+#endif  // ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_REGISTRY_H_

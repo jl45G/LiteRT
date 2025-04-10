@@ -11,10 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// Copyright (c) Qualcomm Innovation Center, Inc. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
 
 #include <cstddef>
 #include <cstdint>
-#include <string>
 
 #include <gtest/gtest.h>
 #include "absl/strings/string_view.h"  // from @com_google_absl
@@ -32,7 +34,6 @@
 #include "litert/vendors/qualcomm/compiler/IR/qnn_op.h"
 #include "litert/vendors/qualcomm/compiler/legalizations/quantize_op_legalization.h"
 #include "third_party/qairt/latest/include/QNN/QnnTypes.h"
-
 namespace litert {
 namespace {
 
@@ -42,6 +43,15 @@ using ::testing::Values;
 // TODO: Add support and uncomment these models.
 const auto kSupportedOps =
                   Values(
+                    "simple_transpose_conv_op.tflite",
+                    "simple_cumsum.tflite",
+                    "simple_floor_div.tflite",
+                    "simple_gather_nd.tflite",
+                    "simple_logistic.tflite",
+                    "simple_max_pool_2d.tflite",
+                    "simple_not_equal.tflite",
+                    "simple_pad.tflite",
+                    "simple_pad_v2.tflite",
                     "rms_norm_composite.tflite",
                     "simple_add_op.tflite",
                     "simple_div_op.tflite",
@@ -94,21 +104,23 @@ const auto kSupportedOps =
                     kRMSNormModel,
                     kSDPAModel,
                     kAttentionModel,
-                    kTransformerBlockModel
-                    // kQSimpleMul16x16Model,
-                    // kQMulAdd16x16Model,
-                    // kQQueryEinsum16x8Model,
-                    // kQKeyEinsum16x8Model,
-                    // kQVauleEinsum16x8Model,
-                    // kQAttnVecEinsum16x8Model
+                    kTransformerBlockModel,
+                    kQSimpleMul16x16Model,
+                    kQMulAdd16x16Model,
+                    kQQueryEinsum16x8Model,
+                    kQKeyEinsum16x8Model,
+                    kQVauleEinsum16x8Model,
+                    kQAttnVecEinsum16x8Model
                     );
 
 const auto kSupportedSocModels = Values(
-    "V68",
-    "V69",
-    "V73",
-    "V75",
-    "V79"
+    "SA8295",
+    "SA8255",
+    "SM8350",
+    "SM8450",
+    "SM8550",
+    "SM8650",
+    "SM8750"
 );
 // clang-format on
 
@@ -120,12 +132,12 @@ TEST(TestQnnPlugin, GetConfigInfo) {
   LiteRtParamIndex num_supported_soc_models;
   LITERT_ASSERT_OK(LiteRtGetNumCompilerPluginSupportedSocModels(
       plugin.get(), &num_supported_soc_models));
-  ASSERT_EQ(num_supported_soc_models, 5);
+  ASSERT_EQ(num_supported_soc_models, 8);
 
   const char* config_id;
   LITERT_ASSERT_OK(
       LiteRtGetCompilerPluginSupportedSocModel(plugin.get(), 0, &config_id));
-  EXPECT_STREQ(config_id, "V68");
+  EXPECT_STREQ(config_id, "UNKNOWN_SDM");
 }
 
 TEST(TestQnnPlugin, PartitionMulOps) {
@@ -147,8 +159,8 @@ TEST(TestQnnPlugin, CompileMulSubgraph) {
   auto model = testing::LoadTestFileModel("one_mul.tflite");
 
   LiteRtCompiledResult compiled;
-  LITERT_ASSERT_OK(
-      LiteRtCompilerPluginCompile(plugin.get(), "V75", model.Get(), &compiled));
+  LITERT_ASSERT_OK(LiteRtCompilerPluginCompile(plugin.get(), "SM8650",
+                                               model.Get(), &compiled));
 
   const void* byte_code;
   size_t byte_code_size;
@@ -179,8 +191,8 @@ TEST(TestQnnPlugin, ShareContextBinary) {
   auto model = testing::LoadTestFileModel("cst_multi_subgraph.tflite");
 
   LiteRtCompiledResult compiled;
-  LITERT_ASSERT_OK(
-      LiteRtCompilerPluginCompile(plugin.get(), "V75", model.Get(), &compiled));
+  LITERT_ASSERT_OK(LiteRtCompilerPluginCompile(plugin.get(), "SM8650",
+                                               model.Get(), &compiled));
   uint64_t num_byte_code;
   LITERT_ASSERT_OK(
       LiteRtCompiledResultNumByteCodeModules(compiled, &num_byte_code));
@@ -194,8 +206,8 @@ TEST(TestQnnPlugin, NotShareContextBinary) {
   auto model = testing::LoadTestFileModel("multi_subgraph.tflite");
 
   LiteRtCompiledResult compiled;
-  LITERT_ASSERT_OK(
-      LiteRtCompilerPluginCompile(plugin.get(), "V75", model.Get(), &compiled));
+  LITERT_ASSERT_OK(LiteRtCompilerPluginCompile(plugin.get(), "SM8650",
+                                               model.Get(), &compiled));
   uint64_t num_byte_code;
   LITERT_ASSERT_OK(
       LiteRtCompiledResultNumByteCodeModules(compiled, &num_byte_code));
@@ -303,6 +315,12 @@ TEST_P(QnnPlyginSupportedSocCompilationTest, CompileMulSubgraph) {
   auto plugin = CreatePlugin();
   auto model = testing::LoadTestFileModel("one_mul.tflite");
   auto soc_model = GetParam();
+  #ifdef __ANDROID__
+  if (soc_model != "V75") {
+    // TODO: Make this dynamic when device cloud testing has more devices.
+    GTEST_SKIP() << "On device tests only support V75s.";
+  }
+#endif
 
   LiteRtCompiledResult compiled;
   LITERT_ASSERT_OK(LiteRtCompilerPluginCompile(plugin.get(), soc_model.c_str(),
@@ -365,8 +383,8 @@ TEST_P(QnnPluginOpCompatibilityTest, SupportedOpsTest) {
   auto model = testing::LoadTestFileModel(GetParam());
 
   LiteRtCompiledResult compiled;
-  LITERT_ASSERT_OK(
-      LiteRtCompilerPluginCompile(plugin.get(), "V75", model.Get(), &compiled));
+  LITERT_ASSERT_OK(LiteRtCompilerPluginCompile(plugin.get(), "SM8650",
+                                               model.Get(), &compiled));
 
   const void* byte_code;
   size_t byte_code_size;

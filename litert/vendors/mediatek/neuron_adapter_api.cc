@@ -34,6 +34,7 @@
   } else {                                                                \
     LITERT_LOG(LITERT_WARNING, "Failed to load symbol %s: %s", #S,        \
                dlib_.DlError());                                          \
+    H = nullptr;                                                          \
   }
 
 namespace litert {
@@ -134,6 +135,8 @@ litert::Expected<void> NeuronAdapterApi::LoadSymbols(
   LOAD_SYMB(NeuronModel_setOperandSymmPerChannelQuantParams,
             api_->model_set_symm_per_channel_quant_params);
   LOAD_SYMB(Neuron_getVersion, api_->get_version);
+  LOAD_SYMB(NeuronModel_relaxComputationFloat32toFloat16,
+            api_->relax_fp32_to_fp16);
 
   LITERT_LOG(LITERT_INFO, "NeuronAdapter symbols loaded");
   return {};
