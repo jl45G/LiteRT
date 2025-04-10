@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//litert/build_common:litert_build_defs.bzl", "copy_file", "litert_dynamic_lib")
+load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib")
+load("//litert/integration_test:litert_device.bzl", "litert_device_test")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:__subpackages__"],
+    default_visibility = ["//visibility:private"],
 )
 
 litert_dynamic_lib(
@@ -53,63 +54,50 @@ litert_dynamic_lib(
         # Don't build/test in OS until qnn is available.
         "nobuilder",
     ],
-    visibility = ["//litert:__subpackages__"],
+    visibility = ["//litert:litert_stable_abi_users"],
     deps = [
         "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
+        # TODO: Remove this dependency.
         "//litert/core/util:tensor_type_util",
         "//litert/vendors/c:litert_dispatch_c_api",
         "//litert/vendors/qualcomm:common",
         "//litert/vendors/qualcomm:context_binary_info",
         "//litert/vendors/qualcomm:qnn_manager",
+        "//litert/vendors/qualcomm/core/utils:miscs",
+        "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
         # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
     ],
 )
 
-# This is cc_library target for `libLiteRtDispatch_Qualcomm.so`.
-cc_library(
-    name = "dispatch_api_shared_lib",
-    srcs = [":dispatch_api_so"],
-)
-
-# Copies the shared library so that it is available for use in test data as libLiteRtDispatch_Qualcomm.so.
-copy_file(
-    name = "copy_dispatch_api_so",
-    src = "//litert/vendors/qualcomm/dispatch:dispatch_api_so",
-    target = "libLiteRtDispatch_Qualcomm.so",
-)
-
-cc_test(
+litert_device_test(
     name = "dispatch_api_qualcomm_test",
     srcs = [
         "dispatch_api_qualcomm_test.cc",
     ],
+    backend_id = "qualcomm",
     data = [
-        ":dispatch_api_so",
-    ],
-    linkopts = select({
-        "@org_tensorflow//tensorflow:android": ["-landroid"],
-        "//conditions:default": [],
-    }),
-    linkstatic = 1,
-    tags = [
-        "no-remote-exec",
-        "no_oss",
-        "notap",
+        "//litert/test:testdata",
     ],
     deps = [
+        ":dispatch_api",
         "@com_google_googletest//:gtest_main",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/types:span",
         "//litert/c:litert_common",
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_any",
-        "//litert/core:filesystem",
+        "//litert/core:filesystem_testonly",
         "//litert/test:common",
         "//litert/test:simple_model_npu",
         "//litert/vendors/c:litert_dispatch_c_api",
+        "//litert/vendors/qualcomm/core/utils:miscs",
+        "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
     ],
 )

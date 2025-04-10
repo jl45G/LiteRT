@@ -1,8 +1,8 @@
 // Copyright (c) Qualcomm Innovation Center, Inc.
 // All Rights Reserved.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_CORE_BUILDERS_ELEMENTWISE_OP_BUILDER_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_CORE_BUILDERS_ELEMENTWISE_OP_BUILDER_H_
+#ifndef ODML_LITERT_LITERT_VENDORS_QUALCOMM_CORE_BUILDERS_ELEMENTWISE_OP_BUILDER_H_
+#define ODML_LITERT_LITERT_VENDORS_QUALCOMM_CORE_BUILDERS_ELEMENTWISE_OP_BUILDER_H_
 
 #include <vector>
 
@@ -68,6 +68,18 @@ std::vector<OpWrapper> BuildElementwiseMaximumOp(
     TensorPool& tensor_pool, const std::vector<TensorWrapperRef>& inputs,
     const std::vector<TensorWrapperRef>& outputs);
 
+std::vector<OpWrapper> BuildElementwiseFloorDivOp(
+    TensorPool& tensor_pool, const std::vector<TensorWrapperRef>& inputs,
+    const std::vector<TensorWrapperRef>& outputs);
+
+std::vector<OpWrapper> BuildElementwiseNotEqualOp(
+    TensorPool& tensor_pool, const std::vector<TensorWrapperRef>& inputs,
+    const std::vector<TensorWrapperRef>& outputs);
+
+std::vector<OpWrapper> BuildElementwisePower(
+    TensorPool& tensor_pool, const std::vector<TensorWrapperRef>& inputs,
+    const std::vector<TensorWrapperRef>& outputs);
+
 }  // namespace qnn
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_QUALCOMM_CORE_BUILDERS_ELEMENTWISE_OP_BUILDER_H_
+#endif  // ODML_LITERT_LITERT_VENDORS_QUALCOMM_CORE_BUILDERS_ELEMENTWISE_OP_BUILDER_H_
