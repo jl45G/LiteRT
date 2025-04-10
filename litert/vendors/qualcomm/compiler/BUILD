@@ -11,12 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# Copyright (c) Qualcomm Innovation Center, Inc. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 
 load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib", "litert_lib", "litert_test")
+load("//litert/integration_test:litert_device.bzl", "litert_device_exec")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//visibility:private"],
+    default_visibility = [
+        "//visibility:private",
+    ],
 )
 
 litert_dynamic_lib(
@@ -45,9 +51,9 @@ litert_dynamic_lib(
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
         "//litert/cc:litert_model_predicates",
-        "//litert/core/model",
         "//litert/vendors/qualcomm:qnn_manager",
         "//litert/vendors/qualcomm/core:tensor_pool",
+        "//litert/vendors/qualcomm/core/schema:soc_table",
         "//litert/vendors/qualcomm/core/wrappers:op_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
         # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
@@ -59,6 +65,7 @@ litert_test(
     srcs = [
         "qnn_compiler_plugin_test.cc",
     ],
+    copts = ["-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1"],
     data = [
         "//litert/test:mlir_test_data",
         "//litert/test:tflite_test_data",
@@ -83,6 +90,7 @@ litert_test(
     use_sys_malloc = True,
     deps = [
         ":qnn_compiler_plugin",  # buildcleaner: keep
+        "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
@@ -92,7 +100,7 @@ litert_test(
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
         "//litert/cc:litert_model_predicates",
-        "//litert/core/model",
+        "//litert/core/model:model_testonly",
         "//litert/test:common",
         "//litert/test:matchers_oss",
         "//litert/test:test_models",
@@ -103,6 +111,13 @@ litert_test(
         "//litert/vendors/qualcomm/compiler/legalizations:quantize_op_legalization",
         # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
     ],
+)
+
+litert_device_exec(
+    name = "qnn_compiler_plugin_device_test",
+    backend_id = "qualcomm",
+    data = ["//litert/test:testdata"],
+    target = ":qnn_compiler_plugin_test",
 )
 
 litert_lib(
@@ -128,15 +143,16 @@ litert_lib(
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
         "//litert/cc:litert_model_predicates",
-        "//litert/core/model",
         "//litert/tools:dump",
         "//litert/vendors/qualcomm:common",
         "//litert/vendors/qualcomm:qnn_manager",
         "//litert/vendors/qualcomm/core:common",
         "//litert/vendors/qualcomm/core:tensor_pool",
+        "//litert/vendors/qualcomm/core/builders:broadcast_to_op_builder",
         "//litert/vendors/qualcomm/core/builders:cast_op_builder",
         "//litert/vendors/qualcomm/core/builders:concatenation_op_builder",
         "//litert/vendors/qualcomm/core/builders:conv2d_op_builder",
+        "//litert/vendors/qualcomm/core/builders:cumsum_op_builder",
         "//litert/vendors/qualcomm/core/builders:depthwise_conv2d_op_builder",
         "//litert/vendors/qualcomm/core/builders:dynamic_update_slice_op_builder",
         "//litert/vendors/qualcomm/core/builders:elementwise_op_builder",
@@ -144,13 +160,16 @@ litert_lib(
         "//litert/vendors/qualcomm/core/builders:fully_connected_op_builder",
         "//litert/vendors/qualcomm/core/builders:fully_connected_op_builder_htp",
         "//litert/vendors/qualcomm/core/builders:gather_op_builder",
+        "//litert/vendors/qualcomm/core/builders:gathernd_op_builder",
         "//litert/vendors/qualcomm/core/builders:gelu_op_builder",
         "//litert/vendors/qualcomm/core/builders:hard_swish_op_builder",
         "//litert/vendors/qualcomm/core/builders:leaky_relu_op_builder",
+        "//litert/vendors/qualcomm/core/builders:logistic_op_builder",
         "//litert/vendors/qualcomm/core/builders:matmul_op_builder",
         "//litert/vendors/qualcomm/core/builders:mean_op_builder",
         "//litert/vendors/qualcomm/core/builders:op_builder",
         "//litert/vendors/qualcomm/core/builders:pack_op_builder",
+        "//litert/vendors/qualcomm/core/builders:pad_op_builder",
         "//litert/vendors/qualcomm/core/builders:pool2d_op_builder",
         "//litert/vendors/qualcomm/core/builders:quantize_op_builder",
         "//litert/vendors/qualcomm/core/builders:reduce_op_builder",
@@ -165,7 +184,9 @@ litert_lib(
         "//litert/vendors/qualcomm/core/builders:spatial_transform_op_builder",
         "//litert/vendors/qualcomm/core/builders:split_op_builder",
         "//litert/vendors/qualcomm/core/builders:tanh_op_builder",
+        "//litert/vendors/qualcomm/core/builders:transpose_conv_op_builder",
         "//litert/vendors/qualcomm/core/builders:transpose_op_builder",
+        "//litert/vendors/qualcomm/core/utils:miscs",
         "//litert/vendors/qualcomm/core/wrappers:op_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:quantize_params_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",

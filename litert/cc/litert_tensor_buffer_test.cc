@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <utility>
+#include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>  // NOLINT: Need when ANDROID_API_LEVEL >= 26
@@ -30,11 +31,8 @@
 #include "litert/cc/litert_event.h"
 #include "litert/cc/litert_layout.h"
 #include "litert/cc/litert_model.h"
+#include "litert/cc/litert_platform_support.h"
 #include "litert/cc/litert_tensor_buffer.h"
-#include "litert/runtime/ahwb_buffer.h"  // IWYU pragma: keep
-#include "litert/runtime/dmabuf_buffer.h"  // IWYU pragma: keep
-#include "litert/runtime/fastrpc_buffer.h"  // IWYU pragma: keep
-#include "litert/runtime/ion_buffer.h"  // IWYU pragma: keep
 #include "litert/runtime/tensor_buffer.h"
 #include "litert/test/matchers.h"
 
@@ -45,6 +43,13 @@
 #if LITERT_HAS_OPENGL_SUPPORT
 #include "tensorflow/lite/delegates/gpu/gl/egl_environment.h"  // from @org_tensorflow
 #endif  // LITERT_HAS_OPENGL_SUPPORT
+
+#if LITERT_HAS_OPENCL_SUPPORT
+#include "litert/runtime/gpu_environment.h"
+#include <CL/cl.h>
+#include "tensorflow/lite/delegates/gpu/cl/buffer.h"  // from @org_tensorflow
+#include "tensorflow/lite/delegates/gpu/cl/cl_command_queue.h"  // from @org_tensorflow
+#endif  // LITERT_HAS_OPENCL_SUPPORT
 
 namespace litert {
 namespace {
@@ -114,7 +119,7 @@ TEST(TensorBuffer, HostMemory) {
 }
 
 TEST(TensorBuffer, Ahwb) {
-  if (!internal::AhwbBuffer::IsSupported()) {
+  if (!HasAhwbSupport()) {
     GTEST_SKIP() << "AHardwareBuffers are not supported on this platform; "
                     "skipping the test";
   }
@@ -163,7 +168,7 @@ TEST(TensorBuffer, Ahwb) {
 }
 
 TEST(TensorBuffer, Ion) {
-  if (!internal::IonBuffer::IsSupported()) {
+  if (!HasIonSupport()) {
     GTEST_SKIP()
         << "ION buffers are not supported on this platform; skipping the test";
   }
@@ -212,7 +217,7 @@ TEST(TensorBuffer, Ion) {
 }
 
 TEST(TensorBuffer, DmaBuf) {
-  if (!internal::DmaBufBuffer::IsSupported()) {
+  if (!HasDmaBufSupport()) {
     GTEST_SKIP()
         << "DMA-BUF buffers are not supported on this platform; skipping "
            "the test";
@@ -262,7 +267,7 @@ TEST(TensorBuffer, DmaBuf) {
 }
 
 TEST(TensorBuffer, FastRpc) {
-  if (!internal::FastRpcBuffer::IsSupported()) {
+  if (!HasFastRpcSupport()) {
     GTEST_SKIP()
         << "FastRPC buffers are not supported on this platform; skipping "
            "the test";
@@ -510,8 +515,9 @@ TEST(TensorBuffer, CreateFromGlTexture) {
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer tensor_buffer,
       TensorBuffer::CreateFromGlTexture(
-          RankedTensorType(kTensorType), gl_texture.target(), gl_texture.id(),
-          gl_texture.format(), gl_texture.bytes_size(), gl_texture.layer()));
+          RankedTensorType(kTestTensorType), gl_texture.target(),
+          gl_texture.id(), gl_texture.format(), gl_texture.bytes_size(),
+          gl_texture.layer()));
 }
 
 tflite::gpu::gl::GlBuffer CreateTestGlBuffer(size_t size_bytes) {
@@ -532,7 +538,7 @@ TEST(TensorBuffer, CreateFromGlBuffer) {
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer tensor_buffer,
       TensorBuffer::CreateFromGlBuffer(
-          RankedTensorType(kTensorType), gl_buffer.target(), gl_buffer.id(),
+          RankedTensorType(kTestTensorType), gl_buffer.target(), gl_buffer.id(),
           gl_buffer.bytes_size(), gl_buffer.offset()));
 }
 
@@ -545,7 +551,7 @@ TEST(TensorBuffer, GetGlBufferFromAhwb) {
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer ahwb_tensor_buffer,
       TensorBuffer::CreateManaged(kLiteRtTensorBufferTypeAhwb,
-                                  RankedTensorType(kTensorType),
+                                  RankedTensorType(kTestTensorType),
                                   sizeof(kTensorData)));
 
   // Write to AHWB Tensor buffer.
@@ -566,15 +572,52 @@ TEST(TensorBuffer, GetGlBufferFromAhwb) {
       gl_buffer.target, gl_buffer.id, gl_buffer.size_bytes, gl_buffer.offset,
       /*has_ownership=*/false);
   float read_data[sizeof(kTensorData) / sizeof(kTensorData[0])];
-  ASSERT_OK(gl_buffer_from_ahwb.Read<float>(absl::MakeSpan(read_data)));
+  auto status = gl_buffer_from_ahwb.Read<float>(absl::MakeSpan(read_data));
+  ASSERT_TRUE(status.ok());
   ASSERT_EQ(std::memcmp(read_data, kTensorData, sizeof(kTensorData)), 0);
 }
 #endif  // LITERT_HAS_AHWB_SUPPORT
 
 #endif  // LITERT_HAS_OPENGL_SUPPORT
 
+#if LITERT_HAS_OPENCL_SUPPORT
+TEST(TensorBuffer, GetClBufferFromAhwb) {
+  if (!HasOpenClSupport() || !HasAhwbSupport()) {
+    GTEST_SKIP() << "OpenCL and/or AHWB are not supported on this platform; "
+                    "skipping the "
+                    "test";
+  }
+  // Create AHWB Tensor buffer.
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      TensorBuffer ahwb_tensor_buffer,
+      TensorBuffer::CreateManaged(kLiteRtTensorBufferTypeAhwb,
+                                  RankedTensorType(kTestTensorType),
+                                  sizeof(kTensorData)));
+
+  // Write to AHWB Tensor buffer.
+  LITERT_ASSERT_OK(ahwb_tensor_buffer.Write<float>(absl::MakeConstSpan(
+      kTensorData, sizeof(kTensorData) / sizeof(kTensorData[0]))));
+
+  LITERT_ASSERT_OK_AND_ASSIGN(cl_mem cl_buffer,
+                              ahwb_tensor_buffer.GetOpenClMemory());
+  EXPECT_THAT(cl_buffer, Ne(nullptr));
+
+  // Read from CL buffer.
+  // TODO(gcarranza): Add ClBuffer ReadLock functionality to LiteRT
+  // TensorBuffer. ClBuffer::Unlock currently writes to CL buffer.
+
+  tflite::gpu::cl::Buffer cl_buffer_from_ahwb(cl_buffer, sizeof(kTensorData));
+  tflite::gpu::cl::CLCommandQueue* queue =
+      internal::GpuEnvironmentSingleton::GetInstance().getCommandQueue();
+  std::vector<float> read_data;
+  auto status = cl_buffer_from_ahwb.ReadData(queue, &read_data);
+  ASSERT_TRUE(status.ok());
+  ASSERT_EQ(std::memcmp(read_data.data(), kTensorData, sizeof(kTensorData)), 0);
+}
+#endif  // LITERT_HAS_OPENCL_SUPPORT
+
 TEST(TensorBuffer, GetAhwb) {
-  if (!internal::AhwbBuffer::IsSupported()) {
+  if (!HasAhwbSupport()) {
     GTEST_SKIP() << "AHardwareBuffers are not supported on this platform; "
                     "skipping the test";
   }
