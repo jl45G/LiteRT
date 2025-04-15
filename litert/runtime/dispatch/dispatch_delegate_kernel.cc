@@ -21,20 +21,25 @@
 #include <utility>
 #include <vector>
 
+#include "absl/cleanup/cleanup.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_dispatch_delegate.h"
 #include "litert/c/litert_event.h"
 #include "litert/c/litert_logging.h"
+#include "litert/c/litert_metrics.h"
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
 #include "litert/cc/litert_buffer_ref.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/litert_handle.h"
+#include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
 #include "litert/core/dispatch_op_schema.h"
 #include "litert/runtime/dispatch/dispatch_delegate_options.h"
 #include "litert/runtime/external_litert_buffer_context.h"
+#include "litert/runtime/metrics.h"
 #include "litert/runtime/tfl_utils.h"
 #include "litert/vendors/c/litert_dispatch.h"
 #include "tensorflow/lite/c/c_api_opaque.h"  // from @org_tensorflow
@@ -263,7 +268,7 @@ TfLiteStatus DispatchDelegateKernel::Init(
     }
     auto input_buffer_requirements =
         GetBufferRequirements(*tensor_type, i, /*is_input=*/true);
-    if (auto res = buffer_context_->RegisterBufferRequirement(
+    if (auto res = buffer_context_->RegisterBufferRequirements(
             tfl_opaque_tensor, std::move(*input_buffer_requirements));
         res != kLiteRtStatusOk) {
       LITERT_LOG(LITERT_ERROR, "Failed to register buffer requirement");
@@ -285,7 +290,7 @@ TfLiteStatus DispatchDelegateKernel::Init(
     }
     auto output_buffer_requirements =
         GetBufferRequirements(*tensor_type, i, /*is_input=*/false);
-    if (auto res = buffer_context_->RegisterBufferRequirement(
+    if (auto res = buffer_context_->RegisterBufferRequirements(
             tfl_opaque_tensor, std::move(*output_buffer_requirements));
         res != kLiteRtStatusOk) {
       LITERT_LOG(LITERT_ERROR, "Failed to register buffer requirement");
@@ -327,8 +332,7 @@ DispatchDelegateKernel::GetBufferRequirements(
     }
   }
 
-  return TensorBufferRequirements(tensor_buffer_requirements,
-                                  /*owned=*/true);
+  return TensorBufferRequirements(tensor_buffer_requirements, OwnHandle::kYes);
 }
 
 TfLiteStatus DispatchDelegateKernel::CreateAndSetBuffer(
@@ -405,9 +409,9 @@ TfLiteStatus DispatchDelegateKernel::CreateAndSetBuffer(
     return kTfLiteError;
   }
 
-  return RegisterLiteRtTensorBuffer(TensorBuffer(litert_tensor_buffer),
-                                    *tensor_buffer_size, buffer_index,
-                                    is_input);
+  return RegisterLiteRtTensorBuffer(
+      TensorBuffer(litert_tensor_buffer, litert::OwnHandle::kYes),
+      *tensor_buffer_size, buffer_index, is_input);
 }
 
 TfLiteStatus DispatchDelegateKernel::RegisterLiteRtTensorBuffer(
@@ -614,7 +618,8 @@ TfLiteStatus DispatchDelegateKernel::Eval(TfLiteOpaqueContext* context,
       auto output_event = output_events[i];
       if (output_event) {
         auto& tensor_buffer = output_tensor_buffers_[i];
-        if (auto status = tensor_buffer.SetEvent(Event(output_event));
+        if (auto status = tensor_buffer.SetEvent(
+                Event(output_event, litert::OwnHandle::kYes));
             !status) {
           LITERT_LOG(LITERT_ERROR,
                      "Failed to set event on output tensor buffer: %s",
@@ -651,6 +656,38 @@ TfLiteStatus DispatchDelegateKernel::Eval(TfLiteOpaqueContext* context,
   }
 
   return kTfLiteOk;
+}
+
+LiteRtStatus DispatchDelegateKernel::StartMetricsCollection(int detail_level) {
+  return LiteRtDispatchStartMetricsCollection(invocation_context_,
+                                              detail_level);
+}
+
+Expected<LiteRtMetricsT> DispatchDelegateKernel::StopMetricsCollection() {
+  LiteRtDispatchMetrics dispatch_metrics;
+  LITERT_RETURN_IF_ERROR(LiteRtDispatchStopMetricsCollection(
+      invocation_context_, &dispatch_metrics));
+
+  absl::Cleanup metrics_cleanup = [&dispatch_metrics] {
+    if (auto status = LiteRtDispatchDestroyMetrics(dispatch_metrics);
+        status != kLiteRtStatusOk) {
+      LITERT_LOG(LITERT_ERROR, "Failed to destroy metrics: %d", status);
+    }
+  };
+
+  int num_metrics = 0;
+  LITERT_RETURN_IF_ERROR(
+      LiteRtDispatchGetNumMetrics(dispatch_metrics, &num_metrics));
+
+  std::vector<LiteRtMetricsT::Metric> metrics;
+  metrics.reserve(num_metrics);
+  for (int i = 0; i < num_metrics; ++i) {
+    LiteRtMetric metric;
+    LITERT_RETURN_IF_ERROR(
+        LiteRtDispatchGetMetric(dispatch_metrics, i, &metric));
+    metrics.push_back({metric.name, metric.value});
+  }
+  return LiteRtMetricsT{.metrics = std::move(metrics)};
 }
 
 }  // namespace internal

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_EXTERNAL_LITERT_BUFFER_CONTEXT_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_EXTERNAL_LITERT_BUFFER_CONTEXT_H_
+#ifndef ODML_LITERT_LITERT_RUNTIME_EXTERNAL_LITERT_BUFFER_CONTEXT_H_
+#define ODML_LITERT_LITERT_RUNTIME_EXTERNAL_LITERT_BUFFER_CONTEXT_H_
 
 #include <memory>
 #include <unordered_map>
@@ -41,36 +41,35 @@ class ExternalLiteRtBufferContext : public TfLiteExternalContext {
   // Note: Currently, the system pre-registers tensor buffer requirements before
   // they're actually used. A more efficient approach would be to query
   // DelegateKernel only when these requirements are needed.
-  LiteRtStatus RegisterBufferRequirement(
+  LiteRtStatus RegisterBufferRequirements(
       const TfLiteOpaqueTensor* tensor,
       TensorBufferRequirements&& buffer_requirements);
 
-  inline LiteRtStatus RegisterBufferRequirement(
+  inline LiteRtStatus RegisterBufferRequirements(
       const TfLiteTensor* tensor,
       TensorBufferRequirements&& buffer_requirements) {
-    return RegisterBufferRequirement(
+    return RegisterBufferRequirements(
         reinterpret_cast<const TfLiteOpaqueTensor*>(tensor),
         std::move(buffer_requirements));
   }
 
-  inline LiteRtStatus RegisterLiteRtBufferRequirement(
+  inline LiteRtStatus RegisterLiteRtBufferRequirements(
       const TfLiteTensor* tensor,
       LiteRtTensorBufferRequirements& litert_buffer_requirements) {
-    return RegisterBufferRequirement(
+    return RegisterBufferRequirements(
         reinterpret_cast<const TfLiteOpaqueTensor*>(tensor),
-        TensorBufferRequirements(litert_buffer_requirements,
-                                 /*owned=*/true));
+        TensorBufferRequirements(litert_buffer_requirements, OwnHandle::kYes));
   }
 
   // Gets a registered tensor buffer requirements for the given tensor.
   // The returned TensorBufferRequirements object is still owned by
   // ExternalLiteRtBufferContext.
-  litert::Expected<TensorBufferRequirements*> GetBufferRequirement(
+  litert::Expected<const TensorBufferRequirements*> GetBufferRequirements(
       const TfLiteOpaqueTensor* tensor);
 
-  inline litert::Expected<TensorBufferRequirements*> GetBufferRequirement(
-      const TfLiteTensor* tensor) {
-    return GetBufferRequirement(
+  inline litert::Expected<const TensorBufferRequirements*>
+  GetBufferRequirements(const TfLiteTensor* tensor) {
+    return GetBufferRequirements(
         reinterpret_cast<const TfLiteOpaqueTensor*>(tensor));
   }
 
@@ -131,4 +130,4 @@ class ExternalLiteRtBufferContext : public TfLiteExternalContext {
 
 }  // namespace litert::internal
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_EXTERNAL_LITERT_BUFFER_CONTEXT_H_
+#endif  // ODML_LITERT_LITERT_RUNTIME_EXTERNAL_LITERT_BUFFER_CONTEXT_H_

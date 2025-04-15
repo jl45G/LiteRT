@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_ACCELERATOR_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_ACCELERATOR_H_
+#ifndef ODML_LITERT_LITERT_RUNTIME_ACCELERATOR_H_
+#define ODML_LITERT_LITERT_RUNTIME_ACCELERATOR_H_
 
 #include <cstddef>
 #include <memory>
@@ -21,6 +21,7 @@
 
 #include "litert/c/litert_accelerator_compilation_options.h"
 #include "litert/c/litert_common.h"
+#include "litert/runtime/metrics.h"
 
 // We need to forward declare this to avoid a dependency loop.
 struct LiteRtCompiledModelT;
@@ -68,7 +69,14 @@ struct LiteRtAcceleratorT {
   LiteRtStatus (*IsTfLiteDelegateResponsibleForJitCompilation)(
       LiteRtAcceleratorT* accelerator, bool* does_jit_compilation);
 
+  // Starts collection of HW-specific metrics at a specific level of detail.
+  LiteRtStatus (*StartMetricsCollection)(void* delegate, int detail_level);
+
+  // Stops collection of HW-specific metrics and report the collected metrics.
+  LiteRtStatus (*StopMetricsCollection)(void* delegate,
+                                        LiteRtMetricsT* metrics);
+
   // NOLINTEND(*-readability-class-member-naming)
 };
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_RUNTIME_ACCELERATOR_H_
+#endif  // ODML_LITERT_LITERT_RUNTIME_ACCELERATOR_H_

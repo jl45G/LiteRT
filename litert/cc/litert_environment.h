@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_ENVIRONMENT_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_ENVIRONMENT_H_
+#ifndef ODML_LITERT_LITERT_CC_LITERT_ENVIRONMENT_H_
+#define ODML_LITERT_LITERT_CC_LITERT_ENVIRONMENT_H_
 
 #include <any>
 #include <vector>
@@ -29,9 +29,7 @@ namespace litert {
 class Environment
     : public internal::Handle<LiteRtEnvironment, LiteRtDestroyEnvironment> {
  public:
-  explicit Environment(LiteRtEnvironment env)
-      : internal::Handle<LiteRtEnvironment, LiteRtDestroyEnvironment>(env,
-                                                                      true) {}
+  explicit Environment(LiteRtEnvironment env) : Handle(env, OwnHandle::kYes) {}
 
   enum class OptionTag {
     CompilerPluginLibraryDir = kLiteRtEnvOptionTagCompilerPluginLibraryDir,
@@ -83,4 +81,4 @@ class Environment
 
 }  // namespace litert
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_ENVIRONMENT_H_
+#endif  // ODML_LITERT_LITERT_CC_LITERT_ENVIRONMENT_H_

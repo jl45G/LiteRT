@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_HANDLE_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_HANDLE_H_
+#ifndef ODML_LITERT_LITERT_CC_LITERT_HANDLE_H_
+#define ODML_LITERT_LITERT_CC_LITERT_HANDLE_H_
 
 #include <memory>
 #include <type_traits>
 
 namespace litert {
+
+enum OwnHandle { kNo, kYes };
+
 namespace internal {
 
 template <typename H>
@@ -31,25 +34,35 @@ inline void DummyDeleter(H) {}
 template <typename H, void (*deleter)(H)>
 class Handle {
  public:
+  using Deleter = void (*)(H);
+
   Handle() = default;
-  explicit Handle(H handle, bool owned) noexcept
-      : ptr_(handle, owned ? deleter : DummyDeleter<H>) {}
 
-  Handle(Handle&& other) noexcept { *this = std::move(other); }
+  Handle(H handle, OwnHandle own) noexcept
+      : ptr_(handle, own == OwnHandle::kYes ? deleter : DummyDeleter<H>) {}
 
-  Handle& operator=(Handle&& other) noexcept {
-    std::swap(ptr_, other.ptr_);
-    return *this;
-  }
-
-  // Return true if the underlying LiteRtTensorBuffer handle is valid.
+  // Returns true if the underlying LiteRT handle is valid.
   explicit operator bool() const noexcept { return static_cast<bool>(ptr_); }
 
-  // Return the underlying LiteRtTensorBuffer handle.
+  bool operator==(const Handle& other) const noexcept {
+    return Get() == other.Get();
+  }
+  bool operator!=(const Handle& other) const noexcept {
+    return Get() != other.Get();
+  }
+
+  // Returns the underlying LiteRT handle.
   H Get() const noexcept { return ptr_.get(); }
 
+  // Returns the deleter for the handle.
+  Deleter GetDeleter() const noexcept { return ptr_.get_deleter(); }
+
+  // Releases the handle ownership.
+  //
+  // After this call, `Get` returns a null handle.
   H Release() noexcept { return ptr_.release(); }
 
+  // Returns true if the underlying handle is managed by this object.
   bool IsOwned() const noexcept {
     return ptr_.get_deleter() != DummyDeleter<H>;
   }
@@ -65,10 +78,10 @@ template <typename H>
 class NonOwnedHandle : public Handle<H, DummyDeleter<H>> {
  public:
   explicit NonOwnedHandle(H handle) noexcept
-      : Handle<H, DummyDeleter<H>>(handle, /*owned=*/false) {}
+      : Handle<H, DummyDeleter<H>>(handle, OwnHandle::kNo) {}
 };
 
 }  // namespace internal
 }  // namespace litert
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_HANDLE_H_
+#endif  // ODML_LITERT_LITERT_CC_LITERT_HANDLE_H_

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_COMPILATION_OPTIONS_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_COMPILATION_OPTIONS_H_
+#ifndef ODML_LITERT_LITERT_CC_LITERT_COMPILATION_OPTIONS_H_
+#define ODML_LITERT_LITERT_CC_LITERT_COMPILATION_OPTIONS_H_
 
 #include "litert/c/litert_accelerator_compilation_options.h"
 #include "litert/c/litert_common.h"
@@ -34,7 +34,7 @@ class CompilationOptions
   // Parameter `owned` indicates if the created CompilationOptions object
   // should take ownership of the provided `compilation_options` handle.
   explicit CompilationOptions(LiteRtCompilationOptions compilation_options,
-                              bool owned = true)
+                              OwnHandle owned)
       : internal::Handle<LiteRtCompilationOptions,
                          LiteRtDestroyCompilationOptions>(compilation_options,
                                                           owned) {}
@@ -42,7 +42,7 @@ class CompilationOptions
   static Expected<CompilationOptions> Create() {
     LiteRtCompilationOptions options;
     LITERT_RETURN_IF_ERROR(LiteRtCreateCompilationOptions(&options));
-    return CompilationOptions(options);
+    return CompilationOptions(options, OwnHandle::kYes);
   }
 
   Expected<void> SetHardwareAccelerators(LiteRtHwAcceleratorSet accelerators) {
@@ -69,10 +69,10 @@ class CompilationOptions
     LiteRtAcceleratorCompilationOptions options;
     LITERT_RETURN_IF_ERROR(
         LiteRtGetAcceleratorCompilationOptions(Get(), &options));
-    return AcceleratorCompilationOptions(options, /*owned=*/false);
+    return AcceleratorCompilationOptions(options, OwnHandle::kNo);
   }
 };
 
 }  // namespace litert
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_COMPILATION_OPTIONS_H_
+#endif  // ODML_LITERT_LITERT_CC_LITERT_COMPILATION_OPTIONS_H_

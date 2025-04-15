@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_TENSOR_BUFFER_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_TENSOR_BUFFER_H_
+#ifndef ODML_LITERT_LITERT_CC_LITERT_TENSOR_BUFFER_H_
+#define ODML_LITERT_LITERT_CC_LITERT_TENSOR_BUFFER_H_
 
 #include <cstddef>
 #include <cstring>
@@ -49,9 +49,8 @@ class TensorBuffer
 
   // Parameter `owned` indicates if the created TensorBuffer object should take
   // ownership of the provided `tensor_buffer` handle.
-  explicit TensorBuffer(LiteRtTensorBuffer tensor_buffer, bool owned = true)
-      : internal::Handle<LiteRtTensorBuffer, LiteRtDestroyTensorBuffer>(
-            tensor_buffer, owned) {}
+  explicit TensorBuffer(LiteRtTensorBuffer tensor_buffer, OwnHandle owned)
+      : Handle(tensor_buffer, owned) {}
 
   // Creates a duplicate of the current TensorBuffer object. The returned
   // object is reference counted so the underlying LiteRtTensorBuffer handle is
@@ -62,7 +61,7 @@ class TensorBuffer
                         "Cannot duplicate a non-owned tensor buffer");
     }
     LITERT_RETURN_IF_ERROR(LiteRtDuplicateTensorBuffer(Get()));
-    return TensorBuffer(Get());
+    return TensorBuffer(Get(), OwnHandle::kYes);
   }
 
   static Expected<TensorBuffer> CreateManaged(
@@ -72,7 +71,7 @@ class TensorBuffer
     auto litert_tensor_type = static_cast<LiteRtRankedTensorType>(tensor_type);
     LITERT_RETURN_IF_ERROR(LiteRtCreateManagedTensorBuffer(
         buffer_type, &litert_tensor_type, buffer_size, &tensor_buffer));
-    return TensorBuffer(tensor_buffer);
+    return TensorBuffer(tensor_buffer, OwnHandle::kYes);
   }
 
   // Creates a TensorBuffer object that wraps the provided host memory.
@@ -87,7 +86,7 @@ class TensorBuffer
     LITERT_RETURN_IF_ERROR(LiteRtCreateTensorBufferFromHostMemory(
         &litert_tensor_type, host_mem_addr, buffer_size,
         /*deallocator=*/nullptr, &tensor_buffer));
-    return TensorBuffer(tensor_buffer);
+    return TensorBuffer(tensor_buffer, OwnHandle::kYes);
   }
 
   // Creates a TensorBuffer object that wraps an Android Hardware Buffer. Note
@@ -105,7 +104,7 @@ class TensorBuffer
     LITERT_RETURN_IF_ERROR(LiteRtCreateTensorBufferFromAhwb(
         &litert_tensor_type, ahwb, ahwb_offset,
         /*deallocator=*/nullptr, &tensor_buffer));
-    return TensorBuffer(tensor_buffer);
+    return TensorBuffer(tensor_buffer, OwnHandle::kYes);
 #else
     return litert::Unexpected(
         kLiteRtStatusErrorRuntimeFailure,
@@ -142,10 +141,10 @@ class TensorBuffer
 #endif
   }
 
-  Expected<cl_mem> GetOpenClBuffer() const {
+  Expected<cl_mem> GetOpenClMemory() const {
 #if LITERT_HAS_OPENCL_SUPPORT
     cl_mem cl_mem;
-    LITERT_RETURN_IF_ERROR(LiteRtGetTensorBufferOpenClBuffer(Get(), &cl_mem));
+    LITERT_RETURN_IF_ERROR(LiteRtGetTensorBufferOpenClMemory(Get(), &cl_mem));
     return cl_mem;
 #else
     return litert::Unexpected(kLiteRtStatusErrorRuntimeFailure,
@@ -168,7 +167,7 @@ class TensorBuffer
     LITERT_RETURN_IF_ERROR(LiteRtCreateTensorBufferFromGlBuffer(
         &litert_tensor_type, target, id, size_bytes, offset,
         /*deallocator=*/nullptr, &tensor_buffer));
-    return TensorBuffer(tensor_buffer);
+    return TensorBuffer(tensor_buffer, OwnHandle::kYes);
   }
 
   Expected<GlBuffer> GetGlBuffer() const {
@@ -193,7 +192,7 @@ class TensorBuffer
     LITERT_RETURN_IF_ERROR(LiteRtCreateTensorBufferFromGlTexture(
         &litert_tensor_type, target, id, format, size_bytes, layer,
         /*deallocator=*/nullptr, &tensor_buffer));
-    return TensorBuffer(tensor_buffer);
+    return TensorBuffer(tensor_buffer, OwnHandle::kYes);
   }
 
   Expected<GlTexture> GetGlTexture() const {
@@ -209,6 +208,28 @@ class TensorBuffer
     LITERT_RETURN_IF_ERROR(
         LiteRtGetTensorBufferType(Get(), &tensor_buffer_type));
     return tensor_buffer_type;
+  }
+
+  // Returns true if the tensor buffer is an OpenCL memory.
+  // Note: This function doesn't return Expected<bool> users can easily make
+  // mistakes when using it.
+  bool IsOpenClMemory() const {
+    LiteRtTensorBufferType tensor_buffer_type;
+    if (auto status = LiteRtGetTensorBufferType(Get(), &tensor_buffer_type);
+        status != kLiteRtStatusOk) {
+      return false;
+    }
+    switch (tensor_buffer_type) {
+      case kLiteRtTensorBufferTypeOpenClBuffer:
+      case kLiteRtTensorBufferTypeOpenClBufferFp16:
+      case kLiteRtTensorBufferTypeOpenClTexture:
+      case kLiteRtTensorBufferTypeOpenClTextureFp16:
+      case kLiteRtTensorBufferTypeOpenClImageBuffer:
+      case kLiteRtTensorBufferTypeOpenClImageBufferFp16:
+        return true;
+      default:
+        return false;
+    }
   }
 
   Expected<RankedTensorType> TensorType() const {
@@ -241,7 +262,7 @@ class TensorBuffer
   Expected<Event> GetEvent() const {
     LiteRtEvent event;
     LITERT_RETURN_IF_ERROR(LiteRtGetTensorBufferEvent(Get(), &event));
-    return Event(event, /*owned=*/false);
+    return Event(event, OwnHandle::kNo);
   }
 
   // Set the C++ Event object for the tensor buffer.
@@ -347,4 +368,4 @@ class TensorBufferScopedLock {
 
 }  // namespace litert
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_TENSOR_BUFFER_H_
+#endif  // ODML_LITERT_LITERT_CC_LITERT_TENSOR_BUFFER_H_

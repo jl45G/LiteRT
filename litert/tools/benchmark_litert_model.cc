@@ -19,13 +19,17 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/types/span.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
 #include "litert/cc/litert_compilation_options.h"
 #include "litert/cc/litert_compiled_model.h"
+#include "litert/cc/litert_environment.h"
+#include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "tensorflow/lite/c/c_api_types.h"  // from @org_tensorflow
+#include "tensorflow/lite/c/common.h"  // from @org_tensorflow
 
 namespace litert::benchmark {
 namespace {
@@ -35,35 +39,76 @@ using ::litert::TensorBuffer;
 
 CompilationOptions CreateCompiledModelOptions(const BenchmarkParams& params) {
   auto use_gpu = params.Get<bool>("use_gpu");
+  auto use_npu = params.Get<bool>("use_npu");
+  auto require_full_delegation = params.Get<bool>("require_full_delegation");
   CompilationOptions compilation_options =
       *litert::CompilationOptions::Create();
+  if (use_npu) {
+    if (require_full_delegation) {
+      compilation_options.SetHardwareAccelerators(
+          LiteRtHwAccelerators::kLiteRtHwAcceleratorNpu);
+    } else {
+      compilation_options.SetHardwareAccelerators(
+          LiteRtHwAccelerators::kLiteRtHwAcceleratorNpu |
+          LiteRtHwAccelerators::kLiteRtHwAcceleratorGpu |
+          LiteRtHwAccelerators::kLiteRtHwAcceleratorCpu);
+    }
+  }
   if (use_gpu) {
-    compilation_options.SetHardwareAccelerators(
-        LiteRtHwAccelerators::kLiteRtHwAcceleratorGpu);
+    if (require_full_delegation) {
+      compilation_options.SetHardwareAccelerators(
+          LiteRtHwAccelerators::kLiteRtHwAcceleratorGpu);
+    } else {
+      compilation_options.SetHardwareAccelerators(
+          LiteRtHwAccelerators::kLiteRtHwAcceleratorGpu |
+          LiteRtHwAccelerators::kLiteRtHwAcceleratorCpu);
+    }
   }
   return compilation_options;
 }
+litert::Expected<Environment> CreateDefaultEnvironment(
+    const BenchmarkParams& params) {
+  auto qnn_dispatch_library_path =
+      params.Get<std::string>("qnn_dispatch_library_path");
+  LITERT_LOG(LITERT_INFO, "qnn_dispatch_library_path: %s",
+             qnn_dispatch_library_path.c_str());
+
+  const std::vector<litert::Environment::Option> environment_options = {
+      litert::Environment::Option{
+          litert::Environment::OptionTag::DispatchLibraryDir,
+          qnn_dispatch_library_path.c_str(),
+      },
+  };
+  return litert::Environment::Create(absl::MakeConstSpan(environment_options));
+}
 }  // namespace
 
-TfLiteStatus BenchmarkLiteRtModel::Init() {
+TfLiteStatus BenchmarkLiteRtModel::LoadModel() {
   std::string fd_or_graph_path = params_.Get<std::string>("graph");
   LITERT_LOG(LITERT_INFO, "Loading model from: %s", fd_or_graph_path.c_str());
-  model_ = *litert::Model::CreateFromFile(fd_or_graph_path);
-  if (!model_) {
+  auto model_result = litert::Model::CreateFromFile(fd_or_graph_path);
+  if (!model_result) {
     LITERT_LOG(LITERT_ERROR, "Failed to load model: %s",
                fd_or_graph_path.c_str());
     return kTfLiteError;
   }
+  model_ = std::make_unique<litert::Model>(std::move(*model_result));
+  return kTfLiteOk;
+}
 
-  auto env = Environment::Create({});
+TfLiteStatus BenchmarkLiteRtModel::Init() {
+  TF_LITE_ENSURE_STATUS(LoadModel());
+
+  auto env = CreateDefaultEnvironment(params_);
   if (!env) {
-    LITERT_LOG(LITERT_ERROR, "Failed to create litert environment.");
+    LITERT_LOG(LITERT_ERROR, "Failed to create litert environment. %s",
+               env.Error().Message().c_str());
     return kTfLiteError;
   }
 
   auto compilation_options = CreateCompiledModelOptions(params_);
   auto compiled_model_result =
-      litert::CompiledModel::Create(*env, model_, compilation_options);
+      litert::CompiledModel::Create(*env, *model_, compilation_options);
   if (!compiled_model_result) {
     LITERT_LOG(LITERT_ERROR, "Failed to create compiled model.");
     return kTfLiteError;
@@ -72,6 +117,11 @@ TfLiteStatus BenchmarkLiteRtModel::Init() {
   compiled_model_ = std::make_unique<litert::CompiledModel>(
       std::move(*compiled_model_result));
   auto signature = params_.Get<std::string>("signature_to_run_for");
+  if (signature.empty()) {
+    auto s = model_->GetSignature(0);
+    signature = model_->GetSignature(0)->Key();
+  }
+
   auto input_buffers_result = compiled_model_->CreateInputBuffers(signature);
   if (!input_buffers_result) {
     LITERT_LOG(LITERT_ERROR, "Failed to create input buffers.");
@@ -79,7 +129,6 @@ TfLiteStatus BenchmarkLiteRtModel::Init() {
   }
   input_buffers_ = std::make_unique<std::vector<litert::TensorBuffer>>(
       std::move(*input_buffers_result));
-
   auto output_buffers_result = compiled_model_->CreateOutputBuffers(signature);
   if (!output_buffers_result) {
     LITERT_LOG(LITERT_ERROR, "Failed to create output buffers.");

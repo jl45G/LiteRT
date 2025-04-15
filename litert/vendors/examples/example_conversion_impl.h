@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_EXAMPLES_EXAMPLE_CONVERSION_IMPL_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_EXAMPLES_EXAMPLE_CONVERSION_IMPL_H_
+#ifndef ODML_LITERT_LITERT_VENDORS_EXAMPLES_EXAMPLE_CONVERSION_IMPL_H_
+#define ODML_LITERT_LITERT_VENDORS_EXAMPLES_EXAMPLE_CONVERSION_IMPL_H_
 
 #include <cstdint>
 #include <memory>
@@ -23,7 +23,7 @@
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_op_code.h"
-#include "litert/c/litert_options.h"
+#include "litert/c/litert_op_options.h"
 #include "litert/cc/litert_model.h"
 #include "litert/vendors/cc/conversion.h"
 #include "litert/vendors/cc/ir_types.h"
@@ -125,4 +125,4 @@ ExampleTypes::Legalizations MakeAllLegalizations();
 
 }  // namespace litert::example
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_EXAMPLES_EXAMPLE_CONVERSION_IMPL_H_
+#endif  // ODML_LITERT_LITERT_VENDORS_EXAMPLES_EXAMPLE_CONVERSION_IMPL_H_

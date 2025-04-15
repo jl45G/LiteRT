@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_MODEL_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_MODEL_H_
+#ifndef ODML_LITERT_LITERT_CC_LITERT_MODEL_H_
+#define ODML_LITERT_LITERT_CC_LITERT_MODEL_H_
 
 #include <algorithm>
 #include <cstddef>
@@ -75,6 +75,12 @@ class Weights : public internal::NonOwnedHandle<LiteRtWeights> {
   explicit Weights(LiteRtWeights weights)
       : internal::NonOwnedHandle<LiteRtWeights>(weights) {}
 
+  int32_t BufferId() const {
+    int32_t buffer_id;
+    internal::AssertOk(LiteRtGetWeightsBufferId, Get(), &buffer_id);
+    return buffer_id;
+  }
+
   absl::Span<const uint8_t> Bytes() const {
     size_t size;
     const void* addr;
@@ -86,8 +92,7 @@ class Weights : public internal::NonOwnedHandle<LiteRtWeights> {
 // Tensor. C++ equivalent of LiteRtTensor.
 class Tensor : public internal::NonOwnedHandle<LiteRtTensor> {
  public:
-  explicit Tensor(LiteRtTensor tensor)
-      : internal::NonOwnedHandle<LiteRtTensor>(tensor) {}
+  explicit Tensor(LiteRtTensor tensor) : NonOwnedHandle(tensor) {}
 
   enum ElementType ElementType() const {
     if (TypeId() == kLiteRtUnrankedTensorType) {
@@ -320,11 +325,11 @@ class Model : public internal::Handle<LiteRtModel, LiteRtDestroyModel> {
   Model() = default;
 
   static Model CreateFromOwnedHandle(LiteRtModel model) {
-    return Model(model, /*owned=*/true);
+    return Model(model, OwnHandle::kYes);
   }
 
   static Model CreateFromNonOwnedHandle(LiteRtModel model) {
-    return Model(model, /*owned=*/false);
+    return Model(model, OwnHandle::kNo);
   }
 
   static Expected<Model> CreateFromFile(const std::string& filename) {
@@ -458,8 +463,7 @@ class Model : public internal::Handle<LiteRtModel, LiteRtDestroyModel> {
  private:
   // Parameter `owned` indicates if the created TensorBuffer object should take
   // ownership of the provided `tensor_buffer` handle.
-  Model(LiteRtModel model, bool owned)
-      : internal::Handle<LiteRtModel, LiteRtDestroyModel>(model, owned) {}
+  Model(LiteRtModel model, OwnHandle owned) : Handle(model, owned) {}
 };
 
 struct SerializationOptions {
@@ -470,4 +474,4 @@ struct SerializationOptions {
 
 }  // namespace litert
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_MODEL_H_
+#endif  // ODML_LITERT_LITERT_CC_LITERT_MODEL_H_

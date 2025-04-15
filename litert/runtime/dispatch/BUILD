@@ -13,13 +13,11 @@
 # limitations under the License.
 
 load("//litert/build_common:special_rule.bzl", "gles_linkopts")
+load("//litert/integration_test:litert_device.bzl", "litert_device_test")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = [
-        "//third_party/odml/infra/perf/mobile_tests/litert:__subpackages__",
-        "//litert:__subpackages__",
-    ],
+    default_visibility = ["//litert:litert_internal_users"],
 )
 
 # Dispatch API implementation, it is used by the dispatch delegate to call the vendor's dispatch
@@ -38,6 +36,7 @@ cc_library(
         "//litert/c:litert_common",
         "//litert/c:litert_event",
         "//litert/c:litert_logging",
+        "//litert/c:litert_metrics",
         "//litert/c:litert_model",
         "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_expected",
@@ -63,46 +62,49 @@ cc_library(
     ],
     deps = [
         ":dispatch",
+        "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_any",
         "//litert/c:litert_common",
+        "//litert/c:litert_dispatch_headers",
         "//litert/c:litert_environment_options",
         "//litert/c:litert_event",
         "//litert/c:litert_logging",
+        "//litert/c:litert_metrics",
         "//litert/c:litert_model",
-        "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_any",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_expected",
+        "//litert/cc:litert_handle",
+        "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
         "//litert/cc:litert_tensor_buffer",
         "//litert/core:build_stamp",
         "//litert/core:dispatch_op_schema",
         "//litert/core:environment_options",
         "//litert/runtime:external_litert_buffer_context",
+        "//litert/runtime:metrics",
         "//litert/runtime:tfl_utils",
         "//litert/vendors/c:litert_dispatch_c_api",
         "@org_tensorflow//tensorflow/lite/c:c_api",
         "@org_tensorflow//tensorflow/lite/c:c_api_opaque",
         "@org_tensorflow//tensorflow/lite/c:c_api_types",
         "@org_tensorflow//tensorflow/lite/c:common",
-        "@org_tensorflow//tensorflow/lite/core/c:c_api_opaque_without_op_resolver",
+        "@org_tensorflow//tensorflow/lite/core/c:private_c_api_opaque_without_op_resolver",
         "@org_tensorflow//tensorflow/lite/delegates/utils:simple_opaque_delegate",
     ],
 )
 
-cc_test(
+litert_device_test(
     name = "dispatch_delegate_google_tensor_test",
     srcs = ["dispatch_delegate_google_tensor_test.cc"],
+    backend_id = "google_tensor",
     data = [
-        "//litert/test:testdata/shared_input_cpu_npu.tflite",
-        "//litert/vendors/google_tensor/dispatch:dispatch_api_so",
+        "//litert/test:testdata/shared_input_cpu_npu_google_tensor_precompiled.tflite",
+        "//litert/test:testdata/simple_model_npu_google_tensor_precompiled.tflite",
     ],
-    linkopts = select({
-        "@org_tensorflow//tensorflow:android": ["-landroid"],
-        "//conditions:default": [],
-    }) + gles_linkopts(),
+    linkopts = gles_linkopts(),
     deps = [
         ":dispatch_delegate",
         "@com_google_googletest//:gtest_main",
@@ -131,17 +133,15 @@ cc_test(
     ],
 )
 
-cc_test(
+litert_device_test(
     name = "dispatch_delegate_qualcomm_test",
     srcs = ["dispatch_delegate_qualcomm_test.cc"],
+    backend_id = "qualcomm",
     data = [
         "//litert/test:testdata/shared_input_cpu_npu.tflite",
-        "//litert/vendors/qualcomm/dispatch:dispatch_api_so",
+        "//litert/test:testdata/simple_model_npu.tflite",
+        "//litert/test:testdata/simple_model_qualcomm.bin",
     ],
-    linkopts = select({
-        "@org_tensorflow//tensorflow:android": ["-landroid"],
-        "//conditions:default": [],
-    }),
     deps = [
         ":dispatch_delegate",
         "@com_google_googletest//:gtest_main",
@@ -154,31 +154,26 @@ cc_test(
         "//litert/cc:litert_compiled_model",
         "//litert/cc:litert_dispatch_delegate",
         "//litert/cc:litert_environment",
+        "//litert/cc:litert_expected",
         "//litert/cc:litert_model",
         "//litert/cc:litert_tensor_buffer",
         "//litert/runtime:external_litert_buffer_context",
         "//litert/test:common",
+        "//litert/test:matchers",
         "//litert/test:simple_model_npu",
         "@org_tensorflow//tensorflow/lite:framework",
         "@org_tensorflow//tensorflow/lite/c:c_api_opaque",
     ],
 )
 
-cc_test(
+litert_device_test(
     name = "dispatch_delegate_mediatek_test",
     srcs = ["dispatch_delegate_mediatek_test.cc"],
+    backend_id = "mediatek",
     data = [
         "//litert/test:testdata/shared_input_cpu_npu.tflite",
-        "//litert/vendors/mediatek/dispatch:dispatch_api_so",
-    ],
-    linkopts = select({
-        "@org_tensorflow//tensorflow:android": ["-landroid"],
-        "//conditions:default": [],
-    }),
-    tags = [
-        "no_oss",
-        "nobuilder",
-        "notap",
+        "//litert/test:testdata/simple_model_mtk.bin",
+        "//litert/test:testdata/simple_model_npu.tflite",
     ],
     deps = [
         ":dispatch_delegate",
@@ -197,6 +192,7 @@ cc_test(
         "//litert/core/util:flatbuffer_tools",
         "//litert/runtime:external_litert_buffer_context",
         "//litert/test:common",
+        "//litert/test:matchers",
         "//litert/test:simple_model_npu",
         "@org_tensorflow//tensorflow/lite:framework",
         "@org_tensorflow//tensorflow/lite/c:c_api_opaque",

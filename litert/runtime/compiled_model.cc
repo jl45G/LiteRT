@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -27,11 +28,13 @@
 #include "litert/c/litert_accelerator.h"
 #include "litert/c/litert_accelerator_compilation_options.h"
 #include "litert/cc/litert_event.h"
+#include "litert/cc/litert_handle.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
 #include "litert/core/util/flatbuffer_tools.h"
 #include "litert/runtime/accelerator.h"
 #include "litert/runtime/accelerator_model_compilation_data.h"
+#include "litert/runtime/metrics.h"
 
 #if defined(__ANDROID__)
 #include <android/hardware_buffer.h>
@@ -45,6 +48,7 @@
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
+#include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_buffer_ref.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_tensor_buffer.h"
@@ -283,7 +287,10 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
       return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                         "Failed to modify graph with delegate");
     }
-    compiled_model->RegisterDelegate(std::move(delegate));
+
+    compiled_model->RegisterDelegate({std::move(delegate),
+                                      accelerator->StartMetricsCollection,
+                                      accelerator->StopMetricsCollection});
   }
 
   compiled_model->CheckCpuTensors();
@@ -300,17 +307,23 @@ void LiteRtCompiledModelT::CheckCpuTensors() {
     for (int execution_plan_index = 0;
          execution_plan_index < execution_plan.size(); execution_plan_index++) {
       int node_index = execution_plan[execution_plan_index];
-      auto& node = nodes_and_registration[node_index].first;
+      const TfLiteNode& node = nodes_and_registration[node_index].first;
       const TfLiteRegistration& registration =
           nodes_and_registration[node_index].second;
-
-      if (registration.builtin_code == kTfLiteBuiltinDelegate) {
+      // Skip delegate nodes expect for XNNPack ones.
+      if (registration.builtin_code == kTfLiteBuiltinDelegate &&
+          !(registration.custom_name &&
+            registration.custom_name ==
+                absl::string_view("TfLiteXNNPackDelegate"))) {
         continue;
       }
+      // Skip AOT compiled NPU custom ops.
       if (registration.builtin_code == kTfLiteBuiltinCustom &&
-          litert::internal::kLiteRtDispatchOpCustomCode ==
-              registration.custom_name)
+          litert::internal::kLiteRtDispatchOpCustomName ==
+              registration.custom_name) {
         continue;
+      }
+      // Mark input of node as CPU tensors.
       for (int i = 0; i < node.inputs->size; ++i) {
         int input_tensor_index = node.inputs->data[i];
         if (input_tensor_index == kTfLiteOptionalTensor) continue;
@@ -325,7 +338,7 @@ LiteRtCompiledModelT::GetTensorBufferRequirements(const TfLiteTensor* tensor) {
   // Use the buffer context to get the buffer requirements only if the tensor
   // is not a CPU tensor.
   if (cpu_tensors_.find(tensor) == cpu_tensors_.end()) {
-    auto requirements = buffer_context_->GetBufferRequirement(tensor);
+    auto requirements = buffer_context_->GetBufferRequirements(tensor);
     if (requirements) {
       return (*requirements)->Get();
     }
@@ -343,8 +356,8 @@ LiteRtCompiledModelT::GetTensorBufferRequirements(const TfLiteTensor* tensor) {
     return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                       "Failed to create CPU buffer requirements");
   }
-  cpu_buffer_requirements_[tensor] =
-      litert::TensorBufferRequirements(litert_cpu_buffer_requirements);
+  cpu_buffer_requirements_[tensor] = litert::TensorBufferRequirements(
+      litert_cpu_buffer_requirements, litert::OwnHandle::kYes);
   return litert_cpu_buffer_requirements;
 }
 
@@ -410,7 +423,7 @@ Expected<void> LiteRtCompiledModelT::RegisterBuffer(
     std::vector<LiteRtTensorBuffer>& locked_buffers) {
   bool backend_requires_cpu_buffer = false;
 
-  auto requirements = buffer_context_->GetBufferRequirement(tensor);
+  auto requirements = buffer_context_->GetBufferRequirements(tensor);
   if (requirements) {
     auto supported_types = (*requirements)->SupportedTypes();
     if (!supported_types) {
@@ -421,7 +434,7 @@ Expected<void> LiteRtCompiledModelT::RegisterBuffer(
       if (type == buffer->buffer_type()) {
         // Register tensor buffer if it can be used by the backend.
         buffer->Duplicate();
-        TensorBuffer duplicated_buffer(buffer);
+        TensorBuffer duplicated_buffer(buffer, litert::OwnHandle::kYes);
         if (auto status = buffer_context_->RegisterTensorBuffer(
                 tensor, std::move(duplicated_buffer));
             status != kLiteRtStatusOk) {
@@ -447,7 +460,7 @@ Expected<void> LiteRtCompiledModelT::RegisterBuffer(
     // When backend requires CPU buffer.
     bool buffer_is_cpu_compatible =
         buffer->buffer_type() == kLiteRtTensorBufferTypeHostMemory ||
-        buffer->buffer_type() == kLiteRtTensorBufferTypeOpenCl;
+        buffer->is_opencl_memory();
 #if defined(__ANDROID__)
     if (buffer->buffer_type() == kLiteRtTensorBufferTypeAhwb) {
       if (__builtin_available(android 26, *)) {
@@ -597,7 +610,7 @@ Expected<void> LiteRtCompiledModelT::Run(
     for (auto& tb : output_buffers) {
       if (tb->HasEvent()) {
         auto event = tb->GetEvent();
-        if (auto status = litert::Event(*event, /*owned=*/false)
+        if (auto status = litert::Event(*event, litert::OwnHandle::kNo)
                               .Wait(/*timeout_in_ms=*/-1);
             !status) {
           return status;
@@ -635,4 +648,35 @@ litert::Expected<void> LiteRtCompiledModelT::RunCApi(
     *async = async_;
   }
   return result;
+}
+
+litert::Expected<void> LiteRtCompiledModelT::StartMetricsCollection(
+    int detail_level) {
+  if (detail_level < 0) {
+    return litert::Unexpected(kLiteRtStatusErrorInvalidArgument,
+                              "Detail level must be >= 0");
+  }
+  for (auto& delegate : delegates_) {
+    if (delegate.StartMetricsCollection) {
+      LITERT_RETURN_IF_ERROR(delegate.StartMetricsCollection(
+          delegate.delegate.get(), detail_level));
+    }
+  }
+  return {};
+}
+
+litert::Expected<LiteRtMetricsT> LiteRtCompiledModelT::StopMetricsCollection() {
+  std::vector<LiteRtMetricsT::Metric> metrics;
+  for (auto& delegate : delegates_) {
+    if (delegate.StopMetricsCollection) {
+      LiteRtMetricsT accelerator_metrics;
+      LITERT_RETURN_IF_ERROR(delegate.StopMetricsCollection(
+          delegate.delegate.get(), &accelerator_metrics));
+      metrics.insert(
+          metrics.end(),
+          std::make_move_iterator(accelerator_metrics.metrics.begin()),
+          std::make_move_iterator(accelerator_metrics.metrics.end()));
+    }
+  }
+  return LiteRtMetricsT{.metrics = std::move(metrics)};
 }

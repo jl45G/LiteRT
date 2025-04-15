@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_COMPILED_MODEL_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_COMPILED_MODEL_H_
+#ifndef ODML_LITERT_LITERT_CC_LITERT_COMPILED_MODEL_H_
+#define ODML_LITERT_LITERT_CC_LITERT_COMPILED_MODEL_H_
 
 #include <cstddef>
 #include <memory>
@@ -23,6 +23,7 @@
 
 #include "absl/container/flat_hash_map.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
+#include "litert/c/litert_any.h"
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_compiled_model.h"
 #include "litert/c/litert_environment.h"
@@ -59,6 +60,15 @@ namespace litert {
 class CompiledModel
     : public internal::Handle<LiteRtCompiledModel, LiteRtDestroyCompiledModel> {
  public:
+  // Hardware specific metrics collected by the CompiledModel.
+  struct Metrics {
+    struct Metric {
+      std::string name;
+      LiteRtAny value;
+    };
+    std::vector<Metric> metrics;
+  };
+
   CompiledModel() = default;
 
   // Creates a CompiledModel instance.
@@ -66,7 +76,7 @@ class CompiledModel
   // If `owned` is `true`, then the created object takes ownership of the
   // `compiled_model` handle.
   explicit CompiledModel(LiteRtModel litert_model,
-                         LiteRtCompiledModel compiled_model, bool owned = true)
+                         LiteRtCompiledModel compiled_model, OwnHandle owned)
       : internal::Handle<LiteRtCompiledModel, LiteRtDestroyCompiledModel>(
             compiled_model, owned),
         model_(Model::CreateFromNonOwnedHandle(litert_model)) {}
@@ -91,7 +101,7 @@ class CompiledModel
     LITERT_RETURN_IF_ERROR(LiteRtCreateCompiledModel(
         env.Get(), litert_model, jit_compilation_options.Get(),
         &compiled_model));
-    return CompiledModel(litert_model, compiled_model);
+    return CompiledModel(litert_model, compiled_model, OwnHandle::kYes);
   }
 
   // Simpler version of Create() that uses the default compilation options.
@@ -125,7 +135,7 @@ class CompiledModel
     LiteRtTensorBufferRequirements buffer_requirements;
     LITERT_RETURN_IF_ERROR(LiteRtGetCompiledModelInputBufferRequirements(
         Get(), signature_index, input_index, &buffer_requirements));
-    return TensorBufferRequirements(buffer_requirements, /*owned=*/false);
+    return TensorBufferRequirements(buffer_requirements, OwnHandle::kNo);
   }
 
   // The same as above except this function takes input tensor name.
@@ -165,7 +175,7 @@ class CompiledModel
     LiteRtTensorBufferRequirements buffer_requirements;
     LITERT_RETURN_IF_ERROR(LiteRtGetCompiledModelOutputBufferRequirements(
         Get(), signature_index, output_index, &buffer_requirements));
-    return TensorBufferRequirements(buffer_requirements, /*owned=*/false);
+    return TensorBufferRequirements(buffer_requirements, OwnHandle::kNo);
   }
 
   // The same as above except this function takes output tensor name.
@@ -374,6 +384,12 @@ class CompiledModel
     return RunMapHelper(signature_key, input_map, output_map, async);
   }
 
+  // Starts collection of HW-specific metrics at a specific level of detail.
+  Expected<void> StartMetricsCollection(int detail_level);
+
+  // Stops collection of HW-specific metrics and report the collected metrics.
+  Expected<Metrics> StopMetricsCollection();
+
  private:
   // Returns the signature input index for the given input tensor name.
   Expected<size_t> FindInputIndex(size_t signature_index,
@@ -435,4 +451,4 @@ class CompiledModel
 
 }  // namespace litert
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CC_LITERT_COMPILED_MODEL_H_
+#endif  // ODML_LITERT_LITERT_CC_LITERT_COMPILED_MODEL_H_
