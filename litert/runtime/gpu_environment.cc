@@ -15,21 +15,34 @@
 #include "litert/runtime/gpu_environment.h"
 
 #include "litert/c/litert_any.h"
+#include "litert/c/litert_common.h"
 #include "litert/c/litert_environment.h"
 #include "litert/c/litert_environment_options.h"
 #include "litert/c/litert_logging.h"
 #include "litert/core/environment.h"
 #include <CL/cl.h>
-#include "tflite/delegates/gpu/cl/cl_command_queue.h"  // from @org_tensorflow
-#include "tflite/delegates/gpu/cl/cl_context.h"  // from @org_tensorflow
-#include "tflite/delegates/gpu/cl/cl_device.h"  // from @org_tensorflow
-#include "tflite/delegates/gpu/cl/opencl_wrapper.h"  // from @org_tensorflow
+#include "tflite/delegates/gpu/cl/cl_command_queue.h"
+#include "tflite/delegates/gpu/cl/cl_context.h"
+#include "tflite/delegates/gpu/cl/cl_device.h"
+#include "tflite/delegates/gpu/cl/opencl_wrapper.h"
 
 namespace litert {
 namespace internal {
 
 GpuEnvironmentSingleton::GpuEnvironmentSingleton(
     LiteRtEnvironmentT* environment) {
+// Set up OpenGL. Reuses context and display if created on this thread.
+#if LITERT_HAS_OPENGL_SUPPORT
+  std::unique_ptr<tflite::gpu::gl::EglEnvironment> egl_env;
+  auto status = tflite::gpu::gl::EglEnvironment::NewEglEnvironment(&egl_env);
+  if (!status.ok()) {
+    LITERT_LOG(LITERT_ERROR, "Failed to create EGL environment");
+  } else {
+    egl_env_ = std::move(egl_env);
+  }
+#endif  // LITERT_HAS_OPENGL_SUPPORT
+
+  // Set up OpenCL.
   cl_device_id device_id = nullptr;
   cl_platform_id platform_id = nullptr;
   cl_context context = nullptr;
