@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//devtools/python/blaze:strict.bzl", "py_strict_library", "py_strict_test")
-load("@org_tensorflow//tensorflow:tensorflow.google.bzl", "pybind_extension")
+load("@org_tensorflow//tensorflow:strict.default.bzl", "py_strict_library", "py_strict_test")
+load("@org_tensorflow//tensorflow:tensorflow.default.bzl", "get_compatible_with_portable", "pybind_extension")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
@@ -39,7 +39,7 @@ cc_library(
         "//litert/cc:litert_handle",
         "//litert/cc:litert_model",
         "//litert/cc:litert_tensor_buffer",
-        "//third_party/python_runtime:headers",  # buildcleaner: keep
+        "@org_tensorflow//third_party/python_runtime:headers",
         "//tflite:framework",
         "//tflite/core:framework",
     ],
@@ -64,8 +64,8 @@ pybind_extension(
         "//litert/cc:litert_environment",
         "//litert/cc:litert_model",
         "//litert/cc:litert_tensor_buffer",
-        "//third_party/pybind11",
-        "//third_party/python_runtime:headers",
+        "@pybind11",
+        "@org_tensorflow//third_party/python_runtime:headers",
         "//tflite:framework",
     ],
 )
@@ -88,7 +88,7 @@ py_strict_test(
     srcs = ["compiled_model_unit_test.py"],
     # Static linking is required because this loads a cc_binary as a shared
     # library, which would otherwise create ODR violations.
-    linking_mode = "static",
+    # copybara:uncomment linking_mode = "static",
     tags = [
         "no_oss",  # TODO(b/190842754): Enable test in OSS.
     ],

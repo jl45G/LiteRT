@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//devtools/python/blaze:strict.bzl", "py_strict_library", "py_strict_test")
-load("@org_tensorflow//tensorflow:tensorflow.google.bzl", "pybind_extension")
+load("@org_tensorflow//tensorflow:strict.default.bzl", "py_strict_library", "py_strict_test")
+load("@org_tensorflow//tensorflow:tensorflow.default.bzl", "get_compatible_with_portable", "pybind_extension")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
@@ -36,7 +36,7 @@ cc_library(
         "//litert/cc:litert_handle",
         "//litert/cc:litert_model",
         "//litert/cc:litert_tensor_buffer",
-        "//third_party/python_runtime:headers",  # buildcleaner: keep
+        "@org_tensorflow//third_party/python_runtime:headers",
         "//tflite:framework",
         "//tflite/core:framework",
     ],
@@ -60,8 +60,8 @@ pybind_extension(
         "//litert/cc:litert_environment",
         "//litert/cc:litert_model",
         "//litert/cc:litert_tensor_buffer",
-        "//third_party/pybind11",
-        "//third_party/python_runtime:headers",
+        "@pybind11",
+        "@org_tensorflow//third_party/python_runtime:headers",
         "//tflite:framework",
     ],
 )
@@ -74,7 +74,7 @@ py_strict_library(
     visibility = ["//visibility:public"],
     deps = [
         "//litert/python/litert_wrapper/tensor_buffer_wrapper:_pywrap_litert_tensor_buffer_wrapper",
-        "//third_party/py/numpy",
+        "@org_tensorflow//third_party/py/numpy:headers",
     ],
 )
 

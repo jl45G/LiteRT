@@ -18,9 +18,9 @@
 #include <vector>
 
 #include "litert/python/litert_wrapper/compiled_model_wrapper/compiled_model_wrapper.h"
-#include "third_party/pybind11/include/pybind11/functional.h"
-#include "third_party/pybind11/include/pybind11/pybind11.h"
-#include "third_party/pybind11/include/pybind11/stl.h"
+#include "pybind11/functional.h"
+#include "pybind11/pybind11.h"
+#include "pybind11/stl.h"
 
 namespace py = pybind11;
 
