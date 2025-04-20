@@ -21,8 +21,8 @@
 #include "litert/c/litert_environment_options.h"
 #include "litert/c/litert_metrics.h"
 #include "litert/vendors/c/litert_dispatch.h"
-#include "tflite/c/c_api_types.h"  // from @org_tensorflow
-#include "tflite/c/common.h"  // from @org_tensorflow
+#include "tflite/c/c_api_types.h"
+#include "tflite/c/common.h"
 
 typedef struct LiteRtDispatchDelegateOptions LiteRtDispatchDelegateOptions;
 typedef struct LiteRtEnvironmentT* LiteRtEnvironment;
@@ -38,7 +38,9 @@ void LiteRtDestroyDispatchDelegateOptions(
     LiteRtDispatchDelegateOptions* options);
 
 // Create a delegate that uses the Dispatch API for execution. Takes ownership
-// of the passed `options`. Must outlive the TFL interpreter.
+// of the passed `options`.
+//
+// NOTE: The returned delegate instance must outlive the TFL interpreter.
 TfLiteOpaqueDelegate* LiteRtCreateDispatchDelegate(
     LiteRtEnvironmentOptions environment_options,
     LiteRtDispatchDelegateOptions* options);

@@ -33,7 +33,7 @@
 #include "litert/runtime/gpu_environment.h"
 #include <CL/cl.h>
 #include <CL/cl_platform.h>
-#include "tflite/delegates/gpu/cl/opencl_wrapper.h"  // from @org_tensorflow
+#include "tflite/delegates/gpu/cl/opencl_wrapper.h"
 #endif  // LITERT_HAS_OPENCL_SUPPORT
 
 using litert::Error;
@@ -120,10 +120,11 @@ Expected<void> LiteRtEventT::Signal() {
 Expected<LiteRtEventT*> LiteRtEventT::CreateManaged(LiteRtEventType type) {
 #if LITERT_HAS_OPENCL_SUPPORT
   if (type == LiteRtEventTypeOpenCl) {
-    auto& env = litert::internal::GpuEnvironmentSingleton::GetInstance();
+    LITERT_ASSIGN_OR_RETURN(
+        auto env, litert::internal::GpuEnvironmentSingleton::GetInstance());
     cl_int res;
     cl_event user_event =
-        tflite::gpu::cl::clCreateUserEvent(env.getContext()->context(), &res);
+        tflite::gpu::cl::clCreateUserEvent(env->getContext()->context(), &res);
     if (res != CL_SUCCESS) {
       return Error(
           kLiteRtStatusErrorRuntimeFailure,
@@ -137,4 +138,53 @@ Expected<LiteRtEventT*> LiteRtEventT::CreateManaged(LiteRtEventType type) {
 #endif
   return Error(kLiteRtStatusErrorInvalidArgument,
                absl::StrFormat("CreateManaged doesn't support type %d", type));
+}
+
+Expected<bool> LiteRtEventT::IsSignaled() const {
+  if (type != LiteRtEventTypeSyncFenceFd) {
+    return Error(kLiteRtStatusErrorInvalidArgument,
+                 "IsSignaled is not supported for this event type");
+  }
+#if LITERT_HAS_SYNC_FENCE_SUPPORT
+  LITERT_RETURN_IF_ERROR(fd >= 0) << "Invalid fd";
+
+  struct pollfd fds = {
+      .fd = fd,
+      .events = POLLIN,
+  };
+
+  int ret;
+  do {
+    ret = ::poll(&fds, 1, /*timeout_in_ms=*/0);
+    if (ret == 1) {
+      LITERT_RETURN_IF_ERROR((fds.revents & POLLERR) == 0) << "POLLERR error";
+      LITERT_RETURN_IF_ERROR((fds.revents & POLLNVAL) == 0) << "POLLNVAL error";
+      return true;
+    } else if (ret == 0) {
+      return false;
+    }
+  } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
+
+  return Error(kLiteRtStatusErrorRuntimeFailure,
+               absl::StrFormat("Failed to check if fd %d is signaled", fd));
+#else
+  return Error(kLiteRtStatusErrorUnsupported,
+               "LiteRT does not have sync fence support enabled.");
+#endif
+}
+
+Expected<int> LiteRtEventT::DupFd() const {
+  if (type != LiteRtEventTypeSyncFenceFd) {
+    return Error(kLiteRtStatusErrorInvalidArgument,
+                 "DupFd is not supported for this event type");
+  }
+#if LITERT_HAS_SYNC_FENCE_SUPPORT
+  int dup_fd = dup(fd);
+  LITERT_RETURN_IF_ERROR(dup_fd >= 0) << "Failed to dup fd " << fd;
+  return dup_fd;
+#else
+  return Error(kLiteRtStatusErrorUnsupported,
+               "LiteRT does not have sync fence support enabled.");
+
+#endif  // LITERT_HAS_SYNC_FENCE_SUPPORT
 }
