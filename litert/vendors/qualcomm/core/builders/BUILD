@@ -15,6 +15,7 @@ cc_library(
         "nobuilder",
     ],
     deps = [
+        "//litert/vendors/qualcomm/core:tensor_pool",
         "//litert/vendors/qualcomm/core/utils:log",
         "//litert/vendors/qualcomm/core/wrappers:op_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
@@ -51,7 +52,6 @@ cc_library(
     ],
     deps = [
         ":op_builder",
-        "//litert/c:litert_logging",
         "//litert/vendors/qualcomm/core:tensor_pool",
         "//litert/vendors/qualcomm/core/wrappers:op_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:param_wrapper",
@@ -437,8 +437,8 @@ cc_library(
     ],
     deps = [
         ":op_builder",
-        "//litert/c:litert_logging",
         "//litert/vendors/qualcomm/core:tensor_pool",
+        "//litert/vendors/qualcomm/core/utils:log",
         "//litert/vendors/qualcomm/core/wrappers:op_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:quantize_params_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",

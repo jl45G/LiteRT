@@ -37,6 +37,46 @@ cc_test(
 )
 
 cc_library(
+    name = "litert_custom_op_kernel",
+    srcs = [],
+    hdrs = ["litert_custom_op_kernel.h"],
+    deps = [
+        ":litert_common",
+        ":litert_layout",
+        ":litert_tensor_buffer",
+    ],
+)
+
+cc_test(
+    name = "litert_custom_op_test",
+    srcs = [
+        "litert_custom_op_test.cc",
+    ],
+    data = [
+        "//litert/test:testdata/simple_model_custom_op.tflite",
+    ],
+    deps = [
+        ":litert_common",
+        ":litert_compiled_model",
+        ":litert_custom_op_kernel",
+        ":litert_environment",
+        ":litert_environment_options",
+        ":litert_layout",
+        ":litert_model",
+        ":litert_options",
+        ":litert_tensor_buffer",
+        ":litert_tensor_buffer_types",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
+        "//litert/cc:litert_macros",
+        "//litert/test:common",
+        "//litert/test:simple_model_custom_op",
+    ],
+)
+
+cc_library(
     name = "litert_any",
     hdrs = ["litert_any.h"],
 )
@@ -130,6 +170,7 @@ cc_test(
 
 cc_library(
     name = "litert_layout",
+    srcs = ["litert_layout.cc"],
     hdrs = ["litert_layout.h"],
     deps = [
         ":litert_common",
@@ -183,10 +224,10 @@ cc_library(
 )
 
 cc_library(
-    name = "litert_options",
-    srcs = ["litert_options.cc"],
+    name = "litert_op_options",
+    srcs = ["litert_op_options.cc"],
     hdrs = [
-        "litert_options.h",
+        "litert_op_options.h",
     ],
     deps = [
         ":litert_common",
@@ -198,15 +239,15 @@ cc_library(
 )
 
 cc_test(
-    name = "litert_options_test",
-    srcs = ["litert_options_test.cc"],
+    name = "litert_op_options_test",
+    srcs = ["litert_op_options_test.cc"],
     data = [
         "//litert/test:mlir_test_data",
     ],
     tags = ["no_oss"],
     deps = [
         ":litert_common",
-        ":litert_options",
+        ":litert_op_options",
         "@com_google_googletest//:gtest_main",
         "//litert/test:common",
         "//litert/test:matchers",
@@ -330,27 +371,30 @@ cc_library(
 )
 
 cc_library(
-    name = "litert_compilation_options",
-    srcs = ["litert_compilation_options.cc"],
+    name = "litert_options",
+    srcs = ["litert_options.cc"],
     hdrs = [
-        "litert_compilation_options.h",
+        "litert_options.h",
     ],
     deps = [
-        ":litert_accelerator_compilation_options",
         ":litert_common",
+        ":litert_custom_op_kernel",
         ":litert_logging",
+        ":litert_opaque_options",
+        "//litert/cc:litert_handle",
         "//litert/cc:litert_macros",
-        "//litert/runtime:compilation_options",
+        "//litert/cc:litert_opaque_options",
+        "//litert/core:options",
     ],
 )
 
 cc_test(
-    name = "litert_compilation_options_test",
-    srcs = ["litert_compilation_options_test.cc"],
+    name = "litert_options_test",
+    srcs = ["litert_options_test.cc"],
     deps = [
-        ":litert_accelerator_compilation_options",
         ":litert_common",
-        ":litert_compilation_options",
+        ":litert_opaque_options",
+        ":litert_options",
         "@com_google_googletest//:gtest_main",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
@@ -365,11 +409,11 @@ cc_library(
     ],
     deps = [
         ":litert_common",
-        ":litert_compilation_options",
         ":litert_environment",
         ":litert_logging",
         ":litert_metrics",
         ":litert_model",
+        ":litert_options",
         ":litert_tensor_buffer",
         "//litert/cc:litert_macros",
         "//litert/runtime:compiled_model",
@@ -387,10 +431,10 @@ cc_test(
     ],
     deps = [
         ":litert_common",
-        ":litert_compilation_options",
         ":litert_compiled_model",
         ":litert_environment",
         ":litert_model",
+        ":litert_options",
         ":litert_tensor_buffer",
         "@com_google_googletest//:gtest_main",
         "@com_google_absl//absl/log:absl_log",
@@ -451,20 +495,21 @@ cc_test(
 )
 
 cc_library(
-    name = "litert_accelerator_compilation_options",
-    srcs = ["litert_accelerator_compilation_options.cc"],
-    hdrs = ["litert_accelerator_compilation_options.h"],
+    name = "litert_opaque_options",
+    srcs = ["litert_opaque_options.cc"],
+    hdrs = ["litert_opaque_options.h"],
     deps = [
         ":litert_common",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
 cc_test(
-    name = "litert_accelerator_compilation_options_test",
-    srcs = ["litert_accelerator_compilation_options_test.cc"],
+    name = "litert_opaque_options_test",
+    srcs = ["litert_opaque_options_test.cc"],
     deps = [
-        ":litert_accelerator_compilation_options",
         ":litert_common",
+        ":litert_opaque_options",
         "@com_google_googletest//:gtest_main",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
@@ -479,9 +524,9 @@ cc_library(
     hdrs = ["litert_accelerator_registration.h"],
     deps = [
         ":litert_accelerator",
-        ":litert_accelerator_compilation_options",
         ":litert_common",
         ":litert_metrics",
+        ":litert_opaque_options",
         "//litert/cc:litert_expected",
         "//litert/core:environment",
         "//litert/runtime:accelerator",
@@ -499,10 +544,10 @@ cc_test(
     srcs = ["litert_accelerator_registration_test.cc"],
     deps = [
         ":litert_accelerator",
-        ":litert_accelerator_compilation_options",
         ":litert_accelerator_registration",
         ":litert_common",
         ":litert_environment",
+        ":litert_opaque_options",
         "@com_google_googletest//:gtest_main",
         "//litert/runtime:accelerator",
     ],
@@ -527,7 +572,7 @@ LITERT_C_API_COMMON_DEPS = [
     ":litert_any",
     ":litert_common",
     ":litert_compiled_model",
-    ":litert_compilation_options",
+    ":litert_options",
     ":litert_dispatch_delegate",
     ":litert_event",
     ":litert_environment",
@@ -536,7 +581,7 @@ LITERT_C_API_COMMON_DEPS = [
     ":litert_metrics",
     ":litert_model",
     ":litert_op_code",
-    ":litert_options",
+    ":litert_op_options",
     ":litert_tensor_buffer",
 ]
 
@@ -564,14 +609,15 @@ cc_shared_library(
 cc_library(
     name = "litert_dispatch_headers",
     hdrs = [
+        ":litert_custom_op_kernel.h",
         ":litert_environment.h",
         ":litert_environment_options.h",
         ":litert_accelerator.h",
-        ":litert_accelerator_compilation_options.h",
+        ":litert_opaque_options.h",
         ":litert_any.h",
         ":litert_common.h",
         ":litert_compiled_model.h",
-        ":litert_compilation_options.h",
+        ":litert_options.h",
         ":litert_event.h",
         ":litert_event_type.h",
         ":litert_layout.h",
@@ -579,7 +625,7 @@ cc_library(
         ":litert_metrics.h",
         ":litert_model.h",
         ":litert_op_code.h",
-        ":litert_options.h",
+        ":litert_op_options.h",
         ":litert_platform_support.h",
         ":litert_tensor_buffer.h",
         ":litert_tensor_buffer_requirements.h",

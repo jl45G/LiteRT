@@ -40,7 +40,7 @@ namespace {
 using testing::UniqueTestDirectory;
 
 constexpr absl::string_view kTestPluginSearchPath =
-    "litert/vendors/examples";
+    "third_party/odml/litert/litert/vendors/examples";
 
 constexpr absl::string_view kTestManufacturer = "ExampleSocManufacturer";
 constexpr absl::string_view kTestModels = "ExampleSocModel";
@@ -59,10 +59,9 @@ TEST(CompilerPluginTest, LoadTestPluginWithMalformed) {
   ASSERT_TRUE(dir);
   Touch(Join({dir->Str(), "notLibLiteRt.so"}));
 
-  auto plugins = CompilerPlugin::LoadPlugins({kTestPluginSearchPath});
+  auto plugins = CompilerPlugin::LoadPlugins({dir->Str()});
 
-  ASSERT_EQ(plugins->size(), 1);
-  EXPECT_EQ(plugins->front().SocManufacturer(), kTestManufacturer);
+  ASSERT_EQ(plugins->size(), 0);
 }
 
 TEST(CompilerPluginTest, MultipleValidPlugins) {
@@ -376,8 +375,8 @@ TEST(ApplyTest, ApplyPlugins) {
   LiteRtHwAccelerators compilation_options = static_cast<LiteRtHwAccelerators>(
       kLiteRtHwAcceleratorCpu | kLiteRtHwAcceleratorGpu |
       kLiteRtHwAcceleratorNpu);
-  auto result =
-      litert::internal::ApplyPlugins(env->Get(), &model, compilation_options);
+  auto result = litert::internal::ApplyPlugins(env->Get(), /*options=*/nullptr,
+                                               &model, compilation_options);
   ASSERT_TRUE(result);
 
   ASSERT_EQ(model.NumSubgraphs(), 1);
