@@ -26,8 +26,21 @@ _SHARED_LIB_SUFFIX = "_so"
 def make_linkopt(opt):
     return "-Wl,{}".format(opt)
 
+def to_path(label, get_parent = False):
+    path = label.removeprefix("//").replace(":", "/")
+    if not get_parent:
+        return path
+    return path[:path.rfind("/")]
+
 def make_rpaths(rpaths):
-    return make_linkopt("-rpath={}".format(":".join(rpaths)))
+    paths = []
+    for rp in rpaths:
+        if ":" in rp:
+            paths.append(to_path(rp, get_parent = True))
+        else:
+            paths.append(rp)
+
+    return make_linkopt("-rpath={}".format(":".join(paths)))
 
 def append_rule_kwargs(rule_kwargs, **append):
     for k, v in append.items():
@@ -322,7 +335,7 @@ def copy_file(name, src, target, visibility = None):
 
 def gtest_main_no_heapcheck_deps():
     # copybara:uncomment_begin(google-only)
-    # return ["@com_google_googletest//:gtest_main"]
+    # return ["@com_google_googletest//:gtest_main_no_heapcheck"]
     # copybara:uncomment_end
     # copybara:comment_begin(oss-only)
     return ["@com_google_googletest//:gtest_main"]

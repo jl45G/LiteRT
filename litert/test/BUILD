@@ -49,10 +49,6 @@ cc_library(
         "common.h",
     ],
     deps = [
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/synchronization",
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
         "//litert/cc:litert_expected",
@@ -66,6 +62,10 @@ cc_library(
         "//tflite/c:common",
         "//tflite/core:private_cc_api_stable",
         "//tflite/kernels:builtin_ops",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/synchronization",
         "@local_tsl//tsl/platform",
     ],
 )
@@ -78,6 +78,22 @@ cc_library(
     ],
     data = [
         "testdata/simple_model.tflite",
+    ],
+    deps = [
+        "//litert/c:litert_model",
+        "//litert/cc:litert_layout",
+    ],
+)
+
+cc_library(
+    name = "simple_model_custom_op",
+    testonly = 1,
+    srcs = [],
+    hdrs = [
+        "testdata/simple_model_custom_op_test_vectors.h",
+    ],
+    data = [
+        "testdata/simple_model_custom_op.tflite",
     ],
     deps = [
         "//litert/c:litert_model",
@@ -124,6 +140,24 @@ cc_library(
 )
 
 cc_library(
+    name = "simple_mixed_cascade_model_npu",
+    testonly = 1,
+    srcs = [],
+    hdrs = [
+        "testdata/simple_mixed_cascade_model_test_vectors.h",
+    ],
+    data = [
+        "testdata/simple_mixed_cascade_model_npu.tflite",
+        "testdata/simple_model_google_tensor.bin",
+        "testdata/simple_model_mtk.bin",
+    ],
+    deps = [
+        "//litert/c:litert_model",
+        "//litert/cc:litert_layout",
+    ],
+)
+
+cc_library(
     name = "test_models",
     hdrs = ["test_models.h"],
     deps = [
@@ -137,9 +171,9 @@ cc_library(
     testonly = True,
     hdrs = ["matchers.h"],
     deps = [
-        "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
         "//litert/cc:litert_expected",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -163,10 +197,10 @@ cc_library(
     defines = ["LITERT_DEFINE_GTEST_STATUS_PRINTER"],
     tags = ["avoid_dep"],
     deps = [
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
         "//litert/cc:litert_expected",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -176,6 +210,7 @@ exports_files(srcs = [
     "testdata/shared_input_cpu_npu_google_tensor_precompiled.tflite",
     "testdata/simple_add_op_google_tensor_p25_precompiled.tflite",
     "testdata/simple_add_op_qc_v75_precompiled.tflite",
+    "testdata/simple_add_uint16_qualcomm.bin",
     "testdata/simple_model_google_tensor.bin",
     "testdata/simple_model_mtk.bin",
     "testdata/simple_model_npu_google_tensor_precompiled.tflite",
