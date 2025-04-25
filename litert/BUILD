@@ -37,6 +37,11 @@ package_group(
         "//litert/test/...",
         "//litert/tools/...",
         # Users with access to core internal apis.
+        # copybara:uncomment "//third_party/odml/infra/ml_drift_delegate/...",
+        # copybara:uncomment "//third_party/odml/infra/genai/conversion/...",
+        # copybara:uncomment "//third_party/darwinn/tflite/...",
+        # copybara:uncomment "//platforms/darwinn/devtools/google_tensor_tpu_delegate_executor/...",
+        # copybara:uncomment "//third_party/darwinn/litert/...",
     ],
 )
 
@@ -46,7 +51,13 @@ package_group(
         ":litert_internal_users",
     ],
     packages = [
+        # copybara:uncomment "INTERNAL_IMAGE_COLLECTION_INTEGRATION/...",
+        # copybara:uncomment "//platforms/darwinn/compiler/...",
+        # copybara:uncomment "@mediapipe//mediapipe/calculators/tensor/...",
+        # copybara:uncomment "//third_party/odml/infra/genai/inference/...",
         "//litert/vendors/...",
+        # copybara:uncomment "//third_party/odml/litert/llm/...",
+        # copybara:uncomment "//third_party/odml/litert_lm/...",
     ],
 )
 
@@ -54,6 +65,7 @@ package_group(
     name = "litert_python_internal_users",
     packages = [
         "//litert/python/...",
+        # copybara:uncomment "//third_party/py/ai_edge_torch/aot/...",
     ],
 )
 

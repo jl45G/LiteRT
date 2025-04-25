@@ -25,6 +25,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -32,18 +33,22 @@
 #include "absl/strings/str_format.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
+#include "litert/c/litert_environment_options.h"
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_model.h"
+#include "litert/c/litert_options.h"
+#include "litert/c/options/litert_qualcomm_options.h"  // IWYU pragma: keep
 #include "litert/cc/litert_macros.h"
-#include "litert/cc/litert_model.h"
 #include "litert/vendors/c/litert_compiler_plugin.h"
+#include "litert/vendors/cc/options_helper.h"
 #include "litert/vendors/qualcomm/compiler/qnn_compose_graph.h"
+#include "litert/vendors/qualcomm/core/common.h"
 #include "litert/vendors/qualcomm/core/schema/soc_table.h"
 #include "litert/vendors/qualcomm/core/tensor_pool.h"
 #include "litert/vendors/qualcomm/core/wrappers/op_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/tensor_wrapper.h"
 #include "litert/vendors/qualcomm/qnn_manager.h"
-#include "third_party/qairt/latest/include/QNN/HTP/QnnHtpDevice.h"
+#include "third_party/qairt/latest/include/QNN/QnnLog.h"
 
 using ::litert::qnn::QnnManager;
 using LiteRtBufferId = uint32_t;
@@ -72,14 +77,6 @@ std::optional<::qnn::SocInfo> FindSocModel(absl::string_view soc_model_name) {
     }
   }
   return soc_model;
-}
-
-bool IsWeightSharingSupported(::qnn::DspArch dsp_arch) {
-#ifdef __ANDROID__
-  return false;
-#else
-  return dsp_arch >= ::qnn::DspArch::V73;
-#endif
 }
 
 }  // namespace
@@ -195,28 +192,68 @@ LiteRtStatus LiteRtCompiledResultNumByteCodeModules(
 //
 
 // Plugins can hold state.
-struct LiteRtCompilerPluginT {
-  // A "key-only" flag will have an empty string as the value.
-  using Flag = std::pair<std::string, std::string>;
-  std::vector<Flag> flags;
+class LiteRtCompilerPluginT {
+ public:
+  using QnnOptions = ::litert::qualcomm::QualcommOptions;
+
+  LiteRtCompilerPluginT(LiteRtEnvironmentOptions env, LiteRtOptions options) {
+    std::tie(env_, opts_, opq_, qnn_opts_) =
+        litert::ParseOptions<QnnOptions>(env, options);
+  }
+
+  QnnLog_Level_t LogLevel() {
+    if (!qnn_opts_) {
+      return QNN_LOG_LEVEL_INFO;
+    }
+    auto log_level_opt = qnn_opts_->GetLogLevel();
+    switch (log_level_opt) {
+      case kLiteRtQualcommLogOff:
+        return QNN_LOG_LEVEL_ERROR;
+      case kLiteRtQualcommLogLevelError:
+        return QNN_LOG_LEVEL_ERROR;
+      case kLiteRtQualcommLogLevelWarn:
+        return QNN_LOG_LEVEL_WARN;
+      case kLiteRtQualcommLogLevelInfo:
+        return QNN_LOG_LEVEL_INFO;
+      case kLiteRtQualcommLogLevelVerbose:
+        return QNN_LOG_LEVEL_VERBOSE;
+      case kLiteRtQualcommLogLevelDebug:
+        return QNN_LOG_LEVEL_DEBUG;
+    }
+  }
+
+  bool IsWeightSharingSupported(::qnn::DspArch dsp_arch) {
+#ifdef __ANDROID__
+    return false;
+#else
+    if (!qnn_opts_) {
+      return true;
+    }
+    return qnn_opts_->GetEnableWeightSharing() &&
+           dsp_arch >= ::qnn::DspArch::V73;
+#endif
+  }
+
+ private:
+  litert::Expected<litert::EnvironmentOptions> env_ = litert::Error(
+      kLiteRtStatusErrorInvalidArgument, "Null environment options");
+  litert::Expected<litert::Options> opts_ =
+      litert::Error(kLiteRtStatusErrorInvalidArgument, "Null options");
+  litert::Expected<litert::OpaqueOptions> opq_ =
+      litert::Error(kLiteRtStatusErrorInvalidArgument, "Null opaque options");
+  litert::Expected<QnnOptions> qnn_opts_ =
+      litert::Error(kLiteRtStatusErrorInvalidArgument, "Null Qualcomm options");
 };
 
-LiteRtStatus LiteRtCompilerPluginSetFlags(LiteRtCompilerPlugin compiler_plugin,
-                                          LiteRtParamIndex num_flags,
-                                          const char** keys,
-                                          const char** values) {
-  auto& flags = compiler_plugin->flags;
-  flags.resize(num_flags);
-  for (int i = 0; i < num_flags; ++i) {
-    auto& flag = flags[i];
-    flag.first = std::string(keys[i]);
-    flag.second = std::string(values[i]);
+LiteRtStatus LiteRtCreateCompilerPlugin(LiteRtCompilerPlugin* compiler_plugin,
+                                        LiteRtEnvironmentOptions env,
+                                        LiteRtOptions options) {
+  if (options == nullptr || env == nullptr) {
+    LITERT_LOG(LITERT_WARNING,
+               "QNN compiler plugin created with null options, these will be "
+               "defaulted.");
   }
-  return kLiteRtStatusOk;
-}
-
-LiteRtStatus LiteRtCreateCompilerPlugin(LiteRtCompilerPlugin* compiler_plugin) {
-  auto* plugin = new LiteRtCompilerPluginT;
+  auto* plugin = new LiteRtCompilerPluginT(env, options);
   *compiler_plugin = plugin;
   return kLiteRtStatusOk;
 }
@@ -232,9 +269,13 @@ LiteRtStatus LiteRtCompilerPluginPartition(LiteRtCompilerPlugin compiler_plugin,
   ::litert::Subgraph graph(subgraph);
 
   auto backend_configs = QnnManager::DefaultBackendConfigs();
-  auto qnn_manager =
-      QnnManager::Create(backend_configs, std::nullopt,
-                         soc_model ? FindSocModel(soc_model) : std::nullopt);
+  // TODO(jiunkaiy): Convert options to LiteRtQnnOptions.
+  LiteRtQnnOptions options = LITERT_QNN_OPTIONS_INIT;
+  options.log_level =
+      static_cast<LiteRtQnnLogLevel>(compiler_plugin->LogLevel());
+  auto qnn_manager = QnnManager::Create(
+      backend_configs, std::nullopt,
+      soc_model ? FindSocModel(soc_model) : std::nullopt, options);
   if (!qnn_manager) {
     LITERT_LOG(LITERT_ERROR, "%s", qnn_manager.Error().Message().data());
     return qnn_manager.Error().Status();
@@ -264,9 +305,9 @@ LiteRtStatus LiteRtCompilerPluginPartition(LiteRtCompilerPlugin compiler_plugin,
     LITERT_RETURN_IF_ERROR(litert::qnn::ConvertOp(
         op, tensor_pool, input_tensors, output_tensors, op_wrappers));
     tensor_pool.ForEach([](::qnn::TensorWrapper& tensor_wrapper) {
-      // TODO(chunhsue): Use compile interface to get useQInt16AsQUint16.
-      constexpr bool useQInt16AsQUint16 = true;
-      if constexpr (useQInt16AsQUint16) {
+      // TODO(chunhsue): Use compile interface to get use_qint16_as_quint16.
+      constexpr bool use_qint16_as_quint16 = true;
+      if constexpr (use_qint16_as_quint16) {
         tensor_wrapper.ConvertQint16ToQuint16();
       }
     });
@@ -318,8 +359,13 @@ LiteRtStatus LiteRtCompilerPluginCompile(
   // Initialize SDK and load qnn shared libraries.
   LITERT_LOG(LITERT_INFO, "%s", "Creating QNN manager");
   auto backend_configs = QnnManager::DefaultBackendConfigs();
-  auto qnn_manager = QnnManager::Create(
-      backend_configs, /*shared_library_dir=*/std::nullopt, opt_soc_model);
+  // TODO(jiunkaiy): Convert options to LiteRtQnnOptions.
+  LiteRtQnnOptions options = LITERT_QNN_OPTIONS_INIT;
+  options.log_level =
+      static_cast<LiteRtQnnLogLevel>(compiler_plugin->LogLevel());
+  auto qnn_manager =
+      QnnManager::Create(backend_configs, /*shared_library_dir=*/std::nullopt,
+                         opt_soc_model, options);
   if (!qnn_manager) {
     LITERT_LOG(LITERT_ERROR, "%s", qnn_manager.Error().Message().c_str());
     return qnn_manager.Error().Status();
@@ -367,7 +413,8 @@ LiteRtStatus LiteRtCompilerPluginCompile(
       // Disable weight sharing if we have only one partition or SoC doesn't
       // support weight sharing.
       if (num_partitions == kDefaultPartitionNum ||
-          !IsWeightSharingSupported(opt_soc_model.value().dsp_arch)) {
+          !compiler_plugin->IsWeightSharingSupported(
+              opt_soc_model.value().dsp_arch)) {
         context_configs = QnnManager::DefaultContextConfigs();
       }
       auto context_handle =

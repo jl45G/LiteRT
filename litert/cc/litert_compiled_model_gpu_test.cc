@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdint>
 #include <cstring>
 #include <utility>
 
@@ -24,16 +25,17 @@
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_event.h"
 #include "litert/c/litert_event_type.h"
-#include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_compiled_model.h"
 #include "litert/cc/litert_environment.h"
 #include "litert/cc/litert_event.h"
 #include "litert/cc/litert_model.h"
+#include "litert/cc/litert_options.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/test/common.h"
 #include "litert/test/matchers.h"
 #include "litert/test/testdata/simple_model_test_vectors.h"
 
+using testing::Eq;
 using testing::FloatNear;
 using testing::Pointwise;
 
@@ -183,7 +185,7 @@ TEST(CompiledModelGpuTest, Async) {
                           async_execution_mode);
 
   // Signal the input event to resume the async execution.
-  LiteRtEventSignal(litert_input_event);
+  LiteRtSignalEvent(litert_input_event);
 
   // Check model output.
   auto output_names = signatures[0].OutputNames();
@@ -199,6 +201,146 @@ TEST(CompiledModelGpuTest, Async) {
       ABSL_LOG(INFO) << "Result: " << output[i] << "\t" << kTestOutputTensor[i];
     }
     EXPECT_THAT(output, Pointwise(FloatNear(1e-5), kTestOutputTensor));
+  }
+}
+
+TEST(CompiledModelGpuTest, PartialDelegation) {
+  // MSAN does not support GPU tests.
+#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
+  GTEST_SKIP() << "GPU tests are not supported in MSAN";
+#endif
+  // To workaround the memory leak in Nvidia's driver
+  absl::LeakCheckDisabler disable_leak_check;
+
+  constexpr const char *kModelPartilaFileName =
+      "simple_cast_and_add_op.tflite";
+  LITERT_ASSERT_OK_AND_ASSIGN(
+          auto model, Model::CreateFromFile(
+                          testing::GetTestFilePath(kModelPartilaFileName)));
+
+  auto env = litert::Environment::Create({});
+  ASSERT_TRUE(env);
+
+  LiteRtHwAcceleratorSet accelerator_flags =
+      kLiteRtHwAcceleratorGpu | kLiteRtHwAcceleratorCpu;
+  auto compilation_options = Options::Create();
+  compilation_options->SetHardwareAccelerators(accelerator_flags);
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto compiled_model,
+      CompiledModel::Create(*env, model, *compilation_options));
+
+  auto signatures = model.GetSignatures().Value();
+  EXPECT_EQ(signatures.size(), 1);
+
+  auto signature_key = signatures[0].Key();
+  EXPECT_EQ(signature_key, Model::DefaultSignatureKey());
+  size_t signature_index = 0;
+
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto input_buffers, compiled_model.CreateInputBuffers(signature_index));
+
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto output_buffers, compiled_model.CreateOutputBuffers(signature_index));
+
+  // Fill model inputs.
+  auto input_names = signatures[0].InputNames();
+  EXPECT_EQ(input_names.size(), 3);
+  EXPECT_EQ(input_names.at(0), "arg0");
+  EXPECT_EQ(input_names.at(1), "arg1");
+  EXPECT_EQ(input_names.at(2), "arg2");
+  EXPECT_TRUE(input_buffers[0].IsOpenClMemory());
+  ASSERT_TRUE(input_buffers[0].Write<float>(
+      absl::MakeConstSpan(kTestInput0Tensor, kTestInput0Size)));
+  EXPECT_TRUE(input_buffers[1].IsOpenClMemory());
+  ASSERT_TRUE(input_buffers[1].Write<float>(
+      absl::MakeConstSpan(kTestInput1Tensor, kTestInput1Size)));
+  int64_t arg2_data[1] = {1};
+  ASSERT_TRUE(input_buffers[2].Write<int64_t>(
+      absl::MakeConstSpan(arg2_data, 1)));
+
+  // Execute model.
+  compiled_model.Run(signature_index, input_buffers, output_buffers);
+
+  // Check model output.
+  auto output_names = signatures[0].OutputNames();
+  EXPECT_EQ(output_names.size(), 1);
+  EXPECT_EQ(output_names.at(0), "tfl.add1");
+  EXPECT_TRUE(output_buffers[0].IsOpenClMemory());
+  {
+    auto lock_and_addr =
+        litert::TensorBufferScopedLock::Create<const float>(output_buffers[0]);
+    ASSERT_TRUE(lock_and_addr);
+    auto output = absl::MakeSpan(lock_and_addr->second, kTestOutputSize);
+    float expected_output[2] = {12.0f, 23.0f};
+    for (auto i = 0; i < kTestOutputSize; ++i) {
+      ABSL_LOG(INFO) << "Result: " << output[i] << "\t" << expected_output[i];
+    }
+    EXPECT_THAT(output, Pointwise(FloatNear(1e-5), expected_output));
+  }
+}
+
+TEST(CompiledModelGpuTest, BasicAdd3dCstInt32) {
+  constexpr const char* kInt32ModelFileName = "simple_add3d_cst_int32.tflite";
+  constexpr const int32_t kInt32TestInput0Tensor[] = {1, 2, 3, 4, 5, 6};
+  constexpr const int32_t kInt32TestOutputTensor[] = {11, 22, 33, 44, 55, 66};
+  constexpr const size_t kInt32TestInput0Size = 6;
+  constexpr const size_t kInt32TestOutputSize = 6;
+
+  // MSAN does not support GPU tests.
+#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
+  GTEST_SKIP() << "GPU tests are not supported in MSAN";
+#endif
+
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto model,
+      Model::CreateFromFile(testing::GetTestFilePath(kInt32ModelFileName)));
+
+  auto env = litert::Environment::Create({});
+  ASSERT_TRUE(env);
+
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto compiled_model,
+      CompiledModel::Create(*env, model, kLiteRtHwAcceleratorGpu));
+
+  auto signatures = model.GetSignatures().Value();
+  EXPECT_EQ(signatures.size(), 1);
+
+  auto signature_key = signatures[0].Key();
+  EXPECT_EQ(signature_key, Model::DefaultSignatureKey());
+  size_t signature_index = 0;
+
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto input_buffers, compiled_model.CreateInputBuffers(signature_index));
+
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto output_buffers, compiled_model.CreateOutputBuffers(signature_index));
+
+  // Fill model inputs.
+  auto input_names = signatures[0].InputNames();
+  EXPECT_EQ(input_names.size(), 1);
+  EXPECT_EQ(input_names.at(0), "arg0");
+  EXPECT_TRUE(input_buffers[0].IsOpenClMemory());
+  ASSERT_TRUE(input_buffers[0].Write<int32_t>(
+      absl::MakeConstSpan(kInt32TestInput0Tensor, kInt32TestInput0Size)));
+
+  // Execute model.
+  compiled_model.Run(signature_index, input_buffers, output_buffers);
+
+  // Check model output.
+  auto output_names = signatures[0].OutputNames();
+  EXPECT_EQ(output_names.size(), 1);
+  EXPECT_EQ(output_names.at(0), "tfl.add");
+  EXPECT_TRUE(output_buffers[0].IsOpenClMemory());
+  {
+    auto lock_and_addr = litert::TensorBufferScopedLock::Create<const int32_t>(
+        output_buffers[0]);
+    ASSERT_TRUE(lock_and_addr);
+    auto output = absl::MakeSpan(lock_and_addr->second, kInt32TestOutputSize);
+    for (auto i = 0; i < kInt32TestOutputSize; ++i) {
+      ABSL_LOG(INFO) << "Result: " << output[i] << "\t"
+                     << kInt32TestOutputTensor[i];
+    }
+    EXPECT_THAT(output, Pointwise(Eq(), kInt32TestOutputTensor));
   }
 }
 

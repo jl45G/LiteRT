@@ -21,7 +21,6 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -30,17 +29,21 @@
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "absl/types/span.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
+#include "litert/c/litert_logging.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"  // IWYU pragma: keep
 #include "litert/cc/litert_shared_library.h"
 #include "litert/vendors/qualcomm/common.h"
 #include "litert/vendors/qualcomm/core/backends/htp_device_config.h"
+#include "litert/vendors/qualcomm/core/backends/htp_perf_control.h"
+#include "litert/vendors/qualcomm/core/common.h"
 #include "litert/vendors/qualcomm/core/schema/soc_table.h"
 #include "third_party/qairt/latest/include/QNN/QnnBackend.h"
 #include "third_party/qairt/latest/include/QNN/QnnCommon.h"
 #include "third_party/qairt/latest/include/QNN/QnnContext.h"
 #include "third_party/qairt/latest/include/QNN/QnnDevice.h"
 #include "third_party/qairt/latest/include/QNN/QnnInterface.h"
+#include "third_party/qairt/latest/include/QNN/QnnLog.h"
 #include "third_party/qairt/latest/include/QNN/QnnTypes.h"
 #include "third_party/qairt/latest/include/QNN/System/QnnSystemContext.h"
 #include "third_party/qairt/latest/include/QNN/System/QnnSystemInterface.h"
@@ -70,12 +73,12 @@ class QnnManager;
 
 namespace internal {
 
-void Dump(const QnnManager& qnn, std::ostream& out);
+  std::string Dump(const QnnManager& qnn);
 
 }  // namespace internal
 
 class QnnManager {
-  friend void internal::Dump(const QnnManager& qnn, std::ostream& out);
+  friend std::string internal::Dump(const QnnManager& qnn);
 
  public:
   using Ptr = std::unique_ptr<QnnManager>;
@@ -89,7 +92,8 @@ class QnnManager {
   static Expected<Ptr> Create(
       absl::Span<const QnnBackend_Config_t*> configs,
       std::optional<std::string> shared_library_dir = std::nullopt,
-      std::optional<::qnn::SocInfo> soc_info = std::nullopt);
+      std::optional<::qnn::SocInfo> soc_info = std::nullopt,
+      const LiteRtQnnOptions& options = LITERT_QNN_OPTIONS_INIT);
 
   static absl::Span<const QnnBackend_Config_t*> DefaultBackendConfigs();
   static absl::Span<const QnnContext_Config_t*> DefaultContextConfigs();
@@ -131,12 +135,17 @@ class QnnManager {
 
   bool IsLegacySocModel() { return soc_info_.dsp_arch == ::qnn::DspArch::V68; }
 
+  // Get qnn backend handle. Nullptr if backendCreate has not been successfully
+  // called.
+  Qnn_BackendHandle_t& BackendHandle() { return backend_handle_; }
+
  private:
   QnnManager() = default;
 
   LiteRtStatus Init(absl::Span<const QnnBackend_Config_t*> configs,
                     std::optional<std::string> shared_library_dir,
-                    std::optional<::qnn::SocInfo> soc_info);
+                    std::optional<::qnn::SocInfo> soc_info,
+                    const LiteRtQnnOptions& options);
 
   //
   // Manage libQnn*.so Loading
@@ -164,10 +173,6 @@ class QnnManager {
 
   // Get qnn log handle. Nullptr if logCreate has not been successfully called.
   Qnn_LogHandle_t& LogHandle() { return log_handle_; }
-
-  // Get qnn backend handle. Nullptr if backendCreate has not been successfully
-  // called.
-  Qnn_BackendHandle_t& BackendHandle() { return backend_handle_; }
 
   // Get qnn device handle. Nullptr if deviceCreate has not been successfully
   // called.
@@ -199,9 +204,12 @@ class QnnManager {
   Qnn_LogHandle_t log_handle_ = nullptr;
   Qnn_BackendHandle_t backend_handle_ = nullptr;
   Qnn_DeviceHandle_t device_handle_ = nullptr;
-  ::qnn::SocInfo soc_info_ = ::qnn::kSocInfos[0];
+  ::qnn::SocInfo soc_info_ = ::qnn::kSocInfos[6];  // V75
   std::unique_ptr<::qnn::HtpDeviceConfig> htp_device_config_;
   std::vector<QnnDevice_Config_t> device_configs_;
+  // For dispatch options
+  std::unique_ptr<PerfControl> perf_control_{nullptr};
+  const QnnDevice_PlatformInfo_t* device_platform_info_ = nullptr;
 };
 
 // Unfortunately we can't use std::unique_ptr with a deleter because
@@ -209,12 +217,26 @@ class QnnManager {
 class QnnManager::ContextHandle {
  public:
   ContextHandle(Qnn_ContextHandle_t context_handle, Qnn_ProfileHandle_t profile,
-                QnnContext_FreeFn_t free_fn)
-      : context_handle_(context_handle), profile_(profile), free_fn_(free_fn) {}
+                QnnContext_FreeFn_t free_fn,
+                QnnProfile_FreeFn_t profile_free_fn)
+      : context_handle_(context_handle),
+        profile_(profile),
+        free_fn_(free_fn),
+        profile_free_fn_(profile_free_fn) {}
 
   ~ContextHandle() {
+    if (profile_ && profile_free_fn_) {
+      if (auto status = profile_free_fn_(profile_); status != QNN_SUCCESS) {
+        LITERT_LOG(LITERT_ERROR, "%s", "Failed to free profile handle\n");
+      }
+      profile_ = nullptr;
+    }
     if (context_handle_ && free_fn_) {
-      free_fn_(context_handle_, profile_);
+      if (auto status = free_fn_(context_handle_, profile_);
+          status != QNN_SUCCESS) {
+        LITERT_LOG(LITERT_ERROR, "%s", "Failed to free context handle\n");
+      }
+      context_handle_ = nullptr;
     }
   }
 
@@ -226,6 +248,7 @@ class QnnManager::ContextHandle {
     std::swap(context_handle_, other.context_handle_);
     std::swap(profile_, other.profile_);
     std::swap(free_fn_, other.free_fn_);
+    std::swap(profile_free_fn_, other.profile_free_fn_);
     return *this;
   }
 
@@ -238,6 +261,7 @@ class QnnManager::ContextHandle {
   Qnn_ContextHandle_t context_handle_ = nullptr;
   Qnn_ProfileHandle_t profile_ = nullptr;
   QnnContext_FreeFn_t free_fn_ = nullptr;
+  QnnProfile_FreeFn_t profile_free_fn_ = nullptr;
 };
 
 }  // namespace litert::qnn
