@@ -14,6 +14,11 @@
 
 """Python wrapper for Hardware Accelerator enums."""
 
+import os
+
+# No imports are required for this simple enum class, but we still add the 
+# file path check for consistency with other source files
+
 
 # TODO(b/410257592): Deprecate this class and use pybind's flag enum.
 class HardwareAccelerator:
