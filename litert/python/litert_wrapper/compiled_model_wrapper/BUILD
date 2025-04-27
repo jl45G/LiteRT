@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@org_tensorflow//tensorflow:tensorflow.default.bzl", "pybind_extension")
-load("//devtools/python/blaze:strict.bzl", "py_strict_library", "py_strict_test")
+load("@org_tensorflow//tensorflow:strict.default.bzl", "py_strict_library", "py_strict_test")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
