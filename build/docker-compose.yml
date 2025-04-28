@@ -1,0 +1,9 @@
+version: '1'
+services:
+  litert-build:
+    build:
+      context: .
+      dockerfile: hermetic_build.Dockerfile
+    volumes:
+      - .:/litert_build
+    command: bash -c "bazel build //litert/runtime:metrics"
