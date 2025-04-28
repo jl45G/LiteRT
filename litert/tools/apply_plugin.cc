@@ -31,10 +31,11 @@
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_model.h"
 #include "litert/cc/litert_buffer_ref.h"
+#include "litert/cc/litert_environment.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
-#include "litert/compiler/plugin/compiler_flags.h"
+#include "litert/cc/litert_options.h"
 #include "litert/compiler/plugin/compiler_plugin.h"
 #include "litert/core/model/model_serialize.h"
 #include "litert/core/util/flatbuffer_tools.h"
@@ -44,7 +45,6 @@
 namespace litert::tools {
 
 using ::litert::BufferRef;
-using ::litert::internal::CompilerFlags;
 using ::litert::internal::CompilerPlugin;
 using ::litert::internal::Dump;
 using ::litert::internal::PartitionResult;
@@ -70,10 +70,13 @@ class Context {
 
   ApplyPluginRun::Cmd Cmd() const { return run_->cmd; }
 
-  absl::Span<const absl::string_view> LibSearchPaths() const {
-    return absl::MakeConstSpan(run_->lib_search_paths.data(),
-                               run_->lib_search_paths.size());
+  const std::vector<std::string>& LibSearchPaths() const {
+    return run_->lib_search_paths;
   }
+
+  Environment& Environment() { return run_->environment; }
+
+  ::litert::Options& Options() { return run_->options; }
 
   absl::string_view SocModelTarget() const {
     ABSL_CHECK_EQ(run_->soc_models.size(), 1);
@@ -88,8 +91,6 @@ class Context {
     ABSL_CHECK_GE(run_->outs.size(), 1);
     return run_->outs.at(out_ind);
   }
-
-  const CompilerFlags& Flags() const { return run_->compiler_flags; }
 
   OutStream SwapOut(OutStream out) {
     ABSL_CHECK_EQ(run_->outs.size(), 1);
@@ -122,12 +123,11 @@ void DumpSubgraphs(ToolDisplay& display, absl::string_view label,
 }
 
 void DumpCompilationRequest(ToolDisplay& display, absl::string_view soc_model,
-                            size_t num_subgraphs, const CompilerFlags& flags) {
+                            size_t num_subgraphs) {
   display.Labeled() << absl::StreamFormat(
-                           "Requesting compilation for target `%s` on %lu "
-                           "partitions with flags: ",
+                           "Requesting compilation for target `%s` on %lu",
                            soc_model, num_subgraphs)
-                    << flags << "\n";
+                    << "\n";
 }
 
 void DumpCompilationResult(ToolDisplay& display, size_t byte_code_size,
@@ -176,7 +176,10 @@ Expected<std::vector<CompilerPlugin>> LoadAllPlugins(Context& ctx) {
   }
   ctx.Dump().Display() << "\n";
 
-  auto plugins = CompilerPlugin::LoadPlugins(ctx.LibSearchPaths());
+  std::vector<absl::string_view> paths_vec(paths.begin(), paths.end());
+  LITERT_ASSIGN_OR_RETURN(auto env_options, ctx.Environment().GetOptions());
+  auto plugins = CompilerPlugin::LoadPlugins(paths_vec, env_options.Get(),
+                                             ctx.Options().Get());
   if (!plugins.HasValue()) {
     ctx.Dump().Fail();
     return plugins;
@@ -372,9 +375,8 @@ LiteRtStatus Compile(Context& ctx) {
   }
 
   ctx.Dump().Start("Compiling");
-  DumpCompilationRequest(ctx.Dump(), ctx.SocModelTarget(), model.NumSubgraphs(),
-                         ctx.Flags());
-  plugin->SetFlags(ctx.Flags());
+  DumpCompilationRequest(ctx.Dump(), ctx.SocModelTarget(),
+                         model.NumSubgraphs());
   auto compilation_result = plugin->Compile(&model, ctx.SocModelTarget());
   if (!compilation_result) {
     ctx.Dump().Fail();
@@ -438,7 +440,6 @@ LiteRtStatus Apply(Context& ctx) {
   }
 
   ctx.Dump().Start("Applying plugin");
-  plugin->SetFlags(ctx.Flags());
   if (auto status = litert::internal::ApplyPlugin(
           *plugin, model, ctx.SocModelTarget(), ctx.Run().subgraphs);
       !status) {

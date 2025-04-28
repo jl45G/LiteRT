@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# Copyright (c) Qualcomm Innovation Center, Inc. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 
 load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib")
 load("//litert/integration_test:litert_device.bzl", "litert_device_test")
@@ -50,10 +53,6 @@ litert_dynamic_lib(
     ],
     shared_lib_name = "dispatch_api_so",
     so_name = "libLiteRtDispatch_Qualcomm.so",
-    tags = [
-        # Don't build/test in OS until qnn is available.
-        "nobuilder",
-    ],
     visibility = ["//litert:litert_stable_abi_users"],
     deps = [
         "@com_google_absl//absl/log:absl_check",
@@ -66,11 +65,12 @@ litert_dynamic_lib(
         "//litert/core/util:tensor_type_util",
         "//litert/vendors/c:litert_dispatch_c_api",
         "//litert/vendors/qualcomm:common",
+        "//litert/vendors/qualcomm/core:common",
         "//litert/vendors/qualcomm:context_binary_info",
         "//litert/vendors/qualcomm:qnn_manager",
         "//litert/vendors/qualcomm/core/utils:miscs",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
-        # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
+        "//third_party/qairt/latest:qnn_lib_headers",
     ],
 )
 
@@ -81,14 +81,12 @@ litert_device_test(
     ],
     backend_id = "qualcomm",
     data = [
-        "//litert/test:testdata",
+        "//litert/test:testdata/simple_add_uint16_qualcomm.bin",
+        "//litert/test:testdata/simple_model_npu.tflite",
+        "//litert/test:testdata/simple_model_qualcomm.bin",
     ],
     deps = [
         ":dispatch_api",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:absl_log",
-        "@com_google_absl//absl/types:span",
         "//litert/c:litert_common",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c:litert_tensor_buffer",
@@ -99,5 +97,9 @@ litert_device_test(
         "//litert/vendors/c:litert_dispatch_c_api",
         "//litert/vendors/qualcomm/core/utils:miscs",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
     ],
 )

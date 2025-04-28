@@ -18,7 +18,9 @@
 
 #include "absl/strings/str_format.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
+#include "litert/c/litert_environment_options.h"
 #include "litert/c/litert_model.h"
+#include "litert/c/litert_options.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
 #include "litert/vendors/c/litert_compiler_plugin.h"
@@ -47,6 +49,8 @@ using ::litert::example::MakeTensorConverter;
 // Plugins can hold state.
 struct LiteRtCompilerPluginT {
   ExampleTypes::Legalizations legalizations;
+  LiteRtEnvironmentOptions env;
+  LiteRtOptions options;
 };
 
 namespace {
@@ -58,8 +62,12 @@ bool MulCapability(const ExampleTypes::Op* op) {
 }  // namespace
 
 // Initialize example plugin and register legalizations.
-LiteRtStatus LiteRtCreateCompilerPlugin(LiteRtCompilerPlugin* compiler_plugin) {
+LiteRtStatus LiteRtCreateCompilerPlugin(LiteRtCompilerPlugin* compiler_plugin,
+                                        LiteRtEnvironmentOptions env,
+                                        LiteRtOptions options) {
   auto* plugin = new LiteRtCompilerPluginT;
+  plugin->env = env;
+  plugin->options = options;
   plugin->legalizations = MakeAllLegalizations();
   *compiler_plugin = plugin;
   return kLiteRtStatusOk;
@@ -128,9 +136,10 @@ LiteRtStatus LiteRtCompilerPluginCompile(
   result->byte_code.resize(num_partitions);
   for (auto i = 0; i < num_partitions; ++i) {
     auto name = absl::StrFormat("partition_%lu", i);
+    LITERT_ASSIGN_OR_RETURN(litert::Subgraph subgraph, model.Subgraph(i));
     LITERT_RETURN_IF_ERROR(
         CompileSinglePartition(compiler_plugin->legalizations, std::move(name),
-                               model.Subgraph(i)->Get(), *result));
+                               subgraph.Get(), *result));
   }
 
   *compiled_result = result.release();
