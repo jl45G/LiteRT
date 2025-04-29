@@ -21,7 +21,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Running build in Docker container..."
-docker run --rm -v $(pwd)/..:/litert_build litert_build_env
+docker run --rm --user $(id -u):$(id -g) -v $(pwd)/..:/litert_build litert_build_env
 
 if [ $? -ne 0 ]; then
   echo "Error: Build failed inside Docker container."
