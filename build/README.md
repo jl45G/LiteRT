@@ -41,7 +41,7 @@ To build different targets, you can either:
 2. Modify the command in `docker-compose.yml`
 3. Pass a custom command when running Docker:
    ```
-   docker run --rm -v $(pwd):/litert_build litert_build_env bash -c "bazel build //your/custom:target"
+   docker run --rm --user $(id -u):$(id -g) -v $(pwd):/litert_build litert_build_env bash -c "bazel build //your/custom:target"
    ```
 
 ## How It Works
