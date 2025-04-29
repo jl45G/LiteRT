@@ -106,6 +106,7 @@ ENV USE_BAZEL_VERSION=7.4.1
 # Set NDK version for configuration
 ENV ANDROID_NDK_VERSION=25
 
+RUN echo y | ${ANDROID_SDK_HOME}/cmdline-tools/latest/bin/sdkmanager --sdk_root=${ANDROID_SDK_HOME} "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" "platforms;android-${ANDROID_SDK_API_LEVEL}" "platform-tools" 
 # Set up work directory
 WORKDIR /litert_build
 
@@ -114,10 +115,7 @@ RUN echo '#!/bin/bash\n\
 \n\
 # Make the repository directory safe for git\n\
 git config --global --add safe.directory /litert_build\n\
-\n\
-# Install additional Android SDK components\n\
-echo "Installing Android SDK components..."\n\
-echo y | ${ANDROID_SDK_HOME}/cmdline-tools/latest/bin/sdkmanager --sdk_root=${ANDROID_SDK_HOME} "build-tools;${ANDROID_BUILD_TOOLS_VERSION}" "platforms;android-${ANDROID_SDK_API_LEVEL}" "platform-tools" \n\
+git config --global --add safe.directory /litert_build/third_party/tensorflow\n\
 \n\
 # Initialize git submodules if .gitmodules file exists\n\
 if [ -f ".gitmodules" ]; then\n\
