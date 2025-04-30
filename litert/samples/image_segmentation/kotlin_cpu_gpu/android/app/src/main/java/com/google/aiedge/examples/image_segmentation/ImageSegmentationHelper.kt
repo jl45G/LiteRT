@@ -27,7 +27,6 @@ import com.google.ai.edge.litert.Accelerator
 import com.google.ai.edge.litert.BuiltinNpuAcceleratorProvider
 import com.google.ai.edge.litert.CompiledModel
 import com.google.ai.edge.litert.Environment
-import com.google.ai.edge.litert.deployment.AiPackModelProvider
 import com.google.aiedge.examples.image_segmentation.TensorUtils.logTensorStats
 import java.nio.ByteBuffer
 import java.nio.FloatBuffer
@@ -40,6 +39,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
 class ImageSegmentationHelper(private val context: Context) {
+  companion object {
+    private const val TAG = "ImageSegmentation"
+  }
+
   /** As the result of image segmentation, this value emits map of probabilities */
   val segmentation: SharedFlow<SegmentationResult>
     get() = _segmentation
@@ -58,19 +61,15 @@ class ImageSegmentationHelper(private val context: Context) {
   private lateinit var model: CompiledModel
   private val coloredLabels: List<ColoredLabel> = coloredLabels()
 
-  /** Init a CompiledModel from AI Pack. */
+  /** Init a CompiledModel from selfie_multiclass_256x256. */
   suspend fun initSegmenter(acceleratorEnum: AcceleratorEnum = AcceleratorEnum.CPU) {
+    val options =
+      when (acceleratorEnum) {
+        AcceleratorEnum.CPU -> CompiledModel.Options(Accelerator.CPU)
+        AcceleratorEnum.NPU -> CompiledModel.Options(Accelerator.NPU)
+        AcceleratorEnum.GPU -> CompiledModel.Options(Accelerator.GPU)
+      }
     try {
-      val accelerator = toAccelerator(acceleratorEnum)
-      val aiPackModelProvider =
-        AiPackModelProvider(
-          context,
-          "selfie_multiclass_ai_pack",
-          "model/selfie_multiclass.tflite",
-          accelerator,
-        )
-      aiPackModelProvider.download()
-
       val env: Environment? =
         if (acceleratorEnum == AcceleratorEnum.NPU) {
           Environment.create(BuiltinNpuAcceleratorProvider(context))
@@ -78,7 +77,13 @@ class ImageSegmentationHelper(private val context: Context) {
           null
         }
       model =
-        CompiledModel.create(aiPackModelProvider.getPath(), CompiledModel.Options(accelerator), env)
+        CompiledModel.create(
+          context.assets,
+          if (acceleratorEnum == AcceleratorEnum.NPU) "selfie_multiclass_256x256_SM8750.tflite"
+          else "selfie_multiclass_256x256.tflite",
+          options,
+          env,
+        )
     } catch (e: Exception) {
       Log.i(TAG, "Create LiteRT from deeplab_v3 is failed ${e.message}")
       _error.emit(e)
@@ -137,16 +142,27 @@ class ImageSegmentationHelper(private val context: Context) {
     return Bitmap.createBitmap(image, 0, 0, w, h, matrix, false)
   }
 
+  // Reusable arrays for normalization
+  private var pixelsIntArray: IntArray? = null
+  private var normalizedFloatArray: FloatArray? = null
+  
   private fun normalize(image: Bitmap, mean: Float, stddev: Float): FloatArray {
     val (width, height) = Pair(image.width, image.height)
     val numPixels = width * height
-    val pixelsIntArray = IntArray(numPixels)
-    val outputFloatArray = FloatArray(numPixels * 3) // 3 channels (R, G, B)
-
-    image.getPixels(pixelsIntArray, 0, width, 0, 0, width, height)
+    
+    // Initialize or resize reusable arrays if needed
+    if (pixelsIntArray == null || pixelsIntArray!!.size < numPixels) {
+      pixelsIntArray = IntArray(numPixels)
+    }
+    
+    if (normalizedFloatArray == null || normalizedFloatArray!!.size < numPixels * 3) {
+      normalizedFloatArray = FloatArray(numPixels * 3) // 3 channels (R, G, B)
+    }
+    
+    image.getPixels(pixelsIntArray!!, 0, width, 0, 0, width, height)
 
     for (i in 0 until numPixels) {
-      val pixel = pixelsIntArray[i]
+      val pixel = pixelsIntArray!![i]
 
       // Extract channels (ARGB_8888 format assumed)
       val (r, g, b) =
@@ -158,13 +174,20 @@ class ImageSegmentationHelper(private val context: Context) {
 
       // Normalize and store in interleaved format
       val outputBaseIndex = i * 3
-      outputFloatArray[outputBaseIndex + 0] = (r - mean) / stddev // Red
-      outputFloatArray[outputBaseIndex + 1] = (g - mean) / stddev // Green
-      outputFloatArray[outputBaseIndex + 2] = (b - mean) / stddev // Blue
+      normalizedFloatArray!![outputBaseIndex + 0] = (r - mean) / stddev // Red
+      normalizedFloatArray!![outputBaseIndex + 1] = (g - mean) / stddev // Green
+      normalizedFloatArray!![outputBaseIndex + 2] = (b - mean) / stddev // Blue
     }
 
-    return outputFloatArray
+    return normalizedFloatArray!!
   }
+
+  // Reusable buffers for inference
+  private var inputBuffers: List<ByteBuffer>? = null
+  private var outputBuffers: List<ByteBuffer>? = null
+  private var outputFloatArray: FloatArray? = null
+  private var outputBuffer: FloatBuffer? = null
+  private var maskBuffer: ByteBuffer? = null
 
   private fun segment(inputFloatArray: FloatArray): Segmentation {
     if (!this::model.isInitialized) {
@@ -176,16 +199,19 @@ class ImageSegmentationHelper(private val context: Context) {
     // MODEL EXECUTION PHASE
     val modelExecStartTime = SystemClock.uptimeMillis()
 
-    // Create buffers - measure time
-    val bufferCreateStartTime = SystemClock.uptimeMillis()
-    val inputBuffers = model.createInputBuffers()
-    val outputBuffers = model.createOutputBuffers()
-    val bufferCreateTime = SystemClock.uptimeMillis() - bufferCreateStartTime
-    Log.d(TAG, "Buffer creation time: $bufferCreateTime ms")
+    // Create buffers only once or reuse existing ones
+    var bufferCreateTime = 0L
+    if (inputBuffers == null || outputBuffers == null) {
+      val bufferCreateStartTime = SystemClock.uptimeMillis()
+      inputBuffers = model.createInputBuffers()
+      outputBuffers = model.createOutputBuffers()
+      bufferCreateTime = SystemClock.uptimeMillis() - bufferCreateStartTime
+      Log.d(TAG, "Buffer creation time: $bufferCreateTime ms")
+    }
 
     // Write input data - measure time
     val bufferWriteStartTime = SystemClock.uptimeMillis()
-    inputBuffers[0].writeFloat(inputFloatArray)
+    inputBuffers!![0].writeFloat(inputFloatArray)
     val bufferWriteTime = SystemClock.uptimeMillis() - bufferWriteStartTime
     Log.d(TAG, "Buffer write time: $bufferWriteTime ms")
 
@@ -194,14 +220,20 @@ class ImageSegmentationHelper(private val context: Context) {
 
     // Run model inference - measure time
     val modelRunStartTime = SystemClock.uptimeMillis()
-    model.run(inputBuffers, outputBuffers)
+    model.run(inputBuffers!!, outputBuffers!!)
     val modelRunTime = SystemClock.uptimeMillis() - modelRunStartTime
     Log.d(TAG, "Model.run() time: $modelRunTime ms")
 
     // Read output data - measure time
     val bufferReadStartTime = SystemClock.uptimeMillis()
-    val outputFloatArray = outputBuffers.get(0).readFloat()
-    val outputBuffer = FloatBuffer.wrap(outputFloatArray)
+    if (outputFloatArray == null) {
+      outputFloatArray = outputBuffers!!.get(0).readFloat()
+      outputBuffer = FloatBuffer.wrap(outputFloatArray!!)
+    } else {
+      // Reuse existing buffer but refresh its content
+      outputBuffers!!.get(0).readFloat(outputFloatArray!!)
+      outputBuffer!!.rewind() // Reset position to beginning
+    }
     val bufferReadTime = SystemClock.uptimeMillis() - bufferReadStartTime
     Log.d(TAG, "Buffer read time: $bufferReadTime ms")
 
@@ -209,26 +241,39 @@ class ImageSegmentationHelper(private val context: Context) {
     Log.d(TAG, "Total model execution time: $modelExecTime ms")
 
     // Optional tensor inspection
-    logTensorStats("Output tensor", outputFloatArray)
+    logTensorStats("Output tensor", outputFloatArray!!)
 
     // POSTPROCESSING PHASE
     val postprocessStartTime = SystemClock.uptimeMillis()
 
     // Process mask from model output
-    val inferenceData = InferenceData(width = w, height = h, channels = c, buffer = outputBuffer)
-    val mask = processImage(inferenceData)
+    val inferenceData = InferenceData(width = w, height = h, channels = c, buffer = outputBuffer!!)
+    
+    // Create or reuse mask buffer
+    if (maskBuffer == null) {
+      maskBuffer = processImage(inferenceData)
+    } else {
+      // Reset position of existing buffer and reuse it
+      maskBuffer!!.rewind()
+      updateMaskBuffer(inferenceData, maskBuffer!!)
+    }
 
     val postprocessTime = SystemClock.uptimeMillis() - postprocessStartTime
     Log.d(TAG, "Postprocessing time (mask creation): $postprocessTime ms")
 
     return Segmentation(
-      listOf(Mask(mask, inferenceData.width, inferenceData.height)),
+      listOf(Mask(maskBuffer!!, inferenceData.width, inferenceData.height)),
       coloredLabels,
     )
   }
 
   private fun processImage(inferenceData: InferenceData): ByteBuffer {
     val mask = ByteBuffer.allocateDirect(inferenceData.width * inferenceData.height)
+    updateMaskBuffer(inferenceData, mask)
+    return mask
+  }
+  
+  private fun updateMaskBuffer(inferenceData: InferenceData, mask: ByteBuffer) {
     for (i in 0 until inferenceData.height) {
       for (j in 0 until inferenceData.width) {
         val offset = inferenceData.channels * (i * inferenceData.width + j)
@@ -246,8 +291,6 @@ class ImageSegmentationHelper(private val context: Context) {
         mask.put(i * inferenceData.width + j, maxIndex.toByte())
       }
     }
-
-    return mask
   }
 
   private fun coloredLabels(): List<ColoredLabel> {
@@ -312,16 +355,20 @@ class ImageSegmentationHelper(private val context: Context) {
     val channels: Int,
     val buffer: FloatBuffer,
   )
-
-  private companion object {
-    const val TAG = "ImageSegmentation"
-
-    fun toAccelerator(acceleratorEnum: AcceleratorEnum): Accelerator {
-      return when (acceleratorEnum) {
-        AcceleratorEnum.CPU -> Accelerator.CPU
-        AcceleratorEnum.NPU -> Accelerator.NPU
-        AcceleratorEnum.GPU -> Accelerator.GPU
-      }
+  
+  /** Close method that disposes of resources. */
+  fun close() {
+    if (this::model.isInitialized) {
+      model.delete()
     }
+    
+    // Clear reusable buffers
+    inputBuffers = null
+    outputBuffers = null
+    outputFloatArray = null
+    outputBuffer = null
+    maskBuffer = null
+    pixelsIntArray = null
+    normalizedFloatArray = null
   }
 }

@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.aiedge.examples.image_segmentation.UiState
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -62,6 +62,8 @@ fun CameraScreen(
   onImageAnalyzed: (ImageProxy) -> Unit,
 ) {
   val context = LocalContext.current
+  val lifecycleOwner = context as LifecycleOwner
+
   val launcher =
     rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
       isGranted: Boolean ->
@@ -106,19 +108,18 @@ fun CameraPreview(
   lensFacing: Int,
 ) {
   val context = LocalContext.current
-  val lifecycleOwner = LocalLifecycleOwner.current
+  val lifecycleOwner = LocalContext.current as LifecycleOwner
   val cameraProviderFuture by remember {
     mutableStateOf(ProcessCameraProvider.getInstance(context))
   }
   // Remember the executor service
   val cameraExecutor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
-  // Remember the PreviewView instance
-  val previewView = remember {
-    PreviewView(context).apply {
-      layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-      scaleType = PreviewView.ScaleType.FILL_START
-    }
-  }
+  // Create the PreviewView instance outside of remember
+  val previewView = PreviewView(context)
+
+  // Configure properties
+  previewView.layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+  previewView.scaleType = PreviewView.ScaleType.FILL_START
 
   LaunchedEffect(lensFacing, lifecycleOwner) {
     Log.d(TAG, "LaunchedEffect triggered for lensFacing: $lensFacing")
@@ -174,7 +175,7 @@ fun bindCameraUseCases(
   // val preview: Preview = Preview.Builder().setTargetResolution(targetSize).build()
   val preview: Preview = Preview.Builder().build()
 
-  preview.surfaceProvider = previewView.surfaceProvider
+  preview.setSurfaceProvider(previewView.surfaceProvider)
 
   val cameraSelector: CameraSelector =
     CameraSelector.Builder().requireLensFacing(lensFacing).build()

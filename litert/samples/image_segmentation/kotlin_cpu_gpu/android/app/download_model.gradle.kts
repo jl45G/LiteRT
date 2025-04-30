@@ -1,0 +1,11 @@
+tasks.register<de.undercouch.gradle.tasks.download.Download>("downloadDeeplab") {
+    // This model is custom made using Model Maker. A detailed guide can be found here:
+    // https://www.tensorflow.org/lite/models/modify/model_maker/speech_recognition
+    src("https://storage.googleapis.com/ai-edge/interpreter-samples/image_segmentation/android/deeplab_v3.tflite")
+    dest("${project.ext.get("ASSET_DIR")}/deeplab_v3.tflite")
+    overwrite(false)
+}
+
+tasks.named("preBuild") {
+    dependsOn("downloadDeeplab")
+}

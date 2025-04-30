@@ -50,7 +50,7 @@ android {
 
 // Import DownloadModels task
 project.ext.set("ASSET_DIR", "$projectDir/src/main/assets")
-apply(from = "download_model.gradle")
+apply(from = "download_model.gradle.kts")
 
 
 dependencies {
@@ -76,8 +76,7 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.coil.compose)
     implementation(files("libs/litert_kotlin_api_aar_20250327.aar"))
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-    implementation("androidx.compose.runtime:runtime-livedata:1.5.4")
+    implementation(libs.androidx.compose.runtime.livedata)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
