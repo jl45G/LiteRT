@@ -16,8 +16,14 @@
 This module defines the `run_on_device` macro, which helps to execute a binary target on a device.
 """
 
-load("//litert/build_common:litert_build_defs.bzl", "absolute_label")
 load("@org_tensorflow//tensorflow:tensorflow.bzl", "if_oss")
+
+# copybara:uncomment_begin(google-only)
+# load("//devtools/deviceinfra/api/builddefs/test:mobile_test.bzl", "mobile_test")
+# load(INTERNAL_PHYSICAL_MOBILE_TESTING_INFRA, "guitar")
+#
+# copybara:uncomment_end
+load("//litert/build_common:litert_build_defs.bzl", "absolute_label")
 
 # MISCELLANEOUS ####################################################################################
 
@@ -161,74 +167,157 @@ def BackendSpec(id, libs = [], mh_devices = [], dispatch = None, plugin = None, 
         mh_user = mh_user,
     )
 
-QUALCOMM_SPEC = BackendSpec(
-    id = "qualcomm",
-    libs = [
-        ("//third_party/qairt/latest:lib/aarch64-android/libQnnHtp.so", "LD_LIBRARY_PATH"),
-        ("//third_party/qairt/latest:lib/aarch64-android/libQnnHtpV75Stub.so", "LD_LIBRARY_PATH"),
-        ("//third_party/qairt/latest:lib/aarch64-android/libQnnSystem.so", "LD_LIBRARY_PATH"),
-        ("//third_party/qairt/latest:lib/aarch64-android/libQnnHtpPrepare.so", "LD_LIBRARY_PATH"),
-        ("//third_party/qairt/latest:lib/hexagon-v75/unsigned/libQnnHtpV75Skel.so", "ADSP_LIBRARY_PATH"),
-        ("//litert/vendors/qualcomm/dispatch:libLiteRtDispatch_Qualcomm.so", "LD_LIBRARY_PATH"),
-        ("//litert/vendors/qualcomm/compiler:libLiteRtCompilerPlugin_Qualcomm.so", "LD_LIBRARY_PATH"),
-    ],
-    mh_devices = [{
-        "model": "regex:sm-s928b|sm-s928u1",
-        "pool": "shared",
-    }],
-    plugin = "libLiteRtCompilerPlugin_Qualcomm.so",
-    dispatch = "libLiteRtDispatch_Qualcomm.so",
-)
+def _QualcommSpec():
+    return {
+        "qualcomm": BackendSpec(
+            id = "qualcomm",
+            libs = [
+                ("//third_party/qairt/latest:lib/aarch64-android/libQnnHtp.so", "LD_LIBRARY_PATH"),
+                ("//third_party/qairt/latest:lib/aarch64-android/libQnnHtpV75Stub.so", "LD_LIBRARY_PATH"),
+                ("//third_party/qairt/latest:lib/aarch64-android/libQnnSystem.so", "LD_LIBRARY_PATH"),
+                ("//third_party/qairt/latest:lib/aarch64-android/libQnnHtpPrepare.so", "LD_LIBRARY_PATH"),
+                ("//third_party/qairt/latest:lib/hexagon-v75/unsigned/libQnnHtpV75Skel.so", "ADSP_LIBRARY_PATH"),
+                ("//litert/vendors/qualcomm/dispatch:libLiteRtDispatch_Qualcomm.so", "LD_LIBRARY_PATH"),
+                ("//litert/vendors/qualcomm/compiler:libLiteRtCompilerPlugin_Qualcomm.so", "LD_LIBRARY_PATH"),
+            ],
+            mh_devices = [{
+                "model": "regex:sm-s928b|sm-s928u1",
+                "pool": "shared",
+            }],
+            plugin = "libLiteRtCompilerPlugin_Qualcomm.so",
+            dispatch = "libLiteRtDispatch_Qualcomm.so",
+        ),
+    }
 
 # MEDIATEK
 
-MEDIATEK_SPEC = BackendSpec(
-    id = "mediatek",
-    libs = [
-        ("//litert/vendors/mediatek/dispatch:libLiteRtDispatch_Mediatek.so", "LD_LIBRARY_PATH"),
-    ],
-    mh_devices = [{
-        "hardware": "mt6989",
-    }],
-    dispatch = "libLiteRtDispatch_Mediatek.so",
-)
+def _MediatekSpec():
+    return {
+        "mediatek": BackendSpec(
+            id = "mediatek",
+            libs = [
+                ("//litert/vendors/mediatek/dispatch:libLiteRtDispatch_Mediatek.so", "LD_LIBRARY_PATH"),
+                ("//litert/vendors/mediatek/compiler:libLiteRtCompilerPlugin_MediaTek.so", "LD_LIBRARY_PATH"),
+            ],
+            mh_devices = [{
+                "hardware": "mt6989",
+                "label": "odml-test",
+            }],
+            dispatch = "libLiteRtDispatch_Mediatek.so",
+            plugin = "libLiteRtCompilerPlugin_MediaTek.so",
+        ),
+    }
 
 # GOOGLE TENSOR
 
-GOOGLE_TENSOR_SPEC = BackendSpec(
-    id = "google_tensor",
-    libs = [
-        ("//litert/vendors/google_tensor/dispatch:libLiteRtDispatch_GoogleTensor.so", "LD_LIBRARY_PATH"),
-    ],
-    mh_devices = [{
-        "pool": "shared",
-        "model": "pixel 9",
-        "build_type": "userdebug",
-    }],
-    dispatch = "libLiteRtDispatch_GoogleTensor.so",
-)
+def _GoogleTensorSpec():
+    return {
+        "google_tensor": BackendSpec(
+            id = "google_tensor",
+            libs = [
+                ("//litert/vendors/google_tensor/dispatch:libLiteRtDispatch_GoogleTensor.so", "LD_LIBRARY_PATH"),
+            ],
+            mh_devices = [{
+                "label": "odml-test",
+                "model": "pixel 9",
+            }],
+            mh_user = "odml-team",
+            dispatch = "libLiteRtDispatch_GoogleTensor.so",
+        ),
+    }
 
 # CPU
 
-CPU_SPEC = BackendSpec(
-    id = "cpu",
-)
+def _CpuSpec():
+    return {
+        "cpu": BackendSpec(
+            id = "cpu",
+        ),
+    }
 
 # GPU
 
-GPU_SPEC = BackendSpec(
-    id = "gpu",
-)
+def _GpuSpec():
+    return {
+        "gpu": BackendSpec(
+            id = "gpu",
+        ),
+    }
 
 # COMMON
 
-_SPECS = {
-    QUALCOMM_SPEC.id: QUALCOMM_SPEC,
-    GOOGLE_TENSOR_SPEC.id: GOOGLE_TENSOR_SPEC,
-    MEDIATEK_SPEC.id: MEDIATEK_SPEC,
-    CPU_SPEC.id: CPU_SPEC,
-    GPU_SPEC.id: GPU_SPEC,
-}
+def _Specs(name):
+    return (_QualcommSpec() | _GoogleTensorSpec() | _MediatekSpec() | _CpuSpec() | _GpuSpec())[name]
+
+# copybara:uncomment_begin(google-only)
+# # MOBILE HARNESS WRAPPER ###########################################################################
+#
+# def _litert_mh_exec(
+#         name,
+#         target,
+#         run_as = "odml-device-lab",
+#         data = [],
+#         exec_args = [],
+#         exec_env_vars = [],
+#         dimensions = {}):
+#     """Wraps the mobile harness "mobile_test" macro"""
+#
+#     files = {
+#         "bin": [target],
+#     }
+#
+#     push_files_list = []
+#
+#     for data_target in data:
+#         data_target_split = data_target.split(":")
+#         if len(data_target_split) != 2:
+#             # This is required by `mobile_test` for value in `files`.
+#             fail("Data inputs must include a colon even if relative label")
+#         data_id = data_target_split[-1]
+#         files[data_id] = [data_target]
+#
+#         # NOTE: Any non raw file data targets must output a directory with the same name as the
+#         # target (e.g. filegroup "foo" that globs "foo/*"). This may need to be updated later
+#         # but it works for everything in LiteRt for now.
+#         push_files_list.append("{id}:{loc}".format(
+#             id = data_id,
+#             loc = device_rlocation(data_target, get_parent = False),
+#         ))
+#
+#     params = {
+#         "run_dir": device_rlocation(),
+#         "options": " ".join(exec_args),
+#         "prepare_des_dir_when_src_is_file": "true",  # Allows dest to be a dir (parent) when src is a file.
+#         "run_env": " ".join(exec_env_vars),
+#         "remove_files_before_push": "true",
+#     }
+#
+#     if push_files_list:
+#         params["push_files"] = ",".join(push_files_list)
+#
+#     args = [
+#         "--run_as={}".format(run_as),
+#     ]
+#
+#     mobile_test(
+#         tags = hidden_test_tags(),
+#         name = name,
+#         dimensions = dimensions,
+#         files = files,
+#         params = params,
+#         args = args,
+#         device = "AndroidRealDevice",
+#         driver = "AndroidNativeBin",
+#         decorators = [
+#             "AndroidFilePusherDecorator",
+#         ],
+#         visibility = [
+#             "//litert/integration_test:__subpackages__",
+#             "//litert/google:__subpackages__",
+#         ],
+#     )
+#
+# copybara:uncomment_end
 
 # RUN ON DEVICE MACRO ##############################################################################
 
@@ -273,7 +362,7 @@ def litert_device_exec(
     data = data + []
     exec_env_vars = exec_env_vars + []
 
-    backend = _SPECS[backend_id]
+    backend = _Specs(backend_id)
 
     data.extend(backend.libs)
     exec_env_vars.extend(backend.env_paths)
@@ -331,13 +420,13 @@ def litert_device_exec(
 
     # copybara:uncomment_begin(google-only)
     # _litert_mh_exec(
-        # name = name + remote_suffix,
-        # target = target,
-        # run_as = backend.mh_user,
-        # data = data,
-        # exec_args = exec_args,
-        # exec_env_vars = exec_env_vars,
-        # dimensions = backend.default_mh_device,
+    # name = name + remote_suffix,
+    # target = target,
+    # run_as = backend.mh_user,
+    # data = data,
+    # exec_args = exec_args,
+    # exec_env_vars = exec_env_vars,
+    # dimensions = backend.default_mh_device,
     # )
     # copybara:uncomment_end(google-only)
 
@@ -414,7 +503,7 @@ def litert_integration_test(
         skips: List of substrings of models to skip.
     """
 
-    backend = _SPECS[backend_id]
+    backend = _Specs(backend_id)
 
     req_hardware = backend.id != "cpu" and backend.id != "gpu"
 
@@ -446,3 +535,75 @@ def litert_integration_test(
         data = data,
         exec_args = cli_args,
     )
+
+# copybara:uncomment_begin(google-only)
+# # GUITAR UTIL ######################################################################################
+#
+# def litert_pixel_9_mh_guitar_test(targets):
+#     return guitar.Tests(
+#         args = [
+#             "--allocation_exit_strategy=FAIL_FAST_NO_MATCH",
+#             "--dimension_model=\"pixel 9\"",
+#             "--dimension_label=odml-test",
+#             "--run_as=xeno-mh-guitar",
+#         ],
+#         bazel_flags = [
+#             "--config=android_arm64",
+#             "--copt=-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1",
+#             "--android_ndk_min_sdk_version=26",
+#         ],
+#         execution_method = "DISTRIBUTED_ON_BORG",
+#         targets = targets,
+#     )
+#
+# def litert_qualcomm_mh_guitar_test(targets):
+#     return guitar.Tests(
+#         args = [
+#             "--allocation_exit_strategy=FAIL_FAST_NO_MATCH",
+#             "--dimension_pool=shared",
+#             "--dimension_model=\"sm-s928u1\"",
+#             "--run_as=xeno-mh-guitar",
+#         ],
+#         bazel_flags = [
+#             "--config=android_arm64",
+#             "--copt=-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1",
+#             "--android_ndk_min_sdk_version=26",
+#         ],
+#         execution_method = "DISTRIBUTED_ON_BORG",
+#         targets = targets,
+#     )
+#
+# def litert_mediatek_mh_guitar_test(targets):
+#     return guitar.Tests(
+#         args = [
+#             "--allocation_exit_strategy=FAIL_FAST_NO_MATCH",
+#             "--dimension_label=odml-test",
+#             "--dimension_hardware=\"mt6989\"",
+#             "--run_as=xeno-mh-guitar",
+#         ],
+#         bazel_flags = [
+#             "--config=android_arm64",
+#             "--copt=-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1",
+#             "--android_ndk_min_sdk_version=26",
+#         ],
+#         execution_method = "DISTRIBUTED_ON_BORG",
+#         targets = targets,
+#     )
+#
+# def litert_cpu_mh_guitar_test(targets):
+#     return guitar.Tests(
+#         args = [
+#             "--allocation_exit_strategy=FAIL_FAST_NO_MATCH",
+#             "--dimension_label=odml-test",
+#             "--run_as=xeno-mh-guitar",
+#         ],
+#         bazel_flags = [
+#             "--config=android_arm64",
+#             "--copt=-DGOOGLE_COMMANDLINEFLAGS_FULL_API=1",
+#             "--android_ndk_min_sdk_version=26",
+#         ],
+#         execution_method = "DISTRIBUTED_ON_BORG",
+#         targets = targets,
+#     )
+#
+# copybara:uncomment_end

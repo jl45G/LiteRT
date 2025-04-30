@@ -40,7 +40,7 @@ namespace {
 using testing::UniqueTestDirectory;
 
 constexpr absl::string_view kTestPluginSearchPath =
-    "litert/vendors/examples";
+    "third_party/odml/litert/litert/vendors/examples";
 
 constexpr absl::string_view kTestManufacturer = "ExampleSocManufacturer";
 constexpr absl::string_view kTestModels = "ExampleSocModel";
@@ -59,10 +59,9 @@ TEST(CompilerPluginTest, LoadTestPluginWithMalformed) {
   ASSERT_TRUE(dir);
   Touch(Join({dir->Str(), "notLibLiteRt.so"}));
 
-  auto plugins = CompilerPlugin::LoadPlugins({kTestPluginSearchPath});
+  auto plugins = CompilerPlugin::LoadPlugins({dir->Str()});
 
-  ASSERT_EQ(plugins->size(), 1);
-  EXPECT_EQ(plugins->front().SocManufacturer(), kTestManufacturer);
+  ASSERT_EQ(plugins->size(), 0);
 }
 
 TEST(CompilerPluginTest, MultipleValidPlugins) {
@@ -103,12 +102,6 @@ TEST(CompilerPluginTest, SocModels) {
 
   EXPECT_THAT(plugins->front().SocModels(),
               ::testing::ElementsAreArray({kTestModels}));
-}
-
-TEST(CompilerPluginTest, SetFlags) {
-  auto plugins = CompilerPlugin::LoadPlugins({kTestPluginSearchPath});
-  ASSERT_EQ(plugins->size(), 1);
-  LITERT_ASSERT_OK(plugins->front().SetFlags(CompilerFlags()));
 }
 
 TEST(CompilerPluginTest, Partition) {
@@ -376,8 +369,8 @@ TEST(ApplyTest, ApplyPlugins) {
   LiteRtHwAccelerators compilation_options = static_cast<LiteRtHwAccelerators>(
       kLiteRtHwAcceleratorCpu | kLiteRtHwAcceleratorGpu |
       kLiteRtHwAcceleratorNpu);
-  auto result =
-      litert::internal::ApplyPlugins(env->Get(), &model, compilation_options);
+  auto result = litert::internal::ApplyPlugins(env->Get(), /*options=*/nullptr,
+                                               &model, compilation_options);
   ASSERT_TRUE(result);
 
   ASSERT_EQ(model.NumSubgraphs(), 1);
@@ -403,6 +396,9 @@ TEST(PartitionTest, MappedCompositeOp) {
   ASSERT_TRUE(partition_result);
   // One new subgraph for the consumed composite op only, decomp not consumed.
   ASSERT_EQ(partition_result->second.NumSubgraphs(), 1);
+  // Examople plugin will select RMS norm composite op during partitioning. only
+  // 1 subgraph should remain in the model.
+  ASSERT_EQ(model.NumSubgraphs(), 1);
 }
 
 TEST(PartitionTest, SimpleNpuCallComposite) {
@@ -436,6 +432,25 @@ TEST(PartitionTest, MultiNpuCallComposite) {
   auto* non_npu_call_decomop = model.Subgraphs()[2];
   auto* decomp2 = model.Subgraphs()[3];
 
+  {
+    // Before partitioning, the model has 4 subgraphs. 1-3 are decompositions,
+    // and 0 is the main subgraph.
+    auto npu_call_op_0_option =
+        GetOptionsAs<CompositeOptions>(model.Subgraph(0).Ops()[0]);
+    ASSERT_TRUE(npu_call_op_0_option);
+    ASSERT_EQ(npu_call_op_0_option->subgraph, 1);
+
+    auto non_npu_call_op_0_option =
+        GetOptionsAs<CompositeOptions>(model.Subgraph(0).Ops()[1]);
+    ASSERT_TRUE(non_npu_call_op_0_option);
+    ASSERT_EQ(non_npu_call_op_0_option->subgraph, 2);
+
+    auto npu_call_op_1_option =
+        GetOptionsAs<CompositeOptions>(model.Subgraph(0).Ops()[2]);
+    ASSERT_TRUE(npu_call_op_1_option);
+    ASSERT_EQ(npu_call_op_1_option->subgraph, 3);
+  }
+
   auto partition_result = PartitionModel(plugins->front(), model);
   ASSERT_TRUE(partition_result);
 
@@ -444,9 +459,10 @@ TEST(PartitionTest, MultiNpuCallComposite) {
     // Non-npu-call decompositions will be reindexed.
     ASSERT_EQ(model.NumSubgraphs(), 2);
     ASSERT_EQ(model.Subgraphs()[1], non_npu_call_decomop);
-    auto opts = GetOptionsAs<CompositeOptions>(model.Subgraph(0).Ops()[1]);
-    ASSERT_TRUE(opts);
-    ASSERT_EQ(opts->subgraph, 1);
+    auto non_npu_call_op_0_option =
+        GetOptionsAs<CompositeOptions>(model.Subgraph(0).Ops()[1]);
+    ASSERT_TRUE(non_npu_call_op_0_option);
+    ASSERT_EQ(non_npu_call_op_0_option->subgraph, 1);
   }
 
   {

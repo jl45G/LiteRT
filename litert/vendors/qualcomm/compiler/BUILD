@@ -15,7 +15,7 @@
 # Copyright (c) Qualcomm Innovation Center, Inc. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib", "litert_lib", "litert_test")
+load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib", "litert_lib", "litert_test", "make_rpaths")
 load("//litert/integration_test:litert_device.bzl", "litert_device_exec")
 
 package(
@@ -29,34 +29,43 @@ litert_dynamic_lib(
     name = "qnn_compiler_plugin",
     srcs = ["qnn_compiler_plugin.cc"],
     hdrs = ["//litert/vendors/c:litert_compiler_plugin.h"],
+    copts = [
+        "-Os",
+        "-fno-exceptions",
+        "-fno-unwind-tables",
+        "-fno-asynchronous-unwind-tables",
+        "-ffunction-sections",
+        "-fdata-sections",
+    ],
     export_litert_only = True,
+    linkopts = select({
+        "@org_tensorflow//tensorflow:android": ["-landroid"],
+        "//conditions:default": [make_rpaths(["//litert/c:litert_runtime_c_api_shared_lib"])],
+    }) + [
+        "-Wl,-soname=libLiteRtCompilerPlugin_Qualcomm.so",
+        "-Wl,-lc++abi",
+    ],
     shared_lib_name = "qnn_compiler_plugin_so",
     so_name = "libLiteRtCompilerPlugin_Qualcomm.so",
-    tags = [
-        # Don't build/test in OS until qnn is available.
-        "nobuilder",
-    ],
     ungrte = True,
     visibility = ["//litert:__subpackages__"],
     deps = [
         ":qnn_compose_graph",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/strings:string_view",
-        "//litert/c:litert_common",
-        "//litert/c:litert_logging",
-        "//litert/c:litert_model",
-        "//litert/c:litert_op_code",
+        "//litert/c:litert_runtime_c_api_shared_lib",
+        "//litert/c/options:litert_qualcomm_options",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
-        "//litert/cc:litert_model",
-        "//litert/cc:litert_model_predicates",
+        "//litert/vendors/cc:options_helper",
         "//litert/vendors/qualcomm:qnn_manager",
+        "//litert/vendors/qualcomm/core:common",
         "//litert/vendors/qualcomm/core:tensor_pool",
         "//litert/vendors/qualcomm/core/schema:soc_table",
         "//litert/vendors/qualcomm/core/wrappers:op_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
-        # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
+        "//third_party/qairt/latest:qnn_lib_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
@@ -75,10 +84,6 @@ litert_test(
         # Tests with ungrte deps do not currently work on forge.
         "no-remote-exec",
         "notap",
-        # Don't build/test in OS until qnn is available.
-        "nobuilder",
-        "no_oss",
-        # Sanitizer runtime doesn't work with anything that loads libQnnHtp.so.
         "nosan",
     ],
     # This test can be run only on Android and Linux.
@@ -87,19 +92,20 @@ litert_test(
         "@platforms//os:linux": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
+    ungrte = True,
     use_sys_malloc = True,
     deps = [
         ":qnn_compiler_plugin",  # buildcleaner: keep
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log:absl_check",
-        "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
         "//litert/c:litert_op_code",
+        "//litert/c:litert_runtime_c_api_shared_lib",
+        "//litert/c/options:litert_qualcomm_options",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
         "//litert/cc:litert_model_predicates",
+        "//litert/cc:litert_options",
         "//litert/core/model:model_testonly",
         "//litert/test:common",
         "//litert/test:matchers_oss",
@@ -109,7 +115,10 @@ litert_test(
         "//litert/vendors/qualcomm/compiler/IR:qnn_op",
         "//litert/vendors/qualcomm/compiler/IR:qnn_tensor",
         "//litert/vendors/qualcomm/compiler/legalizations:quantize_op_legalization",
-        # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
+        "//third_party/qairt/latest:qnn_lib_headers",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/log:absl_check",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
@@ -124,25 +133,13 @@ litert_lib(
     name = "qnn_compose_graph",
     srcs = ["qnn_compose_graph.cc"],
     hdrs = ["qnn_compose_graph.h"],
-    tags = [
-        # Don't build/test in OS until qnn is available.
-        "nobuilder",
-    ],
     deps = [
         ":graph_mapper",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/types:span",
-        "//litert/c:litert_common",
-        "//litert/c:litert_logging",
-        "//litert/c:litert_model",
-        "//litert/c:litert_op_code",
-        "//litert/c:litert_options",
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_element_type",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
-        "//litert/cc:litert_model_predicates",
         "//litert/tools:dump",
         "//litert/vendors/qualcomm:common",
         "//litert/vendors/qualcomm:qnn_manager",
@@ -190,7 +187,10 @@ litert_lib(
         "//litert/vendors/qualcomm/core/wrappers:op_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:quantize_params_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
-        # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
+        "//third_party/qairt/latest:qnn_lib_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -200,28 +200,21 @@ litert_lib(
         "graph_mapper.cc",
     ],
     hdrs = ["graph_mapper.h"],
-    tags = [
-        # Don't build/test in OS until qnn is available.
-        "nobuilder",
-    ],
     visibility = ["//litert:__subpackages__"],
     deps = [
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/types:span",
-        "//litert/c:litert_common",
-        "//litert/c:litert_logging",
-        "//litert/c:litert_model",
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_element_type",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
-        "//litert/cc:litert_model_predicates",
         "//litert/vendors/qualcomm:common",
         "//litert/vendors/qualcomm:qnn_manager",
         "//litert/vendors/qualcomm/compiler/IR:qnn_op",
         "//litert/vendors/qualcomm/compiler/IR:qnn_tensor",
-        # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
+        "//third_party/qairt/latest:qnn_lib_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
     ],
 )
