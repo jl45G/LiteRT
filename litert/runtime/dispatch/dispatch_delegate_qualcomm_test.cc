@@ -30,27 +30,29 @@
 #include "litert/c/litert_environment.h"
 #include "litert/c/litert_environment_options.h"
 #include "litert/c/litert_tensor_buffer.h"
-#include "litert/cc/litert_compilation_options.h"
+#include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_compiled_model.h"
 #include "litert/cc/litert_dispatch_delegate.h"
 #include "litert/cc/litert_environment.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_model.h"
+#include "litert/cc/litert_options.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
 #include "litert/runtime/external_litert_buffer_context.h"
 #include "litert/test/common.h"
 #include "litert/test/matchers.h"
 #include "litert/test/testdata/simple_model_test_vectors.h"
-#include "tflite/c/c_api_opaque.h"  // from @org_tensorflow
-#include "tflite/c/common.h"  // from @org_tensorflow
-#include "tflite/interpreter.h"  // from @org_tensorflow
-#include "tflite/signature_runner.h"  // from @org_tensorflow
+#include "tflite/c/c_api_opaque.h"
+#include "tflite/c/common.h"
+#include "tflite/interpreter.h"
+#include "tflite/signature_runner.h"
 
 using litert::testing::MakeRuntimeFromTestFileWithNpuModel;
 using testing::ElementsAre;
 using testing::FloatNear;
 using testing::Pointwise;
+using testing::litert::IsOkAndHolds;
 
 namespace litert {
 namespace {
@@ -70,6 +72,13 @@ litert::Expected<Environment> CreateDefaultEnvironment() {
 }
 
 TEST(DispatchDelegate, CpuBuffer) {
+  // The dispatch delegate must be declared before the TFL interpreter so that
+  // it gets destroyed only after the interpreter and the dispatch delegate
+  // kernels are destroyed. While this order is guaranteed when using
+  // litert::CompiledModel, we must handle it manually when using the TFL
+  // interpreter directly.
+  DispatchDelegatePtr dispatch_delegate = {nullptr, nullptr};
+
   LITERT_ASSERT_OK_AND_ASSIGN(
       testing::TflRuntime::Ptr runtime,
       MakeRuntimeFromTestFileWithNpuModel(kTfliteFile, kNpuFile));
@@ -91,7 +100,7 @@ TEST(DispatchDelegate, CpuBuffer) {
       CreateDispatchDelegateOptionsPtr(env_options);
   LiteRtDispatchDelegateAddAllocBaseOption(dispatch_delegate_options.get(),
                                            runtime->Flatbuffer().Buf().Data());
-  auto dispatch_delegate = CreateDispatchDelegatePtr(
+  dispatch_delegate = CreateDispatchDelegatePtr(
       env_options, std::move(dispatch_delegate_options));
 
 #if !defined(__ANDROID__)
@@ -139,6 +148,13 @@ TEST(DispatchDelegate, CpuBuffer) {
 }
 
 TEST(DispatchDelegate, HwBuffer) {
+  // The dispatch delegate must be declared before the TFL interpreter so that
+  // it gets destroyed only after the interpreter and the dispatch delegate
+  // kernels are destroyed. While this order is guaranteed when using
+  // litert::CompiledModel, we must handle it manually when using the TFL
+  // interpreter directly.
+  DispatchDelegatePtr dispatch_delegate = {nullptr, nullptr};
+
   // Environment setup.
   LITERT_ASSERT_OK_AND_ASSIGN(Environment env, CreateDefaultEnvironment());
 
@@ -162,7 +178,7 @@ TEST(DispatchDelegate, HwBuffer) {
       CreateDispatchDelegateOptionsPtr(env_options);
   LiteRtDispatchDelegateAddAllocBaseOption(dispatch_delegate_options.get(),
                                            runtime->Flatbuffer().Buf().Data());
-  auto dispatch_delegate = CreateDispatchDelegatePtr(
+  dispatch_delegate = CreateDispatchDelegatePtr(
       env_options, std::move(dispatch_delegate_options));
 
 #if !defined(__ANDROID__)
@@ -179,13 +195,15 @@ TEST(DispatchDelegate, HwBuffer) {
     LITERT_ASSERT_OK_AND_ASSIGN(
         auto* input_buffer_requirements,
         buffer_context.GetBufferRequirements(interpreter.input_tensor(i)));
-    ASSERT_EQ(input_buffer_requirements->SupportedTypes()->at(0),
-              kLiteRtTensorBufferTypeFastRpc);
+    LITERT_ASSERT_OK_AND_ASSIGN(const auto supported_types,
+                                input_buffer_requirements->SupportedTypes());
+    ASSERT_EQ(supported_types.at(0), kLiteRtTensorBufferTypeFastRpc);
     LITERT_ASSERT_OK_AND_ASSIGN(
         TensorBuffer input_buffer,
         buffer_context.CreateBufferForTensor(interpreter.input_tensor(i)));
     ASSERT_TRUE(input_buffer.IsOwned());
-    ASSERT_EQ(*input_buffer.BufferType(), kLiteRtTensorBufferTypeFastRpc);
+    ASSERT_THAT(input_buffer.BufferType(),
+                IsOkAndHolds(kLiteRtTensorBufferTypeFastRpc));
     LITERT_ASSERT_OK_AND_ASSIGN(TensorBuffer duplicate_buffer,
                                 input_buffer.Duplicate());
     auto status = buffer_context.RegisterTensorBuffer(
@@ -200,13 +218,15 @@ TEST(DispatchDelegate, HwBuffer) {
         auto* output_buffer_requirements,
         buffer_context.GetBufferRequirements(interpreter.output_tensor(i)));
     ASSERT_NE(output_buffer_requirements, nullptr);
-    ASSERT_EQ(output_buffer_requirements->SupportedTypes()->at(0),
-              kLiteRtTensorBufferTypeFastRpc);
+    LITERT_ASSERT_OK_AND_ASSIGN(const auto supported_types,
+                                output_buffer_requirements->SupportedTypes());
+    ASSERT_EQ(supported_types.at(0), kLiteRtTensorBufferTypeFastRpc);
     LITERT_ASSERT_OK_AND_ASSIGN(
         TensorBuffer output_buffer,
         buffer_context.CreateBufferForTensor(interpreter.output_tensor(i)));
     ASSERT_TRUE(output_buffer.IsOwned());
-    ASSERT_EQ(*output_buffer.BufferType(), kLiteRtTensorBufferTypeFastRpc);
+    ASSERT_THAT(output_buffer.BufferType(),
+                IsOkAndHolds(kLiteRtTensorBufferTypeFastRpc));
     LITERT_ASSERT_OK_AND_ASSIGN(TensorBuffer duplicate_buffer,
                                 output_buffer.Duplicate());
     auto status = buffer_context.RegisterTensorBuffer(
@@ -283,8 +303,9 @@ TEST(DispatchDelegate, CompiledModel) {
   LITERT_ASSERT_OK_AND_ASSIGN(auto env, CreateDefaultEnvironment());
 
   // Create CompiledModel.
-  LITERT_ASSERT_OK_AND_ASSIGN(auto compiled_model,
-                              CompiledModel::Create(env, model));
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto compiled_model,
+      CompiledModel::Create(env, model, kLiteRtHwAcceleratorCpu));
 
   // Check CompiledModel buffer requirements. Input and output are supposed to
   // be FastRpc and DmaBuf.
@@ -377,8 +398,9 @@ TEST(DispatchDelegate, CompiledModelMultiRun) {
 #endif
 
   LITERT_ASSERT_OK_AND_ASSIGN(auto env, CreateDefaultEnvironment());
-  LITERT_ASSERT_OK_AND_ASSIGN(auto compiled_model,
-                              CompiledModel::Create(env, model));
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto compiled_model,
+      CompiledModel::Create(env, model, kLiteRtHwAcceleratorCpu));
 
   // ///////////////////////////////////////////////////////////////////////////
   // First inference.
@@ -500,8 +522,9 @@ TEST(DispatchDelegate, CompiledModelSharedInput) {
 #endif
 
   LITERT_ASSERT_OK_AND_ASSIGN(auto env, CreateDefaultEnvironment());
-  LITERT_ASSERT_OK_AND_ASSIGN(auto compiled_model,
-                              CompiledModel::Create(env, model));
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto compiled_model,
+      CompiledModel::Create(env, model, kLiteRtHwAcceleratorCpu));
 
   // Create I/O tensor buffers.
   LITERT_ASSERT_OK_AND_ASSIGN(

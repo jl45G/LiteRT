@@ -36,8 +36,10 @@
 #include "litert/c/litert_any.h"
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_environment.h"
+#include "litert/c/litert_environment_options.h"
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_model.h"
+#include "litert/c/litert_options.h"
 #include "litert/cc/litert_buffer_ref.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
@@ -160,7 +162,6 @@ LiteRtStatus ResolvePluginApi(SharedLibrary& lib,
                    result.get_compiled_result_call_info);
   RESOLVE_API_FUNC(kLiteRtGetNumCompiledResultCalls,
                    result.get_compiled_result_num_calls);
-  RESOLVE_API_FUNC(kLiteRtCompilerPluginSetFlags, result.set_flags);
 
   return kLiteRtStatusOk;
 }
@@ -210,7 +211,8 @@ void SortPlugins(std::vector<CompilerPlugin>& compiler_plugins) {
 }  // namespace
 
 Expected<CompilerPlugin> CompilerPlugin::LoadPlugin(
-    const absl::string_view lib_path) {
+    const absl::string_view lib_path, LiteRtEnvironmentOptions env,
+    LiteRtOptions options) {
   CompilerPlugin plugin;
   LITERT_LOG(LITERT_INFO, "Loading plugin at: %s", lib_path.data());
 
@@ -222,8 +224,8 @@ Expected<CompilerPlugin> CompilerPlugin::LoadPlugin(
   LITERT_RETURN_IF_ERROR(ResolvePluginApi(plugin.lib_, plugin.plugin_api_));
   LITERT_LOG(LITERT_INFO, "Resolved plugin api at: %s", lib_path.data());
 
-  LITERT_RETURN_IF_ERROR(
-      plugin.plugin_api_.create_compiler_plugin(&plugin.plugin_handle_));
+  LITERT_RETURN_IF_ERROR(plugin.plugin_api_.create_compiler_plugin(
+      &plugin.plugin_handle_, env, options));
   LITERT_LOG(LITERT_INFO, "Initialize plugin at: %s", lib_path.data());
 
   auto api_version = plugin.ApiVersion();
@@ -247,7 +249,8 @@ Expected<CompilerPlugin> CompilerPlugin::LoadPlugin(
 }
 
 Expected<std::vector<CompilerPlugin>> CompilerPlugin::LoadPlugins(
-    absl::Span<const absl::string_view> lib_search_paths) {
+    absl::Span<const absl::string_view> lib_search_paths,
+    LiteRtEnvironmentOptions env, LiteRtOptions options) {
   std::vector<std::string> plugin_lib_paths;
   for (auto search_path : lib_search_paths) {
     // Skip paths that are not valid.
@@ -262,7 +265,7 @@ Expected<std::vector<CompilerPlugin>> CompilerPlugin::LoadPlugins(
 
   for (const auto& lib_path : plugin_lib_paths) {
     LITERT_LOG(LITERT_INFO, "Loading plugin at: %s", lib_path.c_str());
-    auto plugin = LoadPlugin(lib_path);
+    auto plugin = LoadPlugin(lib_path, env, options);
     if (!plugin.HasValue()) {
       continue;
     }
@@ -384,7 +387,7 @@ Expected<PartitionResult> PartitionModel(
   //
   // There are two cases to consider:
   // 1. The composite op is an "odml.npu_call", in which case it represents a
-  // parition which was explictly requested by the model author.
+  // partition which was explicitly requested by the model author.
   //
   // In this case, the the composite itself is always selected, regardless of
   // whether the plugin selects it. Its subgraph is not passed to the partition
@@ -414,8 +417,8 @@ Expected<PartitionResult> PartitionModel(
   // subgraphs passed to the plugin and pass on auto-selected npu_call
   // partitions.
   absl::flat_hash_set<uint32_t> decomp_subgraphs;
-  std::vector<CompositeOptions> npu_calls;
-  const auto input_num_sgs = model.NumSubgraphs();
+  auto input_num_sgs = model.NumSubgraphs();
+  std::vector<size_t> selected_composite_subgraph_indexes;
 
   ForEachIr(&model, [&](LiteRtOp op) {
     auto info = GetOptionsAs<CompositeOptions>(op);
@@ -423,9 +426,6 @@ Expected<PartitionResult> PartitionModel(
       return;
     }
     decomp_subgraphs.insert(info->subgraph);
-    if (info->name == CompositeOptions::kNpuCall) {
-      npu_calls.push_back(std::move(*info));
-    }
   });
 
   // Build partition result via calling plugin on non-decomposition subgraphs.
@@ -445,6 +445,18 @@ Expected<PartitionResult> PartitionModel(
     if (!selected_ops) {
       return selected_ops.Error();
     }
+    // Record all decomposition subgraph indexes, where its compositie op will
+    // be compiled without relying on the decomposition body.
+    for (auto& op : *selected_ops) {
+      auto info = GetOptionsAs<CompositeOptions>(op.first);
+      if (!info) {
+        continue;
+      }
+      if (info->name == CompositeOptions::kNpuCall) {
+        continue;
+      }
+      selected_composite_subgraph_indexes.push_back(info->subgraph);
+    }
     auto num_selected_ops = selected_ops->size();
     auto num_ops = subgraph->Ops().size();
 
@@ -458,6 +470,25 @@ Expected<PartitionResult> PartitionModel(
                i, num_selected_ops, num_ops, num_partitions);
   }
   ABSL_DCHECK_EQ(dispatch_ops.size(), model.NumSubgraphs() - input_num_sgs);
+
+  // Update input_num_sgs to account for removed decomposition subgraphs.
+  input_num_sgs -= selected_composite_subgraph_indexes.size();
+  // Remove all decomposition subgraphs from the model.
+  model.Yank(std::move(selected_composite_subgraph_indexes));
+
+  // Collect all npu_call ops, and their decomposition subgraphs indexes.
+  // Note:  we do this after partitioning and removing decomposition subgraphs,
+  // so subgraph indexes of npu_calls are also updated.
+  std::vector<CompositeOptions> npu_calls;
+  ForEachIr(&model, [&](LiteRtOp op) {
+    auto info = GetOptionsAs<CompositeOptions>(op);
+    if (!info) {
+      return;
+    }
+    if (info->name == CompositeOptions::kNpuCall) {
+      npu_calls.push_back(std::move(*info));
+    }
+  });
 
   // Add collect all the subgraphs to be compiled. These are the bodies of
   // outlined partitions or npu_calls.
@@ -586,7 +617,7 @@ Expected<void> ApplyPlugin(
 }
 
 Expected<ApplyPluginsResult> ApplyPlugins(
-    LiteRtEnvironment environment, LiteRtModel model,
+    LiteRtEnvironment environment, LiteRtOptions options, LiteRtModel model,
     LiteRtHwAcceleratorSet selected_hw_accelerators, bool* mutated) {
   auto option =
       environment->GetOption(kLiteRtEnvOptionTagCompilerPluginLibraryDir);
@@ -600,7 +631,7 @@ Expected<ApplyPluginsResult> ApplyPlugins(
       compiler_plugin_lib_search_paths = {compiler_plugin_lib_path};
 
   auto compiler_plugins = litert::internal::CompilerPlugin::LoadPlugins(
-      compiler_plugin_lib_search_paths);
+      compiler_plugin_lib_search_paths, &environment->GetOptions(), options);
   if (!compiler_plugins) {
     return compiler_plugins.Error();
   }

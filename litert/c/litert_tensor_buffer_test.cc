@@ -19,7 +19,6 @@
 
 #include <gtest/gtest.h>  // NOLINT: Need when ANDROID_API_LEVEL >= 26
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_event.h"
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_layout.h"
@@ -63,7 +62,7 @@ TEST(TensorBuffer, HostMemory) {
   ASSERT_EQ(tensor_type.element_type, kLiteRtElementTypeFloat32);
   ASSERT_EQ(tensor_type.layout.rank, 1);
   ASSERT_EQ(tensor_type.layout.dimensions[0], kTensorType.layout.dimensions[0]);
-  ASSERT_EQ(tensor_type.layout.strides, nullptr);
+  ASSERT_EQ(tensor_type.layout.has_strides, false);
 
   size_t size;
   ASSERT_EQ(LiteRtGetTensorBufferSize(tensor_buffer, &size), kLiteRtStatusOk);
@@ -113,7 +112,7 @@ TEST(TensorBuffer, Ahwb) {
   ASSERT_EQ(tensor_type.element_type, kLiteRtElementTypeFloat32);
   ASSERT_EQ(tensor_type.layout.rank, 1);
   ASSERT_EQ(tensor_type.layout.dimensions[0], kTensorType.layout.dimensions[0]);
-  ASSERT_EQ(tensor_type.layout.strides, nullptr);
+  ASSERT_EQ(tensor_type.layout.has_strides, false);
 
   size_t size;
   ASSERT_EQ(LiteRtGetTensorBufferSize(tensor_buffer, &size), kLiteRtStatusOk);
@@ -163,7 +162,7 @@ TEST(TensorBuffer, Ion) {
   ASSERT_EQ(tensor_type.element_type, kLiteRtElementTypeFloat32);
   ASSERT_EQ(tensor_type.layout.rank, 1);
   ASSERT_EQ(tensor_type.layout.dimensions[0], kTensorType.layout.dimensions[0]);
-  ASSERT_EQ(tensor_type.layout.strides, nullptr);
+  ASSERT_EQ(tensor_type.layout.has_strides, false);
 
   size_t size;
   ASSERT_EQ(LiteRtGetTensorBufferSize(tensor_buffer, &size), kLiteRtStatusOk);
@@ -214,7 +213,7 @@ TEST(TensorBuffer, DmaBuf) {
   ASSERT_EQ(tensor_type.element_type, kLiteRtElementTypeFloat32);
   ASSERT_EQ(tensor_type.layout.rank, 1);
   ASSERT_EQ(tensor_type.layout.dimensions[0], kTensorType.layout.dimensions[0]);
-  ASSERT_EQ(tensor_type.layout.strides, nullptr);
+  ASSERT_EQ(tensor_type.layout.has_strides, false);
 
   size_t size;
   ASSERT_EQ(LiteRtGetTensorBufferSize(tensor_buffer, &size), kLiteRtStatusOk);
@@ -265,7 +264,7 @@ TEST(TensorBuffer, FastRpc) {
   ASSERT_EQ(tensor_type.element_type, kLiteRtElementTypeFloat32);
   ASSERT_EQ(tensor_type.layout.rank, 1);
   ASSERT_EQ(tensor_type.layout.dimensions[0], kTensorType.layout.dimensions[0]);
-  ASSERT_EQ(tensor_type.layout.strides, nullptr);
+  ASSERT_EQ(tensor_type.layout.has_strides, false);
 
   size_t size;
   ASSERT_EQ(LiteRtGetTensorBufferSize(tensor_buffer, &size), kLiteRtStatusOk);
@@ -357,7 +356,7 @@ TEST(TensorBuffer, OpenCL) {
   ASSERT_EQ(tensor_type.element_type, kLiteRtElementTypeFloat32);
   ASSERT_EQ(tensor_type.layout.rank, 1);
   ASSERT_EQ(tensor_type.layout.dimensions[0], kTensorType.layout.dimensions[0]);
-  ASSERT_EQ(tensor_type.layout.strides, nullptr);
+  ASSERT_EQ(tensor_type.layout.has_strides, false);
 
   size_t size;
   ASSERT_EQ(LiteRtGetTensorBufferSize(tensor_buffer, &size), kLiteRtStatusOk);
@@ -413,7 +412,7 @@ TEST(TensorBuffer, GlBuffer) {
   ASSERT_EQ(tensor_type.element_type, kLiteRtElementTypeFloat32);
   ASSERT_EQ(tensor_type.layout.rank, 1);
   ASSERT_EQ(tensor_type.layout.dimensions[0], kTensorType.layout.dimensions[0]);
-  ASSERT_EQ(tensor_type.layout.strides, nullptr);
+  ASSERT_EQ(tensor_type.layout.has_strides, false);
 
   size_t size;
   ASSERT_EQ(LiteRtGetTensorBufferSize(tensor_buffer, &size), kLiteRtStatusOk);

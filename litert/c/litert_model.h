@@ -22,36 +22,11 @@
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_layout.h"
 #include "litert/c/litert_op_code.h"
-#include "tflite/core/c/c_api_types.h"  // from @org_tensorflow
+#include "tflite/core/c/c_api_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
-
-//
-// Handles + Common
-//
-
-// Constant data behind a tensor stored in the model.
-LITERT_DEFINE_HANDLE(LiteRtWeights);
-
-// Values/edges of the model's graph.
-LITERT_DEFINE_HANDLE(LiteRtTensor);
-
-// Operations/nodes of the model's graph.
-LITERT_DEFINE_HANDLE(LiteRtOp);
-
-// Fundamental block of program, i.e. a function body.
-LITERT_DEFINE_HANDLE(LiteRtSubgraph);
-
-// Signature of the model.
-LITERT_DEFINE_HANDLE(LiteRtSignature);
-
-// A collection of subgraph + metadata + signature.
-LITERT_DEFINE_HANDLE(LiteRtModel);
-
-// Append only list of ops.
-LITERT_DEFINE_HANDLE(LiteRtOpList);
 
 //
 // LiteRtTensor + Types

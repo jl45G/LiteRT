@@ -19,10 +19,6 @@ cc_library(
         "@org_tensorflow//tensorflow:android": ["-llog"],
         "//conditions:default": [],
     }),
-    tags = [
-        # Don't build/test in OS until qnn is available.
-        "nobuilder",
-    ],
     deps = [
         "//litert/vendors/qualcomm/core:common",
     ],
@@ -32,10 +28,6 @@ cc_library(
     name = "miscs",
     srcs = ["miscs.cc"],
     hdrs = ["miscs.h"],
-    tags = [
-        # Don't build/test in OS until qnn is available.
-        "nobuilder",
-    ],
     deps = [
         "@com_google_absl//absl/types:span",
     ],
@@ -46,22 +38,12 @@ cc_test(
     srcs = [
         "utils_test.cc",
     ],
-    tags = [
-        # Tests with ungrte deps do not currently work on forge.
-        "no-remote-exec",
-        "notap",
-        # Don't build/test in OS until qnn is available.
-        "nobuilder",
-        "no_oss",
-        # Sanitizer runtime doesn't work with anything that loads libQnnHtp.so.
-        "nosan",
-    ],
     deps = [
         ":log",
         ":miscs",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/types:span",
         "//litert/vendors/qualcomm/core:common",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

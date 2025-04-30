@@ -15,11 +15,7 @@
 #ifndef ODML_LITERT_LITERT_C_LITERT_ACCELERATOR_REGISTRATION_H_
 #define ODML_LITERT_LITERT_C_LITERT_ACCELERATOR_REGISTRATION_H_
 
-#include "litert/c/litert_accelerator.h"
-#include "litert/c/litert_accelerator_compilation_options.h"
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_environment.h"
-#include "litert/c/litert_metrics.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -76,7 +72,7 @@ LiteRtStatus LiteRtSetAcceleratorGetHardwareSupport(
 LiteRtStatus LiteRtSetDelegateFunction(
     LiteRtAccelerator accelerator,
     LiteRtStatus (*CreateDelegate)(LiteRtAccelerator accelerator,
-                                   LiteRtAcceleratorCompilationOptions options,
+                                   LiteRtOpaqueOptions options,
                                    void** delegate),
     void (*DestroyDelegate)(void* delegate));
 

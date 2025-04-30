@@ -10,12 +10,20 @@ cc_library(
     name = "htp_device_config",
     srcs = ["htp_device_config.cc"],
     hdrs = ["htp_device_config.h"],
-    tags = [
-        # Don't build/test in OS until qnn is available.
-        "nobuilder",
-    ],
     deps = [
         "//litert/vendors/qualcomm/core/schema:soc_table",
-        # copybara:uncomment "//third_party/qairt/latest:qnn_lib_headers",
+        "//third_party/qairt/latest:qnn_lib_headers",
+    ],
+)
+
+cc_library(
+    name = "htp_perf_control",
+    srcs = ["htp_perf_control.cc"],
+    hdrs = ["htp_perf_control.h"],
+    deps = [
+        "//litert/vendors/qualcomm/core:common",
+        "//litert/vendors/qualcomm/core/utils:log",
+        "//third_party/qairt/latest:qnn_lib_headers",
+        "@com_google_absl//absl/base:core_headers",
     ],
 )

@@ -1,0 +1,8 @@
+// Demonstrate how to download a model using gradle.
+tasks.register('downloadDeeplab', Download) {
+    src 'https://storage.googleapis.com/ai-edge/interpreter-samples/image_segmentation/android/deeplab_v3.tflite'
+    dest project.ext.ASSET_DIR + '/deeplab_v3.tflite'
+    overwrite false
+}
+
+preBuild.dependsOn downloadDeeplab

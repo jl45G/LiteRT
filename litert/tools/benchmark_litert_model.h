@@ -15,6 +15,7 @@ limitations under the License.
 #ifndef ODML_LITERT_LITERT_TOOLS_BENCHMARK_LITERT_MODEL_H_
 #define ODML_LITERT_LITERT_TOOLS_BENCHMARK_LITERT_MODEL_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <ios>
@@ -30,14 +31,15 @@ limitations under the License.
 #include "litert/c/litert_logging.h"
 #include "litert/cc/litert_compiled_model.h"
 #include "litert/cc/litert_environment.h"
+#include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_tensor_buffer.h"
-#include "tflite/c/c_api_types.h"  // from @org_tensorflow
-#include "tflite/c/common.h"  // from @org_tensorflow
-#include "tflite/tools/benchmark/benchmark_model.h"  // from @org_tensorflow
-#include "tflite/tools/benchmark/benchmark_params.h"  // from @org_tensorflow
-#include "tflite/tools/command_line_flags.h"  // from @org_tensorflow
-#include "tflite/tools/utils.h"  // from @org_tensorflow
+#include "tflite/c/c_api_types.h"
+#include "tflite/c/common.h"
+#include "tflite/tools/benchmark/benchmark_model.h"
+#include "tflite/tools/benchmark/benchmark_params.h"
+#include "tflite/tools/command_line_flags.h"
+#include "tflite/tools/utils.h"
 
 namespace litert {
 namespace benchmark {
@@ -103,7 +105,9 @@ class BenchmarkLiteRtModel : public BenchmarkModel {
     }
     auto signature = params_.Get<std::string>("signature_to_run_for");
     if (signature.empty()) {
-      signature = model_->GetSignature(0)->Key();
+      LITERT_ASSIGN_OR_RETURN(const auto sig, model_->GetSignature(0),
+                              kTfLiteError);
+      signature = sig.Key();
     }
     if (compiled_model_->Run(signature, *input_buffers_, *output_buffers_)) {
       return kTfLiteOk;
@@ -116,7 +120,8 @@ class BenchmarkLiteRtModel : public BenchmarkModel {
   uint64_t ComputeInputBytes() override {
     uint64_t total_bytes = 0;
     for (const auto& buffer : *input_buffers_) {
-      total_bytes += *buffer.Size();
+      LITERT_ASSIGN_OR_ABORT(const size_t buffer_bytes, buffer.Size());
+      total_bytes += buffer_bytes;
     }
     return total_bytes;
   }
@@ -125,11 +130,13 @@ class BenchmarkLiteRtModel : public BenchmarkModel {
                                          std::string name) {
     float low_range = 0;
     float high_range = 0;
+    LITERT_ASSIGN_OR_ABORT(const auto t_tensor_type, t.TensorType());
+    LITERT_ASSIGN_OR_ABORT(const size_t t_size, t.Size());
     tflite::utils::GetDataRangesForType(
-        static_cast<TfLiteType>(t.TensorType()->ElementType()), &low_range,
+        static_cast<TfLiteType>(t_tensor_type.ElementType()), &low_range,
         &high_range);
     return tflite::utils::CreateRandomTensorData(
-        name, static_cast<TfLiteType>(t.TensorType()->ElementType()), *t.Size(),
+        name, static_cast<TfLiteType>(t_tensor_type.ElementType()), t_size,
         low_range, high_range);
   }
 
@@ -158,7 +165,7 @@ class BenchmarkLiteRtModel : public BenchmarkModel {
         "use_gpu", &params_, "Whether to use GPU accelerator."));
     flags.push_back(tflite::benchmark::CreateFlag<bool>(
         "use_npu", &params_, "Whether to use NPU accelerator."));
-    flags.push_back(tflite::benchmark::CreateFlag<bool>(
+    flags.push_back(tflite::benchmark::CreateFlag<std::string>(
         "qnn_dispatch_library_path", &params_, "QNN dispatch library path."));
     flags.push_back(tflite::benchmark::CreateFlag<bool>(
         "require_full_delegation", &params_,

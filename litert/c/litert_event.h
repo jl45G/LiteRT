@@ -27,14 +27,16 @@ extern "C" {
 
 // Forward declaration of OpenCL event to avoid including OpenCL headers.
 typedef struct _cl_event* cl_event;
-
-LITERT_DEFINE_HANDLE(LiteRtEvent);
+typedef void* EGLSyncKHR;
 
 LiteRtStatus LiteRtCreateEventFromSyncFenceFd(int sync_fence_fd, bool owns_fd,
                                               LiteRtEvent* event);
 
 LiteRtStatus LiteRtCreateEventFromOpenClEvent(cl_event cl_event,
                                               LiteRtEvent* event);
+
+LiteRtStatus LiteRtCreateEventFromEglSyncFence(EGLSyncKHR egl_sync,
+                                               LiteRtEvent* event);
 
 LiteRtStatus LiteRtCreateManagedEvent(LiteRtEventType type, LiteRtEvent* event);
 
@@ -44,11 +46,19 @@ LiteRtStatus LiteRtGetEventSyncFenceFd(LiteRtEvent event, int* sync_fence_fd);
 
 LiteRtStatus LiteRtGetEventOpenClEvent(LiteRtEvent event, cl_event* cl_event);
 
+LiteRtStatus LiteRtGetEventEglSync(LiteRtEvent event, EGLSyncKHR* egl_sync);
+
 // Pass -1 for timeout_in_ms for indefinite wait.
-LiteRtStatus LiteRtEventWait(LiteRtEvent event, int64_t timeout_in_ms);
+LiteRtStatus LiteRtWaitEvent(LiteRtEvent event, int64_t timeout_in_ms);
 
 // Signal the event to notify the waiters.
-LiteRtStatus LiteRtEventSignal(LiteRtEvent event);
+LiteRtStatus LiteRtSignalEvent(LiteRtEvent event);
+
+// Return true if the event is signaled.
+LiteRtStatus LiteRtIsEventSignaled(LiteRtEvent event, bool* is_signaled);
+
+// Returns a dup of the event's sync fence fd.
+LiteRtStatus LiteRtDupFdEvent(LiteRtEvent event, int* dup_fd);
 
 void LiteRtDestroyEvent(LiteRtEvent event);
 

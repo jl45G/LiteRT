@@ -26,8 +26,30 @@ _SHARED_LIB_SUFFIX = "_so"
 def make_linkopt(opt):
     return "-Wl,{}".format(opt)
 
+def to_path(label, get_parent = False):
+    path = label.removeprefix("//").replace(":", "/")
+    if not get_parent:
+        return path
+    return path[:path.rfind("/")]
+
 def make_rpaths(rpaths):
-    return make_linkopt("-rpath={}".format(":".join(rpaths)))
+    paths = []
+    for rp in rpaths:
+        if rp.startswith("@"):
+            # Handle repository paths (E.g. @repo_name//:target/file.txt), relavant in OSS.
+            repo_name, repo_targ = rp.removeprefix("@").split("//")
+            pref = "//external/{}".format(repo_name)
+            if repo_targ.startswith(":"):
+                repo_path = pref + repo_targ
+            else:
+                repo_path = pref + "/" + repo_targ
+            paths.append(to_path(repo_path, get_parent = True))
+        elif ":" in rp:
+            paths.append(to_path(rp, get_parent = True))
+        else:
+            paths.append(rp)
+
+    return make_linkopt("-rpath={}".format(":".join(paths)))
 
 def append_rule_kwargs(rule_kwargs, **append):
     for k, v in append.items():
@@ -166,14 +188,21 @@ def _litert_base(
       ungrte: Whether to link against system libraries ("ungrte").
       **cc_rule_kwargs: Keyword arguments to pass to the underlying rule.
     """
+
     if ungrte:
         append_rule_kwargs(
             cc_rule_kwargs,
             linkopts = select({
                 "@org_tensorflow//tensorflow:linux_x86_64": [_SYS_ELF_INTERPRETER_LINKOPT_X86_64, _SYS_RPATHS_LINKOPT_X86_64],
                 "//conditions:default": [],
-            }),
+            }) + ["-Wl,--disable-new-dtags"],
         )
+    else:
+        append_rule_kwargs(
+            cc_rule_kwargs,
+            linkopts = ["-Wl,--disable-new-dtags"],
+        )
+
     rule(**cc_rule_kwargs)
 
 # Public
@@ -322,7 +351,7 @@ def copy_file(name, src, target, visibility = None):
 
 def gtest_main_no_heapcheck_deps():
     # copybara:uncomment_begin(google-only)
-    # return ["@com_google_googletest//:gtest_main"]
+    # return ["@com_google_googletest//:gtest_main_no_heapcheck"]
     # copybara:uncomment_end
     # copybara:comment_begin(oss-only)
     return ["@com_google_googletest//:gtest_main"]

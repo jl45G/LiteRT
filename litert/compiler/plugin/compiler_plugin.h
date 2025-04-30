@@ -32,7 +32,6 @@
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_shared_library.h"
-#include "litert/compiler/plugin/compiler_flags.h"
 #include "litert/core/model/model.h"
 #include "litert/vendors/c/litert_compiler_plugin.h"
 #include "litert/vendors/c/litert_compiler_plugin_api.h"
@@ -118,12 +117,8 @@ class CompilerPlugin {
   // be successfully loaded. Additionally initializes the compiler plugin
   // instances and stores handle.
   static Expected<std::vector<CompilerPlugin>> LoadPlugins(
-      absl::Span<const absl::string_view> lib_search_paths);
-
-  // Set compiler flags within the plugin.
-  LiteRtStatus SetFlags(const CompilerFlags& flags) {
-    return flags.SetPluginFlags(plugin_handle_, plugin_api_.set_flags);
-  }
+      absl::Span<const absl::string_view> lib_search_paths,
+      LiteRtEnvironmentOptions env = nullptr, LiteRtOptions options = nullptr);
 
   CompilerPlugin(CompilerPlugin&& other);
   CompilerPlugin& operator=(CompilerPlugin&& other);
@@ -135,7 +130,9 @@ class CompilerPlugin {
   ~CompilerPlugin();
 
  private:
-  static Expected<CompilerPlugin> LoadPlugin(absl::string_view lib_path);
+  static Expected<CompilerPlugin> LoadPlugin(absl::string_view lib_path,
+                                             LiteRtEnvironmentOptions env,
+                                             LiteRtOptions options);
   CompilerPlugin() = default;
 
   std::vector<std::string> soc_models_;
@@ -195,7 +192,7 @@ struct ApplyPluginsResult {
 };
 
 Expected<ApplyPluginsResult> ApplyPlugins(
-    LiteRtEnvironment environment, LiteRtModel model,
+    LiteRtEnvironment environment, LiteRtOptions options, LiteRtModel model,
     LiteRtHwAcceleratorSet selected_hw_accelerators, bool* mutated = nullptr);
 
 }  // namespace litert::internal
