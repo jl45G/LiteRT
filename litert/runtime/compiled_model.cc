@@ -19,39 +19,32 @@
 #include <cstring>
 #include <iterator>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include "absl/cleanup/cleanup.h"  // from @com_google_absl
-#include "absl/strings/match.h"  // from @com_google_absl
-#include "litert/c/litert_accelerator.h"
-#include "litert/c/litert_opaque_options.h"
-#include "litert/cc/litert_event.h"
-#include "litert/cc/litert_handle.h"
-#include "litert/cc/litert_macros.h"
-#include "litert/cc/litert_model.h"
-#include "litert/core/util/flatbuffer_tools.h"
-#include "litert/runtime/accelerator.h"
-#include "litert/runtime/accelerator_model_compilation_data.h"
-#include "litert/runtime/metrics.h"
 
 #if defined(__ANDROID__)
 #include <android/hardware_buffer.h>
 #endif
 
+#include "absl/cleanup/cleanup.h"  // from @com_google_absl
+#include "absl/strings/match.h"  // from @com_google_absl
 #include "absl/strings/str_cat.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
+#include "litert/c/litert_accelerator.h"
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_model.h"
+#include "litert/c/litert_opaque_options.h"
 #include "litert/c/litert_options.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
 #include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_buffer_ref.h"
+#include "litert/cc/litert_event.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/litert_handle.h"
+#include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
 #include "litert/compiler/plugin/compiler_plugin.h"
@@ -59,7 +52,12 @@
 #include "litert/core/model/model.h"
 #include "litert/core/model/model_serialize.h"
 #include "litert/core/options.h"
+#include "litert/core/util/flatbuffer_tools.h"
+#include "litert/runtime/accelerator.h"
+#include "litert/runtime/accelerator_model_compilation_data.h"
+#include "litert/runtime/custom_op_dispatcher.h"
 #include "litert/runtime/external_litert_buffer_context.h"
+#include "litert/runtime/metrics.h"
 #include "litert/runtime/tensor_buffer.h"
 #include "tensorflow/compiler/mlir/lite/allocation.h"
 #include "tflite/builtin_ops.h"
@@ -69,18 +67,29 @@
 #include "tflite/interpreter.h"
 #include "tflite/kernels/register.h"
 #include "tflite/model_builder.h"
-#include "tflite/stderr_reporter.h"
 
 using litert::Error;
 using litert::Expected;
-using litert::OwningBufferRef;
 using litert::TensorBuffer;
 using litert::Unexpected;
 using litert::internal::ExternalLiteRtBufferContext;
 using litert::internal::SerializeModel;
 
-Expected<void> LiteRtCompiledModelT::InitializeRuntime() {
-  tflite::ops::builtin::BuiltinOpResolver resolver;
+Expected<void> LiteRtCompiledModelT::InitializeRuntime(
+    LiteRtOptions jit_compilation_options) {
+  tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates resolver;
+
+  // Apply custom ops.
+  if (jit_compilation_options) {
+    for (auto& option : jit_compilation_options->custom_op_options) {
+      custom_op_dispatchers_.push_back(
+          std::make_unique<litert::internal::CustomOpDispatcher>(option));
+      auto* tflite_registration =
+          custom_op_dispatchers_.back()->GetTfLiteRegistration();
+      resolver.AddCustom(option.op_name.c_str(), tflite_registration);
+    }
+  }
+
   tflite::InterpreterBuilder(*fb_model_, resolver)(&interp_);
   if (interp_ == nullptr) {
     return Unexpected(kLiteRtStatusErrorRuntimeFailure,
@@ -222,7 +231,8 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
   LITERT_RETURN_IF_ERROR(
       compiled_model->InitializeModel(*model, hardware_accelerators, *env));
 
-  LITERT_RETURN_IF_ERROR(compiled_model->InitializeRuntime());
+  LITERT_RETURN_IF_ERROR(
+      compiled_model->InitializeRuntime(jit_compilation_options));
   if (compiled_model->GetModelBase() == nullptr) {
     return Error(kLiteRtStatusErrorRuntimeFailure,
                  "Failed to initialize model memory.");

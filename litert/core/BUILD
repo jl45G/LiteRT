@@ -25,6 +25,7 @@ cc_library(
     name = "options",
     hdrs = [
         "options.h",
+        "//litert/c:litert_custom_op_kernel.h",
         "//litert/c:litert_options.h",
     ],
     deps = [
@@ -41,14 +42,14 @@ cc_library(
     srcs = ["build_stamp.cc"],
     hdrs = ["build_stamp.h"],
     deps = [
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
@@ -60,12 +61,12 @@ cc_test(
     ],
     deps = [
         ":build_stamp",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_expected",
         "//litert/test:matchers",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -79,11 +80,11 @@ cc_library(
     visibility = ["//litert:litert_stable_abi_users"],
     deps = [
         ":filesystem",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
         "//litert/c:litert_logging",  # buildcleaner: keep
         "//litert/cc:litert_macros",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
@@ -113,13 +114,13 @@ cc_library(
     ],
     deps = [
         ":environment_options",
-        "@com_google_absl//absl/types:span",
         "//litert/c:litert_any",
         "//litert/c:litert_common",
         "//litert/c:litert_environment_options",
         "//litert/c:litert_logging",
         "//litert/cc:litert_expected",
         "//litert/runtime:accelerator_registry",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -140,11 +141,11 @@ cc_test(
     srcs = ["environment_options_test.cc"],
     deps = [
         ":environment_options",
-        "@com_google_googletest//:gtest_main",
         "//litert/c:litert_any",
         "//litert/c:litert_common",
         "//litert/c:litert_environment_options",
         "//litert/test:matchers",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -153,9 +154,10 @@ cc_test(
     srcs = ["environment_test.cc"],
     deps = [
         ":environment",
-        "@com_google_googletest//:gtest_main",
         "//litert/c:litert_any",
         "//litert/cc:litert_any",
+        "//litert/test:matchers",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -164,13 +166,13 @@ cc_library_with_testonly_vis(
     srcs = ["filesystem.cc"],
     hdrs = ["filesystem.h"],
     deps = [
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_detail",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
@@ -180,8 +182,8 @@ cc_library(
     hdrs = ["dispatch_op_schema.h"],
     copts = ["-DFLATBUFFERS_LOCALE_INDEPENDENT=0"],
     deps = [
-        "@flatbuffers//:runtime_cc",
         "//litert/cc:litert_buffer_ref",
+        "@flatbuffers//:runtime_cc",
     ],
 )
 
@@ -190,9 +192,9 @@ cc_test(
     srcs = ["filesystem_test.cc"],
     deps = [
         ":filesystem",
-        "@com_google_googletest//:gtest_main",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

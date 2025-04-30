@@ -14,8 +14,11 @@
 
 #include "litert/c/options/litert_google_tensor_options.h"
 
+#include <cstddef>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
@@ -32,7 +35,10 @@ struct LiteRtGoogleTensorOptionsT {
   bool int64_to_int32_truncation = false;
   std::string output_dir = "";
   bool dump_op_timings = false;
-  bool enable_reference = false;
+  bool enable_large_model_support = false;
+  LiteRtGoogleTensorOptionsShardingIntensity sharding_intensity =
+      kLiteRtGoogleTensorShardingIntensityMinimal;
+  std::vector<std::vector<std::string>> testing_flags = {};
 };
 
 LiteRtStatus LiteRtGoogleTensorOptionsCreate(LiteRtOpaqueOptions* options) {
@@ -160,23 +166,90 @@ LiteRtStatus LiteRtGoogleTensorOptionsGetDumpOpTimings(
   return kLiteRtStatusOk;
 }
 
-// enable_reference ------------------------------------------------------------
-
-LiteRtStatus LiteRtGoogleTensorOptionsSetEnableReference(
-    LiteRtGoogleTensorOptions options, bool enable_reference) {
+// enable_large_model_support --------------------------------------------------
+LiteRtStatus LiteRtGoogleTensorOptionsSetEnableLargeModelSupport(
+    LiteRtGoogleTensorOptions options, bool enable_large_model_support) {
   if (options == nullptr) {
     return kLiteRtStatusErrorInvalidArgument;
   }
-  options->enable_reference = enable_reference;
+  options->enable_large_model_support = enable_large_model_support;
   return kLiteRtStatusOk;
 }
 
-LiteRtStatus LiteRtGoogleTensorOptionsGetEnableReference(
-    LiteRtGoogleTensorOptions options, bool* enable_reference) {
-  if (options == nullptr || enable_reference == nullptr) {
+LiteRtStatus LiteRtGoogleTensorOptionsGetEnableLargeModelSupport(
+    LiteRtGoogleTensorOptions options, bool* enable_large_model_support) {
+  if (options == nullptr || enable_large_model_support == nullptr) {
     return kLiteRtStatusErrorInvalidArgument;
   }
-  *enable_reference = options->enable_reference;
+  *enable_large_model_support = options->enable_large_model_support;
+  return kLiteRtStatusOk;
+}
+
+// sharding intensity ----------------------------------------------------------
+LiteRtStatus LiteRtGoogleTensorOptionsSetShardingIntensity(
+    LiteRtGoogleTensorOptions options,
+    LiteRtGoogleTensorOptionsShardingIntensity sharding_intensity) {
+  if (options == nullptr) {
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+  options->sharding_intensity = sharding_intensity;
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus LiteRtGoogleTensorOptionsGetShardingIntensity(
+    LiteRtGoogleTensorOptions options,
+    LiteRtGoogleTensorOptionsShardingIntensity* sharding_intensity) {
+  if (options == nullptr || sharding_intensity == nullptr) {
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+  *sharding_intensity = options->sharding_intensity;
+  return kLiteRtStatusOk;
+}
+
+// testing flags ---------------------------------------------------------------
+LiteRtStatus LiteRtGoogleTensorOptionsSetTestingFlags(
+    LiteRtGoogleTensorOptions options, const std::string& testing_flags) {
+  if (options == nullptr) {
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+  if (testing_flags.empty()) {
+    options->testing_flags = {};
+  }
+  std::vector<std::vector<std::string>> result;
+  std::stringstream ss(testing_flags);
+  std::string segment;
+
+  // Split the input string by ',' to get individual "key=value" segments
+  while (std::getline(ss, segment, ',')) {
+    std::vector<std::string> currentPair;
+    size_t delimiterPos = segment.find('=');
+
+    if (delimiterPos != std::string::npos) {
+      // '=' found, split into key and value
+      std::string key = segment.substr(0, delimiterPos);
+      std::string value = segment.substr(delimiterPos + 1);
+      currentPair.push_back(key);
+      currentPair.push_back(value);
+    } else {
+      // '=' not found, consider the whole segment as the key and an
+      // empty string as the value
+      currentPair.push_back(segment);
+      currentPair.push_back("");  // Empty value
+    }
+    result.push_back(currentPair);
+  }
+  options->testing_flags = result;
+
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus LiteRtGoogleTensorOptionsGetTestingFlags(
+    LiteRtGoogleTensorOptions options,
+    std::vector<std::vector<std::string>>* testing_flags) {
+  if (options == nullptr || testing_flags == nullptr) {
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+  *testing_flags = options->testing_flags;
   return kLiteRtStatusOk;
 }
 
@@ -210,7 +283,7 @@ void GoogleTensorOptions::SetFloatTruncationType(
 }
 
 LiteRtGoogleTensorOptionsTruncationType
-GoogleTensorOptions::GetFloatTruncationType() {
+GoogleTensorOptions::GetFloatTruncationType() const {
   LiteRtGoogleTensorOptions options_data = Data();
   LiteRtGoogleTensorOptionsTruncationType truncation_type;
   internal::AssertOk(LiteRtGoogleTensorOptionsGetFloatTruncationType,
@@ -224,7 +297,7 @@ void GoogleTensorOptions::SetInt64ToInt32Truncation(
                      int64_to_int32_truncation);
 }
 
-bool GoogleTensorOptions::GetInt64ToInt32Truncation() {
+bool GoogleTensorOptions::GetInt64ToInt32Truncation() const {
   LiteRtGoogleTensorOptions options_data = Data();
   bool int64_to_int32_truncation;
   internal::AssertOk(LiteRtGoogleTensorOptionsGetInt64ToInt32Truncation,
@@ -237,7 +310,7 @@ void GoogleTensorOptions::SetOutputDir(absl::string_view output_dir) {
                      output_dir.data());
 }
 
-absl::string_view GoogleTensorOptions::GetOutputDir() {
+absl::string_view GoogleTensorOptions::GetOutputDir() const {
   LiteRtGoogleTensorOptions options_data = Data();
   const char* output_dir;
   internal::AssertOk(LiteRtGoogleTensorOptionsGetOutputDir, options_data,
@@ -250,23 +323,53 @@ void GoogleTensorOptions::SetDumpOpTimings(bool dump_op_timings) {
                      dump_op_timings);
 }
 
-bool GoogleTensorOptions::GetDumpOpTimings() {
+bool GoogleTensorOptions::GetDumpOpTimings() const {
   LiteRtGoogleTensorOptions options_data = Data();
   bool dump_op_timings;
   LiteRtGoogleTensorOptionsGetDumpOpTimings(options_data, &dump_op_timings);
   return dump_op_timings;
 }
-void GoogleTensorOptions::SetEnableReference(bool enable_reference) {
-  internal::AssertOk(LiteRtGoogleTensorOptionsSetEnableReference, Data(),
-                     enable_reference);
+
+void GoogleTensorOptions::SetEnableLargeModelSupport(
+    bool enable_large_model_support) {
+  internal::AssertOk(LiteRtGoogleTensorOptionsSetEnableLargeModelSupport,
+                     Data(), enable_large_model_support);
 }
 
-bool GoogleTensorOptions::GetEnableReference() {
+bool GoogleTensorOptions::GetEnableLargeModelSupport() const {
   LiteRtGoogleTensorOptions options_data = Data();
-  bool enable_reference;
-  internal::AssertOk(LiteRtGoogleTensorOptionsGetEnableReference, options_data,
-                     &enable_reference);
-  return enable_reference;
+  bool enable_large_model_support;
+  LiteRtGoogleTensorOptionsGetEnableLargeModelSupport(
+      options_data, &enable_large_model_support);
+  return enable_large_model_support;
+}
+
+void GoogleTensorOptions::SetShardingIntensity(
+    LiteRtGoogleTensorOptionsShardingIntensity sharding_intensity) {
+  internal::AssertOk(LiteRtGoogleTensorOptionsSetShardingIntensity, Data(),
+                     sharding_intensity);
+}
+
+LiteRtGoogleTensorOptionsShardingIntensity
+GoogleTensorOptions::GetShardingIntensity() const {
+  LiteRtGoogleTensorOptions options_data = Data();
+  LiteRtGoogleTensorOptionsShardingIntensity sharding_intensity;
+  LiteRtGoogleTensorOptionsGetShardingIntensity(options_data,
+                                                &sharding_intensity);
+  return sharding_intensity;
+}
+
+void GoogleTensorOptions::SetTestingFlags(const std::string& testing_flags) {
+  internal::AssertOk(LiteRtGoogleTensorOptionsSetTestingFlags, Data(),
+                     testing_flags);
+}
+
+std::vector<std::vector<std::string>> GoogleTensorOptions::GetTestingFlags()
+    const {
+  LiteRtGoogleTensorOptions options_data = Data();
+  std::vector<std::vector<std::string>> testing_flags;
+  LiteRtGoogleTensorOptionsGetTestingFlags(options_data, &testing_flags);
+  return testing_flags;
 }
 
 LiteRtGoogleTensorOptions GoogleTensorOptions::Data() const {
