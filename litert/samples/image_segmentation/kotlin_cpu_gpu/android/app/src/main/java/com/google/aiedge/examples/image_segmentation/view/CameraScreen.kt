@@ -170,7 +170,7 @@ fun bindCameraUseCases(
   // val preview: Preview = Preview.Builder().setTargetResolution(targetSize).build()
   val preview: Preview = Preview.Builder().build()
 
-  // preview.surfaceProvider = previewView.surfaceProvider
+  preview.setSurfaceProvider(previewView.surfaceProvider)
 
   val cameraSelector: CameraSelector =
     CameraSelector.Builder().requireLensFacing(lensFacing).build()

@@ -63,7 +63,7 @@ dependencies {
   implementation(libs.androidx.camera.view)
   implementation(libs.androidx.camera.camera2)
   implementation(libs.coil.compose)
-  implementation("androidx.compose.runtime:runtime-livedata:1.5.4")
+  implementation(libs.androidx.compose.runtime.livedata)
 
   testImplementation(libs.junit)
   androidTestImplementation(libs.androidx.junit)
