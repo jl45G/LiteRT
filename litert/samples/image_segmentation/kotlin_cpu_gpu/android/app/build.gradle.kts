@@ -36,9 +36,9 @@ android {
 }
 
 // Import DownloadModels task
-project.ext.set("ASSET_DIR", "$projectDir/src/main/assets")
+project.extensions.extraProperties["ASSET_DIR"] = "$projectDir/src/main/assets"
 
-apply(from = "download_model.gradle")
+apply(from = "download_model.gradle.kts")
 
 dependencies {
   // TODO(b/414723246): Replace with maven package.
