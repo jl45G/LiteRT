@@ -57,6 +57,10 @@ class ImageSegmentationHelper(private val context: Context) {
 
   private lateinit var model: CompiledModel
   private val coloredLabels: List<ColoredLabel> = coloredLabels()
+  
+  // Reusable input and output buffers
+  private var inputBuffers: List<com.google.ai.edge.litert.TensorBuffer>? = null
+  private var outputBuffers: List<com.google.ai.edge.litert.TensorBuffer>? = null
 
   /** Init a CompiledModel from AI Pack. */
   suspend fun initSegmenter(acceleratorEnum: AcceleratorEnum = AcceleratorEnum.CPU) {
@@ -79,9 +83,35 @@ class ImageSegmentationHelper(private val context: Context) {
         }
       model =
         CompiledModel.create(aiPackModelProvider.getPath(), CompiledModel.Options(accelerator), env)
+        
+      // Initialize reusable buffers
+      inputBuffers = model.createInputBuffers()
+      outputBuffers = model.createOutputBuffers()
+      Log.d(TAG, "Created reusable input and output buffers")
     } catch (e: Exception) {
       Log.i(TAG, "Create LiteRT from deeplab_v3 is failed ${e.message}")
       _error.emit(e)
+    }
+  }
+  
+  /**
+   * Cleanup resources when the helper is no longer needed
+   */
+  fun cleanup() {
+    try {
+      // Clean up buffers - we don't need to manually destroy tensor buffers
+      // as they're managed by the CompiledModel
+      inputBuffers = null
+      outputBuffers = null
+      
+      // Clean up model
+      if (::model.isInitialized) {
+        // The CompiledModel will handle the cleanup of tensor buffers
+        model.close()
+      }
+      Log.d(TAG, "Resources cleaned up")
+    } catch (e: Exception) {
+      Log.e(TAG, "Error during cleanup: ${e.message}")
     }
   }
 
@@ -167,7 +197,7 @@ class ImageSegmentationHelper(private val context: Context) {
   }
 
   private fun segment(inputFloatArray: FloatArray): Segmentation {
-    if (!this::model.isInitialized) {
+    if (!this::model.isInitialized || inputBuffers == null || outputBuffers == null) {
       return Segmentation(emptyList(), emptyList())
     }
 
@@ -176,16 +206,9 @@ class ImageSegmentationHelper(private val context: Context) {
     // MODEL EXECUTION PHASE
     val modelExecStartTime = SystemClock.uptimeMillis()
 
-    // Create buffers - measure time
-    val bufferCreateStartTime = SystemClock.uptimeMillis()
-    val inputBuffers = model.createInputBuffers()
-    val outputBuffers = model.createOutputBuffers()
-    val bufferCreateTime = SystemClock.uptimeMillis() - bufferCreateStartTime
-    Log.d(TAG, "Buffer creation time: $bufferCreateTime ms")
-
     // Write input data - measure time
     val bufferWriteStartTime = SystemClock.uptimeMillis()
-    inputBuffers[0].writeFloat(inputFloatArray)
+    inputBuffers!![0].writeFloat(inputFloatArray)
     val bufferWriteTime = SystemClock.uptimeMillis() - bufferWriteStartTime
     Log.d(TAG, "Buffer write time: $bufferWriteTime ms")
 
@@ -194,13 +217,13 @@ class ImageSegmentationHelper(private val context: Context) {
 
     // Run model inference - measure time
     val modelRunStartTime = SystemClock.uptimeMillis()
-    model.run(inputBuffers, outputBuffers)
+    model.run(inputBuffers!!, outputBuffers!!)
     val modelRunTime = SystemClock.uptimeMillis() - modelRunStartTime
     Log.d(TAG, "Model.run() time: $modelRunTime ms")
 
     // Read output data - measure time
     val bufferReadStartTime = SystemClock.uptimeMillis()
-    val outputFloatArray = outputBuffers.get(0).readFloat()
+    val outputFloatArray = outputBuffers!![0].readFloat()
     val outputBuffer = FloatBuffer.wrap(outputFloatArray)
     val bufferReadTime = SystemClock.uptimeMillis() - bufferReadStartTime
     Log.d(TAG, "Buffer read time: $bufferReadTime ms")

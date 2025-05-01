@@ -55,6 +55,12 @@ class MainViewModel(private val imageSegmentationHelper: ImageSegmentationHelper
   init {
     viewModelScope.launch { imageSegmentationHelper.initSegmenter() }
   }
+  
+  override fun onCleared() {
+    super.onCleared()
+    // Clean up resources when the ViewModel is cleared
+    imageSegmentationHelper.cleanup()
+  }
 
   private var segmentJob: Job? = null
 
