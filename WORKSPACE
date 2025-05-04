@@ -167,3 +167,20 @@ kotlin_repositories()  # if you want the default. Otherwise see custom kotlinc d
 load("@rules_kotlin//kotlin:core.bzl", "kt_register_toolchains")
 
 kt_register_toolchains()  # to use the default toolchain, otherwise see toolchains below
+
+# VENDOR SDKS ######################################################################################
+
+# QUALCOMM ---------------------------------------------------------------------------------------
+
+# The actual macro call will be set during configure for now.
+load("//third_party/qairt:workspace.bzl", "qairt")
+
+qairt()
+
+# MEDIATEK ---------------------------------------------------------------------------------------
+
+# TODO: Enable once mtk sdk is available.
+
+# load("//third_party/neuro_pilot:workspace.bzl", "neuro_pilot")
+
+# neuro_pilot()

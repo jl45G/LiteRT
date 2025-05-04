@@ -58,9 +58,19 @@ def parse_args() -> argparse.Namespace:
       "--src", help="single source file for the wheel", action="append"
   )
   parser.add_argument(
+      "--py_src", help="single source file for the wheel", action="append"
+  )
+  parser.add_argument(
       "--platform",
       required=True,
       help="Platform name to be passed to build module",
+  )
+  parser.add_argument(
+      "--nightly_suffix",
+      help=(
+          "Suffix to be added to the name of the wheel for nightly builds. Does"
+          " not affect the name of the module."
+      ),
   )
   return parser.parse_args()
 
@@ -71,6 +81,7 @@ def create_empty_init_files(dst_dir: str) -> None:
   for dir_name in dir_list:
     with open(os.path.join(dir_name, "__init__.py"), "w"):
       pass
+    create_empty_init_files(dir_name.path)
 
 
 def create_init_files(dst_dir: str, meta_dict: Optional[dict[str, str]] = None):
@@ -79,7 +90,7 @@ def create_init_files(dst_dir: str, meta_dict: Optional[dict[str, str]] = None):
   if meta_dict:
     with open(os.path.join(dst_dir, "__init__.py"), "w") as f:
       for key, value in meta_dict.items():
-        f.write(f"{key} = \"{value}\"\n")
+        f.write(f'{key} = "{value}"\n')
 
 
 def construct_meta_dict(args) -> dict[str, str]:
@@ -103,6 +114,13 @@ def prepare_build_tree(tree_path, args, project_name: str):
 
   for src in args.src:
     shutil.copyfile(src, os.path.join(src_dir, os.path.basename(src)))
+
+  for src in args.py_src:
+    dest = os.path.join(src_dir, src.removeprefix("litert/python/"))
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    shutil.copyfile(
+        src, os.path.join(src_dir, src.removeprefix("litert/python/"))
+    )
 
   meta_dict = construct_meta_dict(args)
 
@@ -150,6 +168,7 @@ def build_setup_py_wheel(
     output_dir: str,
     version: str,
     platform_name: Optional[str] = None,
+    nightly_suffix: Optional[str] = None,
 ):
   """Builds a python wheel from a setup.py file.
 
@@ -159,10 +178,14 @@ def build_setup_py_wheel(
     output_dir: Output directory for the wheel.
     version: Version of the wheel.
     platform_name: Platform name to be passed to build module.
+    nightly_suffix: Suffix to be added to the name of the wheel for nightly
+      builds. Does not affect the name of the module.
   """
   env = os.environ.copy()
 
-  env["PROJECT_NAME"] = project_name
+  env["PROJECT_NAME"] = (
+      project_name + nightly_suffix if nightly_suffix else project_name
+  )
   env["PACKAGE_VERSION"] = version
 
   command = [
@@ -194,4 +217,5 @@ if __name__ == "__main__":
       arg_data.output,
       arg_data.version,
       arg_data.platform,
+      arg_data.nightly_suffix if arg_data.nightly_suffix else None,
   )

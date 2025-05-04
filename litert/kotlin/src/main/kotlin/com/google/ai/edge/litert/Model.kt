@@ -1,3 +1,19 @@
+/*
+ * Copyright 2025 Google LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.ai.edge.litert
 
 import android.content.res.AssetManager
@@ -57,16 +73,38 @@ private constructor(
   fun createInputBuffer(inputName: String, signature: String? = null): TensorBuffer {
     assertNotDestroyed()
 
-    val handle = nativeCreateInputBuffer(handle, model.handle, signature, inputName)
-    return TensorBuffer(handle)
+    val tb = nativeCreateInputBuffer(handle, model.handle, signature, inputName)
+    return TensorBuffer(tb)
+  }
+
+  @Throws(LiteRtException::class)
+  fun getInputBufferRequirements(
+    inputName: String,
+    signature: String? = null,
+  ): TensorBufferRequirements {
+    assertNotDestroyed()
+
+    val tbr = nativeGetInputBufferRequirements(handle, model.handle, signature, inputName)
+    return TensorBufferRequirements(tbr)
   }
 
   @Throws(LiteRtException::class)
   fun createOutputBuffer(outputName: String, signature: String? = null): TensorBuffer {
     assertNotDestroyed()
 
-    val handle = nativeCreateOutputBuffer(handle, model.handle, signature, outputName)
-    return TensorBuffer(handle)
+    val tb = nativeCreateOutputBuffer(handle, model.handle, signature, outputName)
+    return TensorBuffer(tb)
+  }
+
+  @Throws(LiteRtException::class)
+  fun getOutputBufferRequirements(
+    outputName: String,
+    signature: String? = null,
+  ): TensorBufferRequirements {
+    assertNotDestroyed()
+
+    val tbr = nativeGetOutputBufferRequirements(handle, model.handle, signature, outputName)
+    return TensorBufferRequirements(tbr)
   }
 
   @Throws(LiteRtException::class)
@@ -246,7 +284,23 @@ private constructor(
     ): Long
 
     @JvmStatic
+    private external fun nativeGetInputBufferRequirements(
+      compiledModelHandle: Long,
+      modelHandle: Long,
+      signature: String?,
+      inputName: String,
+    ): Long
+
+    @JvmStatic
     private external fun nativeCreateOutputBuffer(
+      compiledModelHandle: Long,
+      modelHandle: Long,
+      signature: String?,
+      outputName: String,
+    ): Long
+
+    @JvmStatic
+    private external fun nativeGetOutputBufferRequirements(
       compiledModelHandle: Long,
       modelHandle: Long,
       signature: String?,

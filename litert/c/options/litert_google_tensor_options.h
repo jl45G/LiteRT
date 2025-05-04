@@ -15,6 +15,9 @@
 #ifndef THIRD_PARTY_ODML_LITERT_LITERT_C_OPTIONS_LITERT_GOOGLE_TENSOR_OPTIONS_H_
 #define THIRD_PARTY_ODML_LITERT_LITERT_C_OPTIONS_LITERT_GOOGLE_TENSOR_OPTIONS_H_
 
+#include <string>
+#include <vector>
+
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_opaque_options.h"
 #include "litert/cc/litert_opaque_options.h"
@@ -49,6 +52,13 @@ typedef enum LiteRtGoogleTensorOptionsTruncationType {
   kLiteRtGoogleTensorFloatTruncationTypeHalf = 3,
 } LiteRtGoogleTensorOptionsTruncationType;
 
+typedef enum LiteRtGoogleTensorOptionsShardingIntensity {
+  kLiteRtGoogleTensorShardingIntensityMinimal = 0,
+  kLiteRtGoogleTensorShardingIntensityModerate = 1,
+  kLiteRtGoogleTensorShardingIntensityExtensive = 2,
+  kLiteRtGoogleTensorShardingIntensityMaximum = 3,
+} LiteRtGoogleTensorOptionsShardingIntensity;
+
 LiteRtStatus LiteRtGoogleTensorOptionsSetFloatTruncationType(
     LiteRtGoogleTensorOptions options,
     LiteRtGoogleTensorOptionsTruncationType truncation_type);
@@ -81,13 +91,31 @@ LiteRtStatus LiteRtGoogleTensorOptionsSetDumpOpTimings(
 LiteRtStatus LiteRtGoogleTensorOptionsGetDumpOpTimings(
     LiteRtGoogleTensorOptions options, bool* dump_op_timings);
 
-// enable_reference ------------------------------------------------------------
+// enable_large_model_support --------------------------------------------------
 
-LiteRtStatus LiteRtGoogleTensorOptionsSetEnableReference(
-    LiteRtGoogleTensorOptions options, bool enable_reference);
+LiteRtStatus LiteRtGoogleTensorOptionsSetEnableLargeModelSupport(
+    LiteRtGoogleTensorOptions options, bool enable_large_model_support);
 
-LiteRtStatus LiteRtGoogleTensorOptionsGetEnableReference(
-    LiteRtGoogleTensorOptions options, bool* enable_reference);
+LiteRtStatus LiteRtGoogleTensorOptionsGetEnableLargeModelSupport(
+    LiteRtGoogleTensorOptions options, bool* enable_large_model_support);
+
+// sharding intensity ---------------------------------------------------------
+
+LiteRtStatus LiteRtGoogleTensorOptionsSetShardingIntensity(
+    LiteRtGoogleTensorOptions options,
+    LiteRtGoogleTensorOptionsShardingIntensity sharding_intensity);
+
+LiteRtStatus LiteRtGoogleTensorOptionsGetShardingIntensity(
+    LiteRtGoogleTensorOptions options,
+    LiteRtGoogleTensorOptionsShardingIntensity* sharding_intensity);
+
+// testing flags ---------------------------------------------------------------
+LiteRtStatus LiteRtGoogleTensorOptionsSetTestingFlags(
+    LiteRtGoogleTensorOptions options, const std::string& testing_flags);
+
+LiteRtStatus LiteRtGoogleTensorOptionsGetTestingFlags(
+    LiteRtGoogleTensorOptions options,
+    std::vector<std::vector<std::string>>* testing_flags);
 
 #ifdef __cplusplus
 }  // extern "C"
@@ -111,23 +139,32 @@ class GoogleTensorOptions : public OpaqueOptions {
   void SetFloatTruncationType(
       LiteRtGoogleTensorOptionsTruncationType truncation_type);
 
-  LiteRtGoogleTensorOptionsTruncationType GetFloatTruncationType();
+  LiteRtGoogleTensorOptionsTruncationType GetFloatTruncationType() const;
 
   void SetInt64ToInt32Truncation(bool int64_to_int32_truncation);
 
-  bool GetInt64ToInt32Truncation();
+  bool GetInt64ToInt32Truncation() const;
 
   void SetOutputDir(absl::string_view output_dir);
 
-  absl::string_view GetOutputDir();
+  absl::string_view GetOutputDir() const;
 
   void SetDumpOpTimings(bool dump_op_timings);
 
-  bool GetDumpOpTimings();
+  bool GetDumpOpTimings() const;
 
-  void SetEnableReference(bool enable_reference);
+  bool GetEnableLargeModelSupport() const;
 
-  bool GetEnableReference();
+  void SetEnableLargeModelSupport(bool enable_large_model_support);
+
+  void SetShardingIntensity(
+      LiteRtGoogleTensorOptionsShardingIntensity sharding_intensity);
+
+  LiteRtGoogleTensorOptionsShardingIntensity GetShardingIntensity() const;
+
+  std::vector<std::vector<std::string>> GetTestingFlags() const;
+
+  void SetTestingFlags(const std::string& testing_flags);
 
  private:
   LiteRtGoogleTensorOptions Data() const;

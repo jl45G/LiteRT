@@ -22,13 +22,11 @@
 extern "C" {
 #endif  // __cplusplus
 
-LITERT_DEFINE_HANDLE(LiteRtEnvironment);
-
 // Create a LiteRT environment with options.
 // Used to set the path of the compiler plugin library and dispatch library.
 //
 // Note: options of kLiteRtEnvOptionTagOpenCl* shouldn't be set with this API.
-LiteRtStatus LiteRtEnvironmentCreate(int num_options,
+LiteRtStatus LiteRtCreateEnvironment(int num_options,
                                      const LiteRtEnvOption* options,
                                      LiteRtEnvironment* environment);
 

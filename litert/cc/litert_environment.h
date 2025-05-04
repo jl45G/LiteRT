@@ -38,6 +38,8 @@ class Environment
   enum class OptionTag {
     CompilerPluginLibraryDir = kLiteRtEnvOptionTagCompilerPluginLibraryDir,
     DispatchLibraryDir = kLiteRtEnvOptionTagDispatchLibraryDir,
+    EglContext = kLiteRtEnvOptionTagEglContext,
+    EglDisplay = kLiteRtEnvOptionTagEglDisplay,
   };
 
   struct Option {
@@ -58,7 +60,7 @@ class Environment
     }
     LiteRtEnvironment env;
     if (auto status =
-            LiteRtEnvironmentCreate(c_options->size(), c_options->data(), &env);
+            LiteRtCreateEnvironment(c_options->size(), c_options->data(), &env);
         status != kLiteRtStatusOk) {
       return Error(status);
     } else {

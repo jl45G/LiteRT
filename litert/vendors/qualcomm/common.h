@@ -16,12 +16,11 @@
 #define ODML_LITERT_LITERT_VENDORS_QUALCOMM_COMMON_H_
 
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_model.h"
-#include "litert/cc/litert_model.h"
-#include "third_party/qairt/latest/include/QNN/QnnCommon.h"
-#include "third_party/qairt/latest/include/QNN/QnnInterface.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
-#include "third_party/qairt/latest/include/QNN/System/QnnSystemInterface.h"
+#include "litert/cc/litert_element_type.h"
+#include "QnnCommon.h"  // from @qairt
+#include "QnnInterface.h"  // from @qairt
+#include "QnnTypes.h"  // from @qairt
+#include "System/QnnSystemInterface.h"  // from @qairt
 
 #ifdef __cplusplus
 extern "C" {

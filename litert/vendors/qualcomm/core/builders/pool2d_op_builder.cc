@@ -13,8 +13,8 @@
 #include "litert/vendors/qualcomm/core/wrappers/op_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/quantize_params_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/tensor_wrapper.h"
-#include "third_party/qairt/latest/include/QNN/QnnOpDef.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+#include "QnnOpDef.h"  // from @qairt
+#include "QnnTypes.h"  // from @qairt
 
 namespace qnn {
 
@@ -77,7 +77,6 @@ std::vector<OpWrapper> BuildPool2dOp(
 
   TensorWrapper& output_tensor = outputs[kOutputIndex];
   pool_op.AddOutputTensor(output_tensor);
-  // TODO: fused activation
 
   return res;
 }
