@@ -24,9 +24,9 @@
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_op_code.h"
-#include "litert/c/options/litert_qualcomm_options.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_options.h"
+#include "litert/cc/options/litert_qualcomm_options.h"
 #include "litert/core/model/model.h"
 #include "litert/test/common.h"
 #include "litert/test/matchers.h"
@@ -35,7 +35,7 @@
 #include "litert/vendors/cc/litert_compiler_plugin.h"
 #include "litert/vendors/qualcomm/compiler/IR/qnn_op.h"
 #include "litert/vendors/qualcomm/compiler/legalizations/quantize_op_legalization.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+#include "QnnTypes.h"  // from @qairt
 namespace litert {
 namespace {
 
@@ -45,6 +45,17 @@ using ::testing::Values;
 // TODO: Add support and uncomment these models.
 const auto kSupportedOps =
                   Values(
+                    "simple_add_fused_relu_n1_1_op.tflite",
+                    "simple_sub_fused_relu_N1_1_op.tflite",
+                    "simple_mul_fused_relu.tflite",
+                    "simple_div_fused_tanh.tflite",
+                    "simple_average_pool_2d_fused_relu.tflite",
+                    "simple_max_pool_2d_fused_relu.tflite",
+                    "simple_concatenation_fused_relu6_op.tflite",
+                    "simple_fully_connected_fused_relu6_op.tflite",
+                    "simple_transpose_conv_fused_tanh.tflite",
+                    "simple_depthwise_conv_2d_fused_relu.tflite",
+                    "simple_conv_2d_fused_relu_op.tflite",
                     "simple_transpose_conv_op.tflite",
                     "simple_cumsum.tflite",
                     "simple_floor_div.tflite",
@@ -146,10 +157,11 @@ TEST(TestQnnPlugin, PartitionMulOps) {
   auto plugin = CreatePlugin();
   auto model = testing::LoadTestFileModel("one_mul.tflite");
 
+  LITERT_ASSERT_OK_AND_ASSIGN(auto subgraph, model.Subgraph(0));
+
   LiteRtOpListT selected_op_list;
   LITERT_ASSERT_OK(LiteRtCompilerPluginPartition(
-      plugin.get(), /*soc_model=*/nullptr, model.Subgraph(0)->Get(),
-      &selected_op_list));
+      plugin.get(), /*soc_model=*/nullptr, subgraph.Get(), &selected_op_list));
   const auto selected_ops = selected_op_list.Values();
 
   ASSERT_EQ(selected_ops.size(), 1);
@@ -359,7 +371,7 @@ TEST_P(QnnPlyginSupportedSocCompilationTest, CompileMulSubgraph) {
   auto plugin = CreatePlugin();
   auto model = testing::LoadTestFileModel("one_mul.tflite");
   auto soc_model = GetParam();
-  #ifdef __ANDROID__
+#ifdef __ANDROID__
   if (soc_model != "V75") {
     // TODO: Make this dynamic when device cloud testing has more devices.
     GTEST_SKIP() << "On device tests only support V75s.";

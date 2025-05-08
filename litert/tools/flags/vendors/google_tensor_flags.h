@@ -19,8 +19,8 @@
 
 #include "absl/flags/declare.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
-#include "litert/c/options/litert_google_tensor_options.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/options/litert_google_tensor_options.h"
 
 // COMPILATION OPTIONS /////////////////////////////////////////////////////////
 
@@ -33,7 +33,12 @@ ABSL_DECLARE_FLAG(std::string, google_tensor_output_dir);
 
 ABSL_DECLARE_FLAG(bool, google_tensor_dump_op_timings);
 
-ABSL_DECLARE_FLAG(bool, google_tensor_enable_reference);
+ABSL_DECLARE_FLAG(bool, google_tensor_enable_large_model_support);
+
+ABSL_DECLARE_FLAG(LiteRtGoogleTensorOptionsShardingIntensity,
+                  google_tensor_sharding_intensity);
+
+ABSL_DECLARE_FLAG(std::string, google_tensor_testing_flags);
 
 // PARSERS (internal) //////////////////////////////////////////////////////////
 
@@ -42,6 +47,12 @@ bool AbslParseFlag(absl::string_view text,
                    std::string* error);
 
 std::string AbslUnparseFlag(LiteRtGoogleTensorOptionsTruncationType options);
+
+bool AbslParseFlag(absl::string_view text,
+                   LiteRtGoogleTensorOptionsShardingIntensity* options,
+                   std::string* error);
+
+std::string AbslUnparseFlag(LiteRtGoogleTensorOptionsShardingIntensity options);
 
 namespace litert::google_tensor {
 

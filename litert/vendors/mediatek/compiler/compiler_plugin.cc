@@ -26,14 +26,15 @@
 #include "absl/strings/str_format.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_environment_options.h"
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_op_code.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
+#include "litert/cc/options/litert_mediatek_options.h"
 #include "litert/vendors/c/litert_compiler_plugin.h"
+#include "litert/vendors/cc/options_helper.h"
 #include "litert/vendors/mediatek/compiler/compile_model.h"
 #include "litert/vendors/mediatek/compiler/create_model.h"
 #include "litert/vendors/mediatek/compiler/legalizations/common_op_legalization.h"
@@ -87,6 +88,16 @@ constexpr LiteRtOpCode kSupportedOps[] = {
     kLiteRtOpCodeTflSoftmax,
     kLiteRtOpCodeTflMean,
     kLiteRtOpCodeTflGelu,
+    kLiteRtOpCodeTflPad,
+    kLiteRtOpCodeTflLogistic,
+    kLiteRtOpCodeTflSum,
+    kLiteRtOpCodeTflConv2d,
+    kLiteRtOpCodeTflDepthwiseConv2d,
+    kLiteRtOpCodeTflSquaredDifference,
+    kLiteRtOpCodeTflResizeBilinear,
+    kLiteRtOpCodeTflResizeNearestNeighbor,
+    kLiteRtOpCodeTflTransposeConv,
+    kLiteRtOpCodeTflMaxPool2d,
 };
 // clang-format on
 
@@ -221,26 +232,37 @@ void LiteRtDestroyCompiledResult(LiteRtCompiledResult compiled_result) {
 //
 
 // Plugins can hold state.
-struct LiteRtCompilerPluginT {
-  LiteRtEnvironmentOptions env;
-  LiteRtOptions options;
-};
+class LiteRtCompilerPluginT {
+ public:
+  using MediatekOptions = ::litert::mediatek::MediatekOptions;
 
-LiteRtStatus LiteRtCompilerPluginSetFlags(LiteRtCompilerPlugin compiler_plugin,
-                                          LiteRtParamIndex num_flags,
-                                          const char** keys,
-                                          const char** values) {
-  // IMPLEMENT ME
-  return kLiteRtStatusOk;
-}
+  LiteRtCompilerPluginT(LiteRtEnvironmentOptions env, LiteRtOptions options) {
+    std::tie(env_, opts_, opq_, mediatek_opts_) =
+        litert::ParseOptions<MediatekOptions>(env, options);
+  }
+
+  ::litert::Expected<MediatekOptions>& GetMediatekOptions() {
+    return mediatek_opts_;
+  }
+
+  ::litert::Expected<litert::OpaqueOptions>& GetOpaqueOptions() { return opq_; }
+
+ private:
+  litert::Expected<litert::EnvironmentOptions> env_ = litert::Error(
+      kLiteRtStatusErrorInvalidArgument, "Null environment options");
+  litert::Expected<litert::Options> opts_ =
+      litert::Error(kLiteRtStatusErrorInvalidArgument, "Null options");
+  litert::Expected<litert::OpaqueOptions> opq_ =
+      litert::Error(kLiteRtStatusErrorInvalidArgument, "Null opaque options");
+  litert::Expected<litert::mediatek::MediatekOptions> mediatek_opts_ =
+      litert::Error(kLiteRtStatusErrorInvalidArgument,
+                    "Null google tensor options");
+};
 
 LiteRtStatus LiteRtCreateCompilerPlugin(LiteRtCompilerPlugin* compiler_plugin,
                                         LiteRtEnvironmentOptions env,
                                         LiteRtOptions options) {
-  auto* plugin = new LiteRtCompilerPluginT;
-  plugin->env = env;
-  plugin->options = options;
-  *compiler_plugin = plugin;
+  *compiler_plugin = new LiteRtCompilerPluginT(env, options);
   return kLiteRtStatusOk;
 }
 
@@ -334,7 +356,11 @@ LiteRtStatus LiteRtCompilerPluginCompile(
                error_code);
     return kLiteRtStatusErrorFileIO;
   }
-  setenv("MTKNN_ADAPTER_DLA_PLATFORM", soc_model, 1);
+
+  // A null soc_model is passed when performing JIT compilation.
+  if (soc_model) {
+    setenv("MTKNN_ADAPTER_DLA_PLATFORM", soc_model, 1);
+  }
   setenv("MTKNN_ADAPTER_DLA_DIR", dla_directory_name, 1);
 
   auto model = litert::Model::CreateFromNonOwnedHandle(partitions);
@@ -354,9 +380,22 @@ LiteRtStatus LiteRtCompilerPluginCompile(
     return kLiteRtStatusErrorInvalidArgument;
   }
 
-  // Initialize SDK and load mediatek shared libraries.
+  // Resolve custom mediatek options.
+  LiteRtOpaqueOptions opaque_options = {};
+  if (!compiler_plugin->GetOpaqueOptions()) {
+    LITERT_LOG(LITERT_INFO,
+               "No custom mediatek options found, creating default options");
+    LITERT_ASSIGN_OR_RETURN(auto mediatek_opts,
+                            ::litert::mediatek::MediatekOptions::Create());
+    opaque_options = mediatek_opts.Release();
+  } else {
+    LITERT_LOG(LITERT_INFO, "Using custom mediatek options");
+    opaque_options = compiler_plugin->GetOpaqueOptions()->Get();
+  }
 
-  auto api = NeuronAdapterApi::Create(/*shared_library_dir=*/std::nullopt);
+  // Initialize SDK and load mediatek shared libraries.
+  auto api = NeuronAdapterApi::Create(
+      /*shared_library_dir=*/std::nullopt, opaque_options);
   if (!api) {
     rmdir(dla_directory_name);
     return api.Error().Status();
@@ -366,8 +405,9 @@ LiteRtStatus LiteRtCompilerPluginCompile(
 
   for (auto i = 0; i < num_partitions; ++i) {
     auto graph_name = absl::StrFormat("Partition_%d", i);
+    LITERT_ASSIGN_OR_RETURN(auto subgraph, model.Subgraph(i));
     auto bytecode =
-        CompilePartition(**api, *model.Subgraph(i), graph_name, opt_soc_model);
+        CompilePartition(**api, subgraph, graph_name, opt_soc_model);
     rmdir(dla_directory_name);
     if (!bytecode) {
       LITERT_LOG(LITERT_INFO, "%s", bytecode.Error().Message().c_str());

@@ -144,10 +144,28 @@ class IsOkMatcher {
 // Expected<Something> BuildSomething();
 //
 // // Will fail the test if BuildSomething()'s returned value holds an error.
-// // Note that the returned value is unused.
+// // Note that the returned value is discarded.
 // EXPECT_THAT(BuildSomething(), IsOk());
 // ```
 inline IsOkMatcher IsOk() { return IsOkMatcher(); }
+
+// Matches `litert::Expected` values that hold a value and which value matches
+// `matcher`.
+//
+// ```cpp
+// Expected<Something> BuildSomething();
+//
+// // Will fail the test if BuildSomething()'s returned value holds an error or
+// // if the value doesn't match `Eq(expected_something)`.
+// //
+// // Note that the returned value is discarded.
+// EXPECT_THAT(BuildSomething(), IsOkAndHolds(Eq(expected_something)));
+// ```
+MATCHER_P(IsOkAndHolds, matcher, "") {
+  return testing::ExplainMatchResult(testing::litert::IsOk(), arg,
+                                     result_listener) &&
+         testing::ExplainMatchResult(matcher, arg.Value(), result_listener);
+}
 
 // Matches `litert::Expected` values that hold an error and
 // `LiteRtStatusError*` values.
@@ -325,6 +343,14 @@ inline IsErrorMatcher IsError(LiteRtStatus status, std::string msg) {
 }
 
 }  // namespace testing::litert
+
+// Teaches GTest how to print LiteRtStatus enum values.
+//
+// LiteRtSTatus lives in the global namespace. We try to avoid conflict by only
+// defining this function in this file which is only pulled for tests.
+inline void PrintTo(const LiteRtStatus status, std::ostream* os) {
+  *os << LiteRtGetStatusString(status);
+}
 
 // GTest doesn't use `AbslStringify` if `GTEST_USE_ABSL` is not defined. This
 // provides a fallback implementation.

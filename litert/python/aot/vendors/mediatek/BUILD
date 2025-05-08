@@ -17,6 +17,7 @@ load("@org_tensorflow//tensorflow:pytype.default.bzl", "pytype_strict_contrib_te
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
     default_visibility = [
+        "//litert:litert_python_internal_users",
         "//litert/python:__subpackages__",
         "//third_party/py/ai_edge_torch/aot:__subpackages__",
     ],
@@ -45,9 +46,9 @@ pytype_strict_contrib_test(
     deps = [
         ":mediatek_backend",
         ":target",
-        "@absl_py//absl/testing:absltest",
         "//litert/python/aot/core:components",
         "//litert/python/aot/core:test_common",
         "//litert/python/aot/core:types",
+        "@absl_py//absl/testing:absltest",
     ],
 )

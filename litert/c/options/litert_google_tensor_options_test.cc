@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 #include "litert/c/litert_opaque_options.h"
+#include "litert/cc/options/litert_google_tensor_options.h"
 #include "litert/test/matchers.h"
 
 namespace litert::google_tensor {
@@ -115,27 +116,6 @@ TEST(LiteRtGoogleTensorOptionsTest, DumpOpTimings) {
   LiteRtDestroyOpaqueOptions(options);
 }
 
-TEST(LiteRtGoogleTensorOptionsTest, EnableReference) {
-  LiteRtOpaqueOptions options;
-  LITERT_ASSERT_OK(LiteRtGoogleTensorOptionsCreate(&options));
-
-  LiteRtGoogleTensorOptions options_data;
-  LITERT_ASSERT_OK(LiteRtGoogleTensorOptionsGet(options, &options_data));
-
-  bool enable_reference;
-  LITERT_ASSERT_OK(LiteRtGoogleTensorOptionsGetEnableReference(
-      options_data, &enable_reference));
-  ASSERT_FALSE(enable_reference);
-
-  LITERT_ASSERT_OK(
-      LiteRtGoogleTensorOptionsSetEnableReference(options_data, true));
-  LITERT_ASSERT_OK(LiteRtGoogleTensorOptionsGetEnableReference(
-      options_data, &enable_reference));
-  ASSERT_TRUE(enable_reference);
-
-  LiteRtDestroyOpaqueOptions(options);
-}
-
 TEST(GoogleTensorOptionsTest, CppApi) {
   auto options = GoogleTensorOptions::Create();
   ASSERT_TRUE(options);
@@ -158,10 +138,6 @@ TEST(GoogleTensorOptionsTest, CppApi) {
   EXPECT_FALSE(options->GetDumpOpTimings());
   options->SetDumpOpTimings(true);
   EXPECT_TRUE(options->GetDumpOpTimings());
-
-  EXPECT_FALSE(options->GetEnableReference());
-  options->SetEnableReference(true);
-  EXPECT_TRUE(options->GetEnableReference());
 }
 
 }  // namespace

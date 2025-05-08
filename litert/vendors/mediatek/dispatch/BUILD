@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib")
+load("//litert/integration_test:litert_device.bzl", "litert_device_test")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
@@ -62,7 +63,9 @@ litert_dynamic_lib(
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
-        # copybara:uncomment "//third_party/neuro_pilot:latest_host_headers",
+        "@neuro_pilot//:latest_host_headers",
+        # Needed to build in OSS
+        "//litert/core/util:tensor_type_util",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
@@ -73,39 +76,27 @@ litert_dynamic_lib(
     ],
 )
 
-cc_test(
+litert_device_test(
     name = "dispatch_api_mediatek_test",
-    srcs = [
-        "dispatch_api_mediatek_test.cc",
+    srcs = ["dispatch_api_mediatek_test.cc"],
+    backend_id = "mediatek",
+    data = [
+        "//litert/test:testdata/simple_model_mtk.bin",
+        "//litert/test:testdata/simple_model_npu.tflite",
     ],
-    linkopts = select({
-        "@org_tensorflow//tensorflow:android": ["-landroid"],
-        "//conditions:default": [],
-    }),
-    tags = [
-        "no-remote-exec",
-        "no_oss",
-        "nobuilder",
-        "nosan",
-        "notap",
-    ],
-    target_compatible_with = select({
-        "@platforms//os:android": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
     deps = [
         ":dispatch_api",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:absl_log",
-        "@com_google_absl//absl/types:span",
-        # copybara:uncomment "//third_party/neuro_pilot:latest_host_headers",
         "//litert/c:litert_common",
         "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_any",
-        "//litert/core:filesystem",
+        "//litert/core:filesystem_testonly",
         "//litert/test:common",
         "//litert/test:simple_model_npu",
         "//litert/vendors/c:litert_dispatch_c_api",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
+        "@neuro_pilot//:latest_host_headers",
     ],
 )

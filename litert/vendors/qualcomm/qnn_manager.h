@@ -21,7 +21,6 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -36,16 +35,18 @@
 #include "litert/cc/litert_shared_library.h"
 #include "litert/vendors/qualcomm/common.h"
 #include "litert/vendors/qualcomm/core/backends/htp_device_config.h"
+#include "litert/vendors/qualcomm/core/backends/htp_perf_control.h"
+#include "litert/vendors/qualcomm/core/common.h"
 #include "litert/vendors/qualcomm/core/schema/soc_table.h"
-#include "third_party/qairt/latest/include/QNN/QnnBackend.h"
-#include "third_party/qairt/latest/include/QNN/QnnCommon.h"
-#include "third_party/qairt/latest/include/QNN/QnnContext.h"
-#include "third_party/qairt/latest/include/QNN/QnnDevice.h"
-#include "third_party/qairt/latest/include/QNN/QnnInterface.h"
-#include "third_party/qairt/latest/include/QNN/QnnLog.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
-#include "third_party/qairt/latest/include/QNN/System/QnnSystemContext.h"
-#include "third_party/qairt/latest/include/QNN/System/QnnSystemInterface.h"
+#include "QnnBackend.h"  // from @qairt
+#include "QnnCommon.h"  // from @qairt
+#include "QnnContext.h"  // from @qairt
+#include "QnnDevice.h"  // from @qairt
+#include "QnnInterface.h"  // from @qairt
+#include "QnnLog.h"  // from @qairt
+#include "QnnTypes.h"  // from @qairt
+#include "System/QnnSystemContext.h"  // from @qairt
+#include "System/QnnSystemInterface.h"  // from @qairt
 
 //===----------------------------------------------------------------------===//
 //
@@ -72,12 +73,12 @@ class QnnManager;
 
 namespace internal {
 
-void Dump(const QnnManager& qnn, std::ostream& out);
+std::string Dump(const QnnManager& qnn);
 
 }  // namespace internal
 
 class QnnManager {
-  friend void internal::Dump(const QnnManager& qnn, std::ostream& out);
+  friend std::string internal::Dump(const QnnManager& qnn);
 
  public:
   using Ptr = std::unique_ptr<QnnManager>;
@@ -92,7 +93,7 @@ class QnnManager {
       absl::Span<const QnnBackend_Config_t*> configs,
       std::optional<std::string> shared_library_dir = std::nullopt,
       std::optional<::qnn::SocInfo> soc_info = std::nullopt,
-      QnnLog_Level_t log_level = QNN_LOG_LEVEL_INFO);
+      const LiteRtQnnOptions& options = LITERT_QNN_OPTIONS_INIT);
 
   static absl::Span<const QnnBackend_Config_t*> DefaultBackendConfigs();
   static absl::Span<const QnnContext_Config_t*> DefaultContextConfigs();
@@ -144,7 +145,7 @@ class QnnManager {
   LiteRtStatus Init(absl::Span<const QnnBackend_Config_t*> configs,
                     std::optional<std::string> shared_library_dir,
                     std::optional<::qnn::SocInfo> soc_info,
-                    QnnLog_Level_t log_level);
+                    const LiteRtQnnOptions& options);
 
   //
   // Manage libQnn*.so Loading
@@ -203,9 +204,12 @@ class QnnManager {
   Qnn_LogHandle_t log_handle_ = nullptr;
   Qnn_BackendHandle_t backend_handle_ = nullptr;
   Qnn_DeviceHandle_t device_handle_ = nullptr;
-  ::qnn::SocInfo soc_info_ = ::qnn::kSocInfos[0];
+  ::qnn::SocInfo soc_info_ = ::qnn::kSocInfos[6];  // V75
   std::unique_ptr<::qnn::HtpDeviceConfig> htp_device_config_;
   std::vector<QnnDevice_Config_t> device_configs_;
+  // For dispatch options
+  std::unique_ptr<PerfControl> perf_control_{nullptr};
+  const QnnDevice_PlatformInfo_t* device_platform_info_ = nullptr;
 };
 
 // Unfortunately we can't use std::unique_ptr with a deleter because
