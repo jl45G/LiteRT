@@ -78,23 +78,59 @@ LiteRtStatus LiteRtGetEventOpenClEvent(LiteRtEvent event, cl_event* cl_event) {
   return kLiteRtStatusErrorUnsupported;
 }
 
+LiteRtStatus LiteRtGetEventEglSync(LiteRtEvent event, EGLSyncKHR* egl_sync) {
+#if LITERT_HAS_OPENGL_SUPPORT
+  if (event->type == LiteRtEventTypeEglSyncFence ||
+      event->type == LiteRtEventTypeEglNativeSyncFence) {
+    *egl_sync = event->egl_sync;
+    return kLiteRtStatusOk;
+  }
+#endif
+  return kLiteRtStatusErrorUnsupported;
+}
+
+LiteRtStatus LiteRtCreateEventFromEglSyncFence(EGLSyncKHR egl_sync,
+                                               LiteRtEvent* event) {
+#if LITERT_HAS_OPENGL_SUPPORT
+  LITERT_ASSIGN_OR_RETURN(LiteRtEventType type,
+                          GetEventTypeFromEglSync(egl_sync));
+  *event = new LiteRtEventT{
+      .type = type,
+      .egl_sync = egl_sync,
+  };
+  return kLiteRtStatusOk;
+#else
+  return kLiteRtStatusErrorUnsupported;
+#endif
+}
+
 LiteRtStatus LiteRtCreateManagedEvent(LiteRtEventType type,
                                       LiteRtEvent* event) {
-  auto event_res = LiteRtEventT::CreateManaged(type);
-  if (!event_res) {
-    return kLiteRtStatusErrorUnsupported;
-  }
-  *event = *event_res;
+  LITERT_ASSIGN_OR_RETURN(LiteRtEventT * event_res,
+                          LiteRtEventT::CreateManaged(type));
+  *event = event_res;
   return kLiteRtStatusOk;
 }
 
-LiteRtStatus LiteRtEventWait(LiteRtEvent event, int64_t timeout_in_ms) {
+LiteRtStatus LiteRtWaitEvent(LiteRtEvent event, int64_t timeout_in_ms) {
   LITERT_RETURN_IF_ERROR(event->Wait(timeout_in_ms));
   return kLiteRtStatusOk;
 }
 
-LiteRtStatus LiteRtEventSignal(LiteRtEvent event) {
+LiteRtStatus LiteRtSignalEvent(LiteRtEvent event) {
   LITERT_RETURN_IF_ERROR(event->Signal());
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus LiteRtIsEventSignaled(LiteRtEvent event, bool* is_signaled) {
+  LITERT_ASSIGN_OR_RETURN(auto is_signaled_res, event->IsSignaled());
+  *is_signaled = is_signaled_res;
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus LiteRtDupFdEvent(LiteRtEvent event, int* dup_fd) {
+  LITERT_ASSIGN_OR_RETURN(auto dup_fd_res, event->DupFd());
+  *dup_fd = dup_fd_res;
   return kLiteRtStatusOk;
 }
 

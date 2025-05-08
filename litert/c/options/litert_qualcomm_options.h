@@ -15,10 +15,8 @@
 #ifndef THIRD_PARTY_ODML_LITERT_LITERT_C_OPTIONS_LITERT_QUALCOMM_OPTIONS_H_
 #define THIRD_PARTY_ODML_LITERT_LITERT_C_OPTIONS_LITERT_QUALCOMM_OPTIONS_H_
 
-#include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_opaque_options.h"
-#include "litert/cc/litert_opaque_options.h"
 
 // User-facing options for Qualcomm. This is not built as part of
 // libLiteRt_QualcommXXX.so, and should not include `vendor/` or qnn sdk
@@ -102,41 +100,5 @@ LiteRtStatus LiteRtQualcommOptionsGetPowerMode(
 
 #ifdef __cplusplus
 }  // extern "C"
-
-// C++ WRAPPERS ////////////////////////////////////////////////////////////////
-
-namespace litert::qualcomm {
-
-// Wraps a LiteRtQualcommOptions object for convenience.
-class QualcommOptions : public OpaqueOptions {
- public:
-  using LogLevel = LiteRtQualcommOptionsLogLevel;
-  using PowerMode = LiteRtQualcommOptionsPowerMode;
-
-  using OpaqueOptions::OpaqueOptions;
-
-  static const char* Discriminator() {
-    return LiteRtQualcommOptionsGetIdentifier();
-  }
-
-  static Expected<QualcommOptions> Create(OpaqueOptions& options);
-
-  static Expected<QualcommOptions> Create();
-
-  void SetLogLevel(LogLevel log_level);
-  LogLevel GetLogLevel();
-
-  void SetPowerMode(PowerMode power_mode);
-  PowerMode GetPowerMode();
-
-  void SetEnableWeightSharing(bool weight_sharing_enabled);
-  bool GetEnableWeightSharing();
-
- private:
-  LiteRtQualcommOptions Data() const;
-};
-
-}  // namespace litert::qualcomm
-
 #endif  // __cplusplus
 #endif  // THIRD_PARTY_ODML_LITERT_LITERT_C_OPTIONS_LITERT_QUALCOMM_OPTIONS_H_

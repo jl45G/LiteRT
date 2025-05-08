@@ -1,12 +1,66 @@
+/*
+ * Copyright 2025 Google LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.ai.edge.litert
 
 import android.content.res.AssetManager
+
+/** The type of a tensor, including its element type and layout. */
+data class TensorType
+@JvmOverloads
+constructor(val elementType: ElementType, val layout: Layout? = null) {
+
+  /** Data type of tensor elements. */
+  // TODO(niuchl): Add support for more element types.
+  enum class ElementType {
+    INT,
+    FLOAT,
+    INT8,
+    BOOLEAN,
+  }
+
+  /** Layout of a tensor. */
+  data class Layout
+  @JvmOverloads
+  constructor(val dimensions: IntArray, val strides: IntArray = intArrayOf()) {
+    val rank: Int
+      get() = dimensions.size
+
+    val hasStrides: Boolean
+      get() = strides.isNotEmpty()
+  }
+}
 
 /** Model represents a LiteRT model file. */
 class Model private constructor(handle: Long) : JniHandle(handle) {
 
   protected override fun destroy() {
     nativeDestroy(handle)
+  }
+
+  fun getInputTensorType(inputName: String, signature: String? = null): TensorType {
+    assertNotDestroyed()
+
+    return nativeGetInputTensorType(handle, inputName, signature)
+  }
+
+  fun getOutputTensorType(outputName: String, signature: String? = null): TensorType {
+    assertNotDestroyed()
+
+    return nativeGetOutputTensorType(handle, outputName, signature)
   }
 
   companion object {
@@ -32,6 +86,20 @@ class Model private constructor(handle: Long) : JniHandle(handle) {
     @JvmStatic private external fun nativeLoadFile(filePath: String): Long
 
     @JvmStatic private external fun nativeDestroy(handle: Long)
+
+    @JvmStatic
+    private external fun nativeGetInputTensorType(
+      handle: Long,
+      inputName: String,
+      signature: String?,
+    ): TensorType
+
+    @JvmStatic
+    private external fun nativeGetOutputTensorType(
+      handle: Long,
+      outputName: String,
+      signature: String?,
+    ): TensorType
   }
 }
 
@@ -57,16 +125,38 @@ private constructor(
   fun createInputBuffer(inputName: String, signature: String? = null): TensorBuffer {
     assertNotDestroyed()
 
-    val handle = nativeCreateInputBuffer(handle, model.handle, signature, inputName)
-    return TensorBuffer(handle)
+    val tb = nativeCreateInputBuffer(handle, model.handle, signature, inputName)
+    return TensorBuffer(tb)
+  }
+
+  @Throws(LiteRtException::class)
+  fun getInputBufferRequirements(
+    inputName: String,
+    signature: String? = null,
+  ): TensorBufferRequirements {
+    assertNotDestroyed()
+
+    val tbr = nativeGetInputBufferRequirements(handle, model.handle, signature, inputName)
+    return TensorBufferRequirements(tbr)
   }
 
   @Throws(LiteRtException::class)
   fun createOutputBuffer(outputName: String, signature: String? = null): TensorBuffer {
     assertNotDestroyed()
 
-    val handle = nativeCreateOutputBuffer(handle, model.handle, signature, outputName)
-    return TensorBuffer(handle)
+    val tb = nativeCreateOutputBuffer(handle, model.handle, signature, outputName)
+    return TensorBuffer(tb)
+  }
+
+  @Throws(LiteRtException::class)
+  fun getOutputBufferRequirements(
+    outputName: String,
+    signature: String? = null,
+  ): TensorBufferRequirements {
+    assertNotDestroyed()
+
+    val tbr = nativeGetOutputBufferRequirements(handle, model.handle, signature, outputName)
+    return TensorBufferRequirements(tbr)
   }
 
   @Throws(LiteRtException::class)
@@ -246,7 +336,23 @@ private constructor(
     ): Long
 
     @JvmStatic
+    private external fun nativeGetInputBufferRequirements(
+      compiledModelHandle: Long,
+      modelHandle: Long,
+      signature: String?,
+      inputName: String,
+    ): Long
+
+    @JvmStatic
     private external fun nativeCreateOutputBuffer(
+      compiledModelHandle: Long,
+      modelHandle: Long,
+      signature: String?,
+      outputName: String,
+    ): Long
+
+    @JvmStatic
+    private external fun nativeGetOutputBufferRequirements(
       compiledModelHandle: Long,
       modelHandle: Long,
       signature: String?,

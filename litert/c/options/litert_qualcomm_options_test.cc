@@ -21,6 +21,7 @@
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_opaque_options.h"
 #include "litert/cc/litert_opaque_options.h"
+#include "litert/cc/options/litert_qualcomm_options.h"
 #include "litert/test/matchers.h"
 
 namespace litert::qualcomm {
@@ -122,7 +123,7 @@ TEST(QualcommOptionsTest, FindFromChain) {
   ASSERT_TRUE(qnn_options);
   options->Append(std::move(*qnn_options));
 
-  auto qnn_opts_d = Find<QualcommOptions>(*options);
+  auto qnn_opts_d = FindOpaqueOptions<QualcommOptions>(*options);
   EXPECT_TRUE(qnn_opts_d);
 }
 

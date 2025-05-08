@@ -1,3 +1,17 @@
+// Copyright 2025 Google LLC.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "litert/kotlin/src/main/jni/litert_compiled_model_jni.h"
 
 #include <jni.h>
@@ -124,6 +138,29 @@ Java_com_google_ai_edge_litert_CompiledModel_nativeCreateInputBuffer(
 }
 
 JNIEXPORT jlong JNICALL
+Java_com_google_ai_edge_litert_CompiledModel_nativeGetInputBufferRequirements(
+    JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
+    jstring signature, jstring input_name) {
+  auto compiled_model = CreateCompileModel(compiled_model_handle, model_handle);
+
+  AUTO_CLEANUP_JNI_STRING(env, signature);
+  AUTO_CLEANUP_JNI_STRING(env, input_name);
+  auto requirements =
+      signature_str == nullptr
+          ? compiled_model.GetInputBufferRequirements(input_name_str)
+          : compiled_model.GetInputBufferRequirements(signature_str,
+                                                      input_name_str);
+  if (!requirements) {
+    LITERT_LOG(LITERT_ERROR, "Failed to get input buffer requirements: %s",
+               requirements.Error().Message().c_str());
+    ThrowLiteRtException(env, requirements.Error().Status(),
+                         requirements.Error().Message());
+    return 0;
+  }
+  return reinterpret_cast<jlong>(std::move(requirements->Release()));
+}
+
+JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_CompiledModel_nativeCreateOutputBuffer(
     JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
     jstring signature, jstring output_name) {
@@ -143,6 +180,29 @@ Java_com_google_ai_edge_litert_CompiledModel_nativeCreateOutputBuffer(
     return 0;
   }
   return reinterpret_cast<jlong>(std::move(tensor_buffer->Release()));
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_google_ai_edge_litert_CompiledModel_nativeGetOutputBufferRequirements(
+    JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
+    jstring signature, jstring output_name) {
+  auto compiled_model = CreateCompileModel(compiled_model_handle, model_handle);
+
+  AUTO_CLEANUP_JNI_STRING(env, signature);
+  AUTO_CLEANUP_JNI_STRING(env, output_name);
+  auto requirements =
+      signature_str == nullptr
+          ? compiled_model.GetOutputBufferRequirements(output_name_str)
+          : compiled_model.GetOutputBufferRequirements(signature_str,
+                                                       output_name_str);
+  if (!requirements) {
+    LITERT_LOG(LITERT_ERROR, "Failed to get outpput buffer requirements: %s",
+               requirements.Error().Message().c_str());
+    ThrowLiteRtException(env, requirements.Error().Status(),
+                         requirements.Error().Message());
+    return 0;
+  }
+  return reinterpret_cast<jlong>(std::move(requirements->Release()));
 }
 
 JNIEXPORT jlongArray JNICALL

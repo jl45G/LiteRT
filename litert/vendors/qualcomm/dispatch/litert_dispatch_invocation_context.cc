@@ -40,9 +40,9 @@
 #include "litert/vendors/qualcomm/core/utils/miscs.h"
 #include "litert/vendors/qualcomm/dispatch/litert_dispatch_device_context.h"
 #include "litert/vendors/qualcomm/qnn_manager.h"
-#include "third_party/qairt/latest/include/QNN/HTP/QnnHtpProfile.h"
-#include "third_party/qairt/latest/include/QNN/QnnCommon.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+#include "HTP/QnnHtpProfile.h"  // from @qairt
+#include "QnnCommon.h"  // from @qairt
+#include "QnnTypes.h"  // from @qairt
 
 using litert::Expected;
 using litert::Unexpected;
@@ -164,8 +164,7 @@ namespace {
 
 Expected<LiteRtTensorBufferRequirements> GetTensorBufferRequirements(
     const LiteRtRankedTensorType& tensor_type) {
-  auto* tensor_strides = tensor_type.layout.strides;
-  if (tensor_strides != nullptr) {
+  if (tensor_type.layout.has_strides) {
     return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                       "Tensor strides are not supported by QNN");
   }

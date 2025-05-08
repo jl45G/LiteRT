@@ -1,0 +1,24 @@
+<config:device-targeting-config
+    xmlns:config="http://schemas.android.com/apk/config">
+
+    <config:device-group name="qti_v79">
+      <config:device-selector>
+        <config:system-on-chip manufacturer="QTI" model="SM8750"/>
+      </config:device-selector>
+    </config:device-group>
+
+    <config:device-group name="qti_v75">
+      <config:device-selector>
+        <config:system-on-chip manufacturer="QTI" model="SM8650"/>
+      </config:device-selector>
+    </config:device-group>
+
+    <config:device-group name="qti_v73">
+      <config:device-selector>
+        <config:system-on-chip manufacturer="QTI" model="SM8550"/>
+        <config:system-on-chip manufacturer="QTI" model="SM8635"/>
+        <config:system-on-chip manufacturer="QTI" model="SM7675"/>
+      </config:device-selector>
+    </config:device-group>
+
+</config:device-targeting-config>

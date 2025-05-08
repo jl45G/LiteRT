@@ -48,7 +48,13 @@ const auto kSupportedOps = Values(
     "simple_tanh_op.tflite",
     "simple_softmax_op.tflite",
     "simple_mean_op.tflite",
-    "simple_gelu_op.tflite"
+    "simple_gelu_op.tflite",
+    "simple_pad.tflite",
+    "simple_logistic.tflite",
+    "simple_sum_op.tflite",
+    "simple_resize_bilinear_op.tflite",
+    "simple_resize_nearest_neighbor_op.tflite",
+    "simple_max_pool_2d.tflite"
     );
 // clang-format on
 
@@ -74,9 +80,11 @@ TEST(TestMediatekPlugin, PartitionAdd) {
   auto plugin = CreatePlugin();
   auto model = testing::LoadTestFileModel("add_simple.tflite");
 
+  auto subgraph = model.Subgraph(0);
+  ASSERT_TRUE(subgraph.HasValue());
   LiteRtOpListT selected_op_list;
   ASSERT_EQ(LiteRtCompilerPluginPartition(plugin.get(), /*soc_model=*/nullptr,
-                                          model.Subgraph(0)->Get(),
+                                          subgraph->Get(),
                                           &selected_op_list),
             kLiteRtStatusOk);
   const auto selected_ops = selected_op_list.Values();
