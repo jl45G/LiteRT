@@ -7,11 +7,26 @@ workspace(name = "litert")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
+    name = "rules_shell",
+    sha256 = "bc61ef94facc78e20a645726f64756e5e285a045037c7a61f65af2941f4c25e1",
+    strip_prefix = "rules_shell-0.4.1",
+    url = "https://github.com/bazelbuild/rules_shell/releases/download/v0.4.1/rules_shell-v0.4.1.tar.gz",
+)
+
+load("@rules_shell//shell:repositories.bzl", "rules_shell_dependencies", "rules_shell_toolchains")
+
+rules_shell_dependencies()
+
+rules_shell_toolchains()
+
+# Java rules
+http_archive(
     name = "rules_java",
     sha256 = "c73336802d0b4882e40770666ad055212df4ea62cfa6edf9cb0f9d29828a0934",
     url = "https://github.com/bazelbuild/rules_java/releases/download/5.3.5/rules_java-5.3.5.tar.gz",
 )
 
+# TensorFlow
 local_repository(
     name = "org_tensorflow",
     path = "third_party/tensorflow",
@@ -132,3 +147,61 @@ nccl_configure(name = "local_config_nccl")
 load("//third_party/tqdm:workspace.bzl", tqdm = "repo")
 
 tqdm()
+
+load("@rules_jvm_external//:defs.bzl", "maven_install")
+
+maven_install(
+    name = "maven",
+    artifacts = [
+        "androidx.lifecycle:lifecycle-common:2.8.7",
+        "com.google.android.play:ai-delivery:0.1.1-alpha01",
+        "com.google.guava:guava:33.4.6-android",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.1",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.1",
+    ],
+    repositories = [
+        "https://maven.google.com",
+        "https://repo1.maven.org/maven2",
+    ],
+)
+
+# Kotlin rules
+http_archive(
+    name = "rules_kotlin",
+    sha256 = "e1448a56b2462407b2688dea86df5c375b36a0991bd478c2ddd94c97168125e2",
+    url = "https://github.com/bazelbuild/rules_kotlin/releases/download/v2.1.3/rules_kotlin-v2.1.3.tar.gz",
+)
+
+load("@rules_kotlin//kotlin:repositories.bzl", "kotlin_repositories")
+
+kotlin_repositories()  # if you want the default. Otherwise see custom kotlinc distribution below
+
+load("@rules_kotlin//kotlin:core.bzl", "kt_register_toolchains")
+
+kt_register_toolchains()  # to use the default toolchain, otherwise see toolchains below
+
+load("//third_party/stblib:workspace.bzl", stblib = "repo")
+
+stblib()
+
+# VENDOR SDKS ######################################################################################
+
+# QUALCOMM ---------------------------------------------------------------------------------------
+
+# The actual macro call will be set during configure for now.
+load("//third_party/qairt:workspace.bzl", "qairt")
+
+qairt()
+
+# MEDIATEK ---------------------------------------------------------------------------------------
+
+# Currently only works with local sdk
+load("//third_party/neuro_pilot:workspace.bzl", "neuro_pilot")
+
+neuro_pilot()
+
+# GOOGLE TENSOR ----------------------------------------------------------------------------------
+load("//third_party/google_tensor:workspace.bzl", "google_tensor")
+
+google_tensor()

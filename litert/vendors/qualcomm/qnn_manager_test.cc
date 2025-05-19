@@ -13,11 +13,9 @@
 
 #include "litert/vendors/qualcomm/qnn_manager.h"
 
-#include <sstream>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "litert/test/common.h"
+#include "litert/vendors/qualcomm/core/common.h"
 #include "litert/vendors/qualcomm/tools/dump.h"
 
 namespace {
@@ -31,20 +29,21 @@ using ::testing::HasSubstr;
 
 TEST(QnnManagerTest, SetupQnnManager) {
   auto configs = QnnManager::DefaultBackendConfigs();
-  auto qnn = QnnManager::Create(configs);
+  auto options = ::qnn::Options();
+  auto qnn = QnnManager::Create(configs, options);
   ASSERT_TRUE(qnn);
 }
 
 TEST(QnnManagerTest, Dump) {
   auto configs = QnnManager::DefaultBackendConfigs();
-  auto qnn = QnnManager::Create(configs);
+  auto options = ::qnn::Options();
+  auto qnn = QnnManager::Create(configs, options);
   ASSERT_TRUE(qnn);
 
-  std::ostringstream dump;
-  Dump(**qnn, dump);
+  auto dump = Dump(**qnn);
 
-  EXPECT_THAT(dump.str(), HasSubstr("< QnnInterface_t >"));
-  EXPECT_THAT(dump.str(), HasSubstr("< QnnSystemInterface_t >"));
+  EXPECT_THAT(dump, HasSubstr("< QnnInterface_t >"));
+  EXPECT_THAT(dump, HasSubstr("< QnnSystemInterface_t >"));
 }
 
 }  // namespace

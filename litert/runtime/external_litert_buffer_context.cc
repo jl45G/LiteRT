@@ -23,11 +23,12 @@
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/litert_handle.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
 #include "litert/runtime/tfl_utils.h"
-#include "tflite/c/c_api_opaque.h"  // from @org_tensorflow
-#include "tflite/c/c_api_types.h"  // from @org_tensorflow
+#include "tflite/c/c_api_opaque.h"
+#include "tflite/c/c_api_types.h"
 
 namespace litert {
 namespace internal {
@@ -119,14 +120,14 @@ ExternalLiteRtBufferContext::CreateBufferForTensor(
 
   LiteRtTensorBuffer litert_tensor_buffer;
   if (auto status = LiteRtCreateManagedTensorBuffer(
-          tensor_buffer_type, &litert_tensor_type, *tensor_buffer_size,
+          env_, tensor_buffer_type, &litert_tensor_type, *tensor_buffer_size,
           &litert_tensor_buffer);
       status != kLiteRtStatusOk) {
     return litert::Unexpected(kLiteRtStatusErrorRuntimeFailure,
                               "Failed to create managed tensor buffer");
   }
 
-  return TensorBuffer(litert_tensor_buffer, /*owned=*/true);
+  return TensorBuffer(litert_tensor_buffer, OwnHandle::kYes);
 }
 
 }  // namespace internal

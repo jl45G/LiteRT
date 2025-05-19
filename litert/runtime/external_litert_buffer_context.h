@@ -15,25 +15,36 @@
 #ifndef ODML_LITERT_LITERT_RUNTIME_EXTERNAL_LITERT_BUFFER_CONTEXT_H_
 #define ODML_LITERT_LITERT_RUNTIME_EXTERNAL_LITERT_BUFFER_CONTEXT_H_
 
-#include <memory>
 #include <unordered_map>
 #include <utility>
 
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_tensor_buffer_requirements.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
-#include "tflite/c/c_api_opaque.h"  // from @org_tensorflow
-#include "tflite/c/c_api_types.h"  // from @org_tensorflow
-#include "tflite/c/common.h"  // from @org_tensorflow
+#include "tflite/c/c_api_opaque.h"
+#include "tflite/c/c_api_types.h"
+#include "tflite/c/common.h"
 
 namespace litert::internal {
 
 class ExternalLiteRtBufferContext : public TfLiteExternalContext {
  public:
-  ExternalLiteRtBufferContext() = default;
+  ExternalLiteRtBufferContext() : env_(nullptr) {}
+  explicit ExternalLiteRtBufferContext(LiteRtEnvironment env) : env_(env) {}
   ~ExternalLiteRtBufferContext() = default;
+
+  static Expected<ExternalLiteRtBufferContext*> GetInstance(
+      TfLiteOpaqueContext* context) {
+    void* external_context;
+    TfLiteOpaqueContextGetExternalContext(context, &external_context,
+                                          kTfLiteLiteRtBufferContext);
+    if (!external_context) {
+      return Unexpected(kLiteRtStatusErrorRuntimeFailure,
+                        "External context not found");
+    }
+    return reinterpret_cast<ExternalLiteRtBufferContext*>(external_context);
+  }
 
   // Registers a tensor buffer requirements for the given tensor.
   // The registered TensorBufferRequirements object is owned by
@@ -58,8 +69,7 @@ class ExternalLiteRtBufferContext : public TfLiteExternalContext {
       LiteRtTensorBufferRequirements& litert_buffer_requirements) {
     return RegisterBufferRequirements(
         reinterpret_cast<const TfLiteOpaqueTensor*>(tensor),
-        TensorBufferRequirements(litert_buffer_requirements,
-                                 /*owned=*/true));
+        TensorBufferRequirements(litert_buffer_requirements, OwnHandle::kYes));
   }
 
   // Gets a registered tensor buffer requirements for the given tensor.
@@ -117,7 +127,11 @@ class ExternalLiteRtBufferContext : public TfLiteExternalContext {
   // Returns true if the async execution mode is set.
   inline bool IsAsyncExecutionMode() const { return async_execution_mode_; }
 
+  // Returns the LiteRtEnvironment used to create CompiledModel.
+  inline LiteRtEnvironment GetEnvironment() const { return env_; }
+
  private:
+  LiteRtEnvironment env_;
   std::unordered_map<const TfLiteOpaqueTensor*, TensorBufferRequirements>
       buffer_requirements_;
   std::unordered_map<const TfLiteOpaqueTensor*, TensorBuffer> tensor_buffers_;

@@ -35,7 +35,7 @@
 #include "litert/core/model/model.h"
 #include "litert/core/model/model_graph.h"
 #include "litert/core/util/flatbuffer_tools.h"
-#include "tflite/schema/schema_generated.h"  // from @org_tensorflow
+#include "tflite/schema/schema_generated.h"
 
 namespace litert::internal {
 namespace {
@@ -51,11 +51,14 @@ class FlatbufferContext {
                     BufferManager* buffer_manager)
       : tfl_flatbuffer_(tfl_flatbuffer), buffer_manager_(buffer_manager) {}
 
-  void SetOpCode(LiteRtOpT& litert_op, uint32_t ind) {
-    const auto builtin_code =
-        PackedModel()->operator_codes()->Get(ind)->builtin_code();
-    litert_op.SetOpCode(static_cast<LiteRtOpCode>(builtin_code));
+  Expected<void> SetOpCode(LiteRtOpT& litert_op, uint32_t ind) {
+    const auto* code = PackedModel()->operator_codes()->Get(ind);
+    const int32_t builtin_code = code->builtin_code();
+    const int32_t dep_code = code->deprecated_builtin_code();
+    litert_op.SetOpCode(
+        static_cast<LiteRtOpCode>(std::max(dep_code, builtin_code)));
     litert::internal::SetTflOpCodeInd(litert_op, ind);
+    return {};
   }
 
   // Get the buffer at the given index in the tflite model.
@@ -139,7 +142,7 @@ LiteRtStatus UnpackOp(FlatbufferContext& context, LiteRtSubgraphT& parent,
 
   // OP CODE
 
-  context.SetOpCode(litert_op, tfl_op.opcode_index());
+  LITERT_RETURN_IF_ERROR(context.SetOpCode(litert_op, tfl_op.opcode_index()));
 
   return kLiteRtStatusOk;
 }
@@ -259,8 +262,9 @@ LiteRtStatus UnpackSubgraph(FlatbufferContext& context,
   const auto num_tensors = tfl_subgraph.tensors()->size();
   for (auto i = 0; i < num_tensors; ++i) {
     const auto* tfl_tensor = tfl_subgraph.tensors()->Get(i);
-    LITERT_RETURN_IF_ERROR(
-        UnpackTensor(context, *tfl_tensor, litert_subgraph.EmplaceTensor()));
+    auto& litert_tensor = litert_subgraph.EmplaceTensor();
+    LITERT_RETURN_IF_ERROR(UnpackTensor(context, *tfl_tensor, litert_tensor));
+    litert_tensor.SetTensorIndex(i);
   }
 
   // Unpack ops, pass litert_subgraph so they can look up the new litert

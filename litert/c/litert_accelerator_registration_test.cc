@@ -18,9 +18,9 @@
 
 #include <gtest/gtest.h>
 #include "litert/c/litert_accelerator.h"
-#include "litert/c/litert_accelerator_compilation_options.h"
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_environment.h"
+#include "litert/c/litert_opaque_options.h"
 #include "litert/runtime/accelerator.h"
 
 namespace {
@@ -55,9 +55,8 @@ class DummyAccelerator {
     return kLiteRtStatusOk;
   }
 
-  static LiteRtStatus CreateDelegate(
-      LiteRtAccelerator accelerator,
-      LiteRtAcceleratorCompilationOptions options, void** delegate) {
+  static LiteRtStatus CreateDelegate(LiteRtAccelerator accelerator,
+                                     LiteRtOptions options, void** delegate) {
     return kLiteRtStatusOk;
   }
 
@@ -113,7 +112,7 @@ TEST(LiteRtAcceleratorRegistrationTest, CreateDestroyAcceleratorDoesntLeak) {
 
 TEST(LiteRtAcceleratorRegistrationTest, RegisterAcceleratorWorks) {
   LiteRtEnvironment env_;
-  LiteRtEnvironmentCreate(/*num_options=*/0, /*options=*/nullptr, &env_);
+  LiteRtCreateEnvironment(/*num_options=*/0, /*options=*/nullptr, &env_);
   auto dummy_accelerator = DummyAccelerator::CpuAccelerator();
   LiteRtAccelerator accelerator;
   LiteRtCreateAccelerator(&accelerator);
@@ -129,7 +128,7 @@ TEST(LiteRtAcceleratorRegistrationTest, RegisterAcceleratorWorks) {
 TEST(LiteRtAcceleratorRegistrationTest,
      RegisterAcceleratorFailsForNullAccelerator) {
   LiteRtEnvironment env;
-  LiteRtEnvironmentCreate(/*num_options=*/0, /*options=*/nullptr, &env);
+  LiteRtCreateEnvironment(/*num_options=*/0, /*options=*/nullptr, &env);
   // We check that the memory is correctly deallocated if the registration
   // fails.
   auto dummy_accelerator = DummyAccelerator::CpuAccelerator();

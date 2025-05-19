@@ -22,18 +22,17 @@
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
-#include "litert/c/litert_model.h"
 #include "litert/c/litert_op_code.h"
 #include "litert/cc/litert_model.h"
+#include "litert/cc/litert_options.h"
+#include "litert/cc/options/litert_qualcomm_options.h"
 #include "litert/core/model/model.h"
 #include "litert/test/common.h"
 #include "litert/test/matchers.h"
 #include "litert/test/test_models.h"
 #include "litert/vendors/c/litert_compiler_plugin.h"
 #include "litert/vendors/cc/litert_compiler_plugin.h"
-#include "litert/vendors/qualcomm/compiler/IR/qnn_op.h"
-#include "litert/vendors/qualcomm/compiler/legalizations/quantize_op_legalization.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+
 namespace litert {
 namespace {
 
@@ -43,6 +42,17 @@ using ::testing::Values;
 // TODO: Add support and uncomment these models.
 const auto kSupportedOps =
                   Values(
+                    "simple_add_fused_relu_n1_1_op.tflite",
+                    "simple_sub_fused_relu_N1_1_op.tflite",
+                    "simple_mul_fused_relu.tflite",
+                    "simple_div_fused_tanh.tflite",
+                    "simple_average_pool_2d_fused_relu.tflite",
+                    "simple_max_pool_2d_fused_relu.tflite",
+                    "simple_concatenation_fused_relu6_op.tflite",
+                    "simple_fully_connected_fused_relu6_op.tflite",
+                    "simple_transpose_conv_fused_tanh.tflite",
+                    "simple_depthwise_conv_2d_fused_relu.tflite",
+                    "simple_conv_2d_fused_relu_op.tflite",
                     "simple_transpose_conv_op.tflite",
                     "simple_cumsum.tflite",
                     "simple_floor_div.tflite",
@@ -118,6 +128,7 @@ const auto kSupportedSocModels = Values(
     "SA8255",
     "SM8350",
     "SM8450",
+    "SM8475",
     "SM8550",
     "SM8650",
     "SM8750"
@@ -132,7 +143,7 @@ TEST(TestQnnPlugin, GetConfigInfo) {
   LiteRtParamIndex num_supported_soc_models;
   LITERT_ASSERT_OK(LiteRtGetNumCompilerPluginSupportedSocModels(
       plugin.get(), &num_supported_soc_models));
-  ASSERT_EQ(num_supported_soc_models, 8);
+  ASSERT_EQ(num_supported_soc_models, 9);
 
   const char* config_id;
   LITERT_ASSERT_OK(
@@ -144,10 +155,11 @@ TEST(TestQnnPlugin, PartitionMulOps) {
   auto plugin = CreatePlugin();
   auto model = testing::LoadTestFileModel("one_mul.tflite");
 
+  LITERT_ASSERT_OK_AND_ASSIGN(auto subgraph, model.Subgraph(0));
+
   LiteRtOpListT selected_op_list;
   LITERT_ASSERT_OK(LiteRtCompilerPluginPartition(
-      plugin.get(), /*soc_model=*/nullptr, model.Subgraph(0)->Get(),
-      &selected_op_list));
+      plugin.get(), /*soc_model=*/nullptr, subgraph.Get(), &selected_op_list));
   const auto selected_ops = selected_op_list.Values();
 
   ASSERT_EQ(selected_ops.size(), 1);
@@ -156,6 +168,48 @@ TEST(TestQnnPlugin, PartitionMulOps) {
 
 TEST(TestQnnPlugin, CompileMulSubgraph) {
   auto plugin = CreatePlugin();
+  auto model = testing::LoadTestFileModel("one_mul.tflite");
+
+  LiteRtCompiledResult compiled;
+  LITERT_ASSERT_OK(LiteRtCompilerPluginCompile(plugin.get(), "SM8650",
+                                               model.Get(), &compiled));
+
+  const void* byte_code;
+  size_t byte_code_size;
+
+  LITERT_ASSERT_OK(LiteRtGetCompiledResultByteCode(
+      compiled, /*byte_code_idx=*/0, &byte_code, &byte_code_size));
+
+  absl::string_view byte_code_string(reinterpret_cast<const char*>(byte_code),
+                                     byte_code_size);
+  ASSERT_FALSE(byte_code_string.empty());
+
+  const void* op_data;
+  size_t op_data_size;
+  LiteRtParamIndex byte_code_idx;
+
+  LITERT_ASSERT_OK(LiteRtGetCompiledResultCallInfo(
+      compiled, /*call_idx=*/0, &op_data, &op_data_size, &byte_code_idx));
+
+  absl::string_view op_data_string(reinterpret_cast<const char*>(op_data),
+                                   op_data_size);
+  ASSERT_EQ("qnn_partition_0", op_data_string);
+
+  LiteRtDestroyCompiledResult(compiled);
+}
+
+TEST(TestQnnPlugin, CompileMulSubgraphWithOptions) {
+  auto opts = Options::Create();
+  ASSERT_TRUE(opts);
+
+  auto qnn_opts = qualcomm::QualcommOptions::Create();
+  ASSERT_TRUE(qnn_opts);
+  qnn_opts->SetLogLevel(kLiteRtQualcommLogLevelError);
+  qnn_opts->SetEnableWeightSharing(false);
+
+  ASSERT_TRUE(opts->AddOpaqueOptions(std::move(*qnn_opts)));
+
+  auto plugin = CreatePlugin(/*env=*/nullptr, opts->Get());
   auto model = testing::LoadTestFileModel("one_mul.tflite");
 
   LiteRtCompiledResult compiled;
@@ -216,97 +270,6 @@ TEST(TestQnnPlugin, NotShareContextBinary) {
   LiteRtDestroyCompiledResult(compiled);
 }
 
-TEST(TestLegalization, QuantizeOpLegalizedToCastOp) {
-  static constexpr absl::string_view kQnnOpName = "Cast";
-  static constexpr int kSUFixed8OffsetDiff = 128;
-  const auto input_quantization_params = MakePerTensorQuantization(
-      /*scale=*/1.0f, /*zero_point=*/0);
-  const auto output_quantization_params = MakePerTensorQuantization(
-      /*scale=*/1.0f, /*zero_point=*/kSUFixed8OffsetDiff);
-  LiteRtOpT quantize_op;
-  LiteRtTensorT input_tensor;
-  LiteRtTensorT output_tensor;
-  // Set quantization params, tensor type for input and output tensors.
-  input_tensor.SetQarams(input_quantization_params);
-  TensorType input_tensor_type =
-      MakeRankedTensorType(kLiteRtElementTypeInt8, {1, 1});
-  input_tensor.SetType(input_tensor_type);
-  output_tensor.SetQarams(output_quantization_params);
-  TensorType output_tensor_type =
-      MakeRankedTensorType(kLiteRtElementTypeUInt8, {1, 1});
-  output_tensor.SetType(output_tensor_type);
-  quantize_op.Inputs().push_back(&input_tensor);
-  quantize_op.Outputs().push_back(&output_tensor);
-  quantize_op.SetOpCode(kLiteRtOpCodeTflQuantize);
-
-  qnn::QuantizeOpLegalization legalization;
-  Qnn_OpConfig_t legalized_qnn_op = qnn::BuildDefaultOp();
-  litert::Op litert_quantize_op(&quantize_op);
-  LITERT_ASSERT_OK(
-      legalization.ConfigureQnnOp(litert_quantize_op, legalized_qnn_op));
-  absl::string_view qnn_op_name(legalized_qnn_op.v1.typeName);
-  EXPECT_EQ(qnn_op_name, kQnnOpName);
-}
-
-TEST(TestLegalization, QuantizeOpLegalizedToConvertOp) {
-  static constexpr absl::string_view kQnnOpName = "Convert";
-  static constexpr int kSUFixed8OffsetDiff = 0;
-  const auto input_quantization_params = MakePerTensorQuantization(
-      /*scale=*/1.0f, /*zero_point=*/0);
-  const auto output_quantization_params = MakePerTensorQuantization(
-      /*scale=*/1.0f, /*zero_point=*/kSUFixed8OffsetDiff);
-  LiteRtOpT quantize_op;
-  LiteRtTensorT input_tensor;
-  LiteRtTensorT output_tensor;
-  // Set quantization params, tensor type for input and output tensors.
-  input_tensor.SetQarams(input_quantization_params);
-  TensorType input_tensor_type =
-      MakeRankedTensorType(kLiteRtElementTypeInt8, {1, 1});
-  input_tensor.SetType(input_tensor_type);
-  output_tensor.SetQarams(output_quantization_params);
-  TensorType output_tensor_type =
-      MakeRankedTensorType(kLiteRtElementTypeUInt8, {1, 1});
-  output_tensor.SetType(output_tensor_type);
-  quantize_op.Inputs().push_back(&input_tensor);
-  quantize_op.Outputs().push_back(&output_tensor);
-  quantize_op.SetOpCode(kLiteRtOpCodeTflQuantize);
-
-  qnn::QuantizeOpLegalization legalization;
-  Qnn_OpConfig_t legalized_qnn_op = qnn::BuildDefaultOp();
-  litert::Op litert_quantize_op(&quantize_op);
-  LITERT_ASSERT_OK(
-      legalization.ConfigureQnnOp(litert_quantize_op, legalized_qnn_op));
-  absl::string_view qnn_op_name(legalized_qnn_op.v1.typeName);
-  EXPECT_EQ(qnn_op_name, kQnnOpName);
-}
-
-TEST(TestLegalization, QuantizeOpLegalizedToQuantizeOp) {
-  static constexpr absl::string_view kQnnOpName = "Quantize";
-  const auto output_quantization_params = MakePerTensorQuantization(
-      /*scale=*/1.0f, /*zero_point=*/0);
-  LiteRtOpT quantize_op;
-  LiteRtTensorT input_tensor;
-  LiteRtTensorT output_tensor;
-  // Set quantization params, tensor type for input and output tensors.
-  TensorType input_tensor_type =
-      MakeRankedTensorType(kLiteRtElementTypeFloat32, {1, 1});
-  input_tensor.SetType(input_tensor_type);
-  output_tensor.SetQarams(output_quantization_params);
-  TensorType output_tensor_type =
-      MakeRankedTensorType(kLiteRtElementTypeInt16, {1, 1});
-  output_tensor.SetType(output_tensor_type);
-  quantize_op.Inputs().push_back(&input_tensor);
-  quantize_op.Outputs().push_back(&output_tensor);
-  quantize_op.SetOpCode(kLiteRtOpCodeTflQuantize);
-
-  qnn::QuantizeOpLegalization legalization;
-  Qnn_OpConfig_t legalized_qnn_op = qnn::BuildDefaultOp();
-  litert::Op litert_quantize_op(&quantize_op);
-  LITERT_ASSERT_OK(
-      legalization.ConfigureQnnOp(litert_quantize_op, legalized_qnn_op));
-  absl::string_view qnn_op_name(legalized_qnn_op.v1.typeName);
-  EXPECT_EQ(qnn_op_name, kQnnOpName);
-}
 
 class QnnPlyginSupportedSocCompilationTest
     : public ::testing::TestWithParam<std::string> {};
@@ -315,7 +278,7 @@ TEST_P(QnnPlyginSupportedSocCompilationTest, CompileMulSubgraph) {
   auto plugin = CreatePlugin();
   auto model = testing::LoadTestFileModel("one_mul.tflite");
   auto soc_model = GetParam();
-  #ifdef __ANDROID__
+#ifdef __ANDROID__
   if (soc_model != "V75") {
     // TODO: Make this dynamic when device cloud testing has more devices.
     GTEST_SKIP() << "On device tests only support V75s.";

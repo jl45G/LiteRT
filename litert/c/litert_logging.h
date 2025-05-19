@@ -16,6 +16,8 @@
 #define ODML_LITERT_LITERT_C_LITERT_LOGGING_H_
 
 #include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "litert/c/litert_common.h"
 
@@ -23,11 +25,10 @@
 extern "C" {
 #endif  // __cplusplus
 
-LITERT_DEFINE_HANDLE(LiteRtLogger);
-
 // WARNING: The values of the following enum are to be kept in sync with
 // tflite::LogSeverity.
-typedef enum {
+typedef enum : int8_t {
+  kLiteRtLogSeverityDebug = -1,
   kLiteRtLogSeverityVerbose = 0,
   kLiteRtLogSeverityInfo = 1,
   kLiteRtLogSeverityWarning = 2,
@@ -35,28 +36,76 @@ typedef enum {
   kLiteRtLogSeveritySilent = 4,
 } LiteRtLogSeverity;
 
+#ifdef NDEBUG
+#define LITERT_DEBUG kLiteRtLogSeverityDebug
+#else
+#define LITERT_DEBUG kLiteRtLogSeverityInfo
+#endif
 #define LITERT_VERBOSE kLiteRtLogSeverityVerbose
 #define LITERT_INFO kLiteRtLogSeverityInfo
 #define LITERT_WARNING kLiteRtLogSeverityWarning
 #define LITERT_ERROR kLiteRtLogSeverityError
 #define LITERT_SILENT kLiteRtLogSeveritySilent
 
+const char* LiteRtGetLogSeverityName(LiteRtLogSeverity severity);
+
+// Creates a default LiteRT logger.
 LiteRtStatus LiteRtCreateLogger(LiteRtLogger* logger);
+
 LiteRtStatus LiteRtGetMinLoggerSeverity(LiteRtLogger logger,
                                         LiteRtLogSeverity* min_severity);
+
 LiteRtStatus LiteRtSetMinLoggerSeverity(LiteRtLogger logger,
                                         LiteRtLogSeverity min_severity);
+
 LiteRtStatus LiteRtLoggerLog(LiteRtLogger logger, LiteRtLogSeverity severity,
                              const char* format, ...);
+
+LiteRtStatus LiteRtGetLoggerIdentifier(LiteRtLoggerConst logger,
+                                       const char** identifier);
+
 void LiteRtDestroyLogger(LiteRtLogger logger);
 
+// Creates a sink logger.
+//
+// A sink logger will store the logs instead of outputting them. This allows the
+// C++ public API to silence logs generated at the C boundary and control
+// when/if to output them.
+LiteRtStatus LiteRtCreateSinkLogger(LiteRtLogger* logger);
+
+// Returns the number of log calls that were done to the sink logger.
+LiteRtStatus LiteRtGetSinkLoggerSize(LiteRtLogger logger, size_t* size);
+
+// Returns the idx_th log in the sink logger.
+LiteRtStatus LiteRtGetSinkLoggerMessage(LiteRtLogger logger, size_t idx,
+                                        const char** message);
+
+// Clears the sink logger.
+LiteRtStatus LiteRtClearSinkLogger(LiteRtLogger logger);
+
 LiteRtLogger LiteRtGetDefaultLogger();
+
 LiteRtStatus LiteRtSetDefaultLogger(LiteRtLogger logger);
+
 LiteRtStatus LiteRtDefaultLoggerLog(LiteRtLogSeverity severity,
                                     const char* format, ...);
 
+// Use the library provided standard logger instead of creating a new one.
+LiteRtStatus LiteRtUseStandardLogger();
+
+// Use the library provided sink logger instead of creating a new one.
+LiteRtStatus LiteRtUseSinkLogger();
+
 #ifdef __cplusplus
-}
+}  // extern "C"
+
+// Compile statement only in debug mode.
+#ifndef NDEBUG
+#define LITERT_DEBUG_CODE(stmt) stmt;
+#else
+#define LITERT_DEBUG_CODE(stmt)
+#endif
+
 #endif  // __cplusplus
 
 #define LITERT_LOGGER_LOG_PROD(logger, severity, format, ...)                  \

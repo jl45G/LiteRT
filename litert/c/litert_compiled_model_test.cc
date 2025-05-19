@@ -24,9 +24,9 @@
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "absl/types/span.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_compilation_options.h"
 #include "litert/c/litert_environment.h"
 #include "litert/c/litert_model.h"
+#include "litert/c/litert_options.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
 #include "litert/test/common.h"
@@ -44,16 +44,15 @@ TEST(CompiledModelTest, Basic) {
   LiteRtModel model;
   ASSERT_EQ(LiteRtCreateModelFromFile(path.c_str(), &model), kLiteRtStatusOk);
 
-  LiteRtCompilationOptions jit_compilation_options;
-  ASSERT_EQ(LiteRtCreateCompilationOptions(&jit_compilation_options),
-            kLiteRtStatusOk);
-  ASSERT_EQ(LiteRtSetCompilationOptionsHardwareAccelerators(
-                jit_compilation_options, kLiteRtHwAcceleratorCpu),
+  LiteRtOptions jit_compilation_options;
+  ASSERT_EQ(LiteRtCreateOptions(&jit_compilation_options), kLiteRtStatusOk);
+  ASSERT_EQ(LiteRtSetOptionsHardwareAccelerators(jit_compilation_options,
+                                                 kLiteRtHwAcceleratorCpu),
             kLiteRtStatusOk);
 
   LiteRtEnvironment environment;
   LiteRtEnvOption options = {};
-  ASSERT_EQ(LiteRtEnvironmentCreate(/*num_options=*/0, &options, &environment),
+  ASSERT_EQ(LiteRtCreateEnvironment(/*num_options=*/0, &options, &environment),
             kLiteRtStatusOk);
 
   LiteRtCompiledModel compiled_model;
@@ -61,7 +60,7 @@ TEST(CompiledModelTest, Basic) {
                                       jit_compilation_options, &compiled_model),
             kLiteRtStatusOk);
 
-  LiteRtDestroyCompilationOptions(jit_compilation_options);
+  LiteRtDestroyOptions(jit_compilation_options);
 
   LiteRtSubgraph subgraph;
   ASSERT_EQ(LiteRtGetModelSubgraph(model, 0, &subgraph), kLiteRtStatusOk);
@@ -87,10 +86,10 @@ TEST(CompiledModelTest, Basic) {
                   tensor_buffer_requirements, &tensor_buffer_size),
               kLiteRtStatusOk);
     LiteRtTensorBuffer tensor_buffer;
-    EXPECT_EQ(
-        LiteRtCreateManagedTensorBuffer(tensor_buffer_type, &kInput0TensorType,
-                                        tensor_buffer_size, &tensor_buffer),
-        kLiteRtStatusOk);
+    EXPECT_EQ(LiteRtCreateManagedTensorBuffer(
+                  environment, tensor_buffer_type, &kInput0TensorType,
+                  tensor_buffer_size, &tensor_buffer),
+              kLiteRtStatusOk);
     input_tensor_buffers.push_back(tensor_buffer);
   }
 
@@ -116,10 +115,10 @@ TEST(CompiledModelTest, Basic) {
                   tensor_buffer_requirements, &tensor_buffer_size),
               kLiteRtStatusOk);
     LiteRtTensorBuffer tensor_buffer;
-    EXPECT_EQ(
-        LiteRtCreateManagedTensorBuffer(tensor_buffer_type, &kInput0TensorType,
-                                        tensor_buffer_size, &tensor_buffer),
-        kLiteRtStatusOk);
+    EXPECT_EQ(LiteRtCreateManagedTensorBuffer(
+                  environment, tensor_buffer_type, &kInput0TensorType,
+                  tensor_buffer_size, &tensor_buffer),
+              kLiteRtStatusOk);
     output_tensor_buffers.push_back(tensor_buffer);
   }
 

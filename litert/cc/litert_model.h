@@ -36,6 +36,7 @@
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_handle.h"
 #include "litert/cc/litert_layout.h"
+#include "litert/cc/litert_macros.h"
 
 namespace litert {
 
@@ -92,14 +93,15 @@ class Weights : public internal::NonOwnedHandle<LiteRtWeights> {
 // Tensor. C++ equivalent of LiteRtTensor.
 class Tensor : public internal::NonOwnedHandle<LiteRtTensor> {
  public:
-  explicit Tensor(LiteRtTensor tensor)
-      : internal::NonOwnedHandle<LiteRtTensor>(tensor) {}
+  explicit Tensor(LiteRtTensor tensor) : NonOwnedHandle(tensor) {}
 
   enum ElementType ElementType() const {
     if (TypeId() == kLiteRtUnrankedTensorType) {
-      return static_cast<enum ElementType>(UnrankedTensorType()->element_type);
+      LITERT_ASSIGN_OR_ABORT(auto tensor_type, UnrankedTensorType())
+      return static_cast<enum ElementType>(tensor_type.element_type);
     } else {
-      return RankedTensorType()->ElementType();
+      LITERT_ASSIGN_OR_ABORT(auto tensor_type, RankedTensorType())
+      return tensor_type.ElementType();
     }
   }
 
@@ -173,6 +175,12 @@ class Tensor : public internal::NonOwnedHandle<LiteRtTensor> {
     return absl::string_view(name);
   }
 
+  std::uint32_t TensorIndex() const {
+    std::uint32_t tensor_index;
+    internal::AssertOk(LiteRtGetTensorIndex, Get(), &tensor_index);
+    return tensor_index;
+  }
+
   struct TensorUse;
   using TensorUses =
       absl::InlinedVector<TensorUse, kExpectedMaxNumOfTensorUses>;
@@ -197,20 +205,20 @@ class Tensor : public internal::NonOwnedHandle<LiteRtTensor> {
     const absl::Span<const uint8_t> weights = Weights().Bytes();
 
     auto num_elements = ranked_tensor_type->Layout().NumElements();
-    if (!num_elements.has_value()) {
-      return litert::Unexpected(kLiteRtStatusErrorInvalidArgument);
+    if (!num_elements) {
+      return num_elements.Error();
     }
     auto byte_width = GetByteWidth(ty);
     if (!byte_width.has_value()) {
       return litert::Unexpected(kLiteRtStatusErrorInvalidArgument);
     }
 
-    if (byte_width.value() * num_elements.value() != weights.size()) {
+    if (byte_width.value() * *num_elements != weights.size()) {
       return litert::Unexpected(kLiteRtStatusErrorInvalidArgument);
     }
 
     return absl::MakeConstSpan(reinterpret_cast<const T*>(weights.data()),
-                               num_elements.value());
+                               *num_elements);
   }
 
   std::optional<LiteRtTensorDefiningOp> DefiningOp() const {
@@ -326,11 +334,11 @@ class Model : public internal::Handle<LiteRtModel, LiteRtDestroyModel> {
   Model() = default;
 
   static Model CreateFromOwnedHandle(LiteRtModel model) {
-    return Model(model, /*owned=*/true);
+    return Model(model, OwnHandle::kYes);
   }
 
   static Model CreateFromNonOwnedHandle(LiteRtModel model) {
-    return Model(model, /*owned=*/false);
+    return Model(model, OwnHandle::kNo);
   }
 
   static Expected<Model> CreateFromFile(const std::string& filename) {
@@ -464,8 +472,7 @@ class Model : public internal::Handle<LiteRtModel, LiteRtDestroyModel> {
  private:
   // Parameter `owned` indicates if the created TensorBuffer object should take
   // ownership of the provided `tensor_buffer` handle.
-  Model(LiteRtModel model, bool owned)
-      : internal::Handle<LiteRtModel, LiteRtDestroyModel>(model, owned) {}
+  Model(LiteRtModel model, OwnHandle owned) : Handle(model, owned) {}
 };
 
 struct SerializationOptions {

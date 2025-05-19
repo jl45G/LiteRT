@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("//litert/vendors/mediatek:mediatek_build_defs.bzl", "litert_cc_lib_with_mtk")
 
 package(
@@ -27,18 +28,23 @@ litert_cc_lib_with_mtk(
     hdrs = [
         "neuron_adapter_api.h",
     ],
-    tags = [
-        # Don't build/test in OS until neuron is available.
-        "nobuilder",
-        "notap",
-    ],
+    ungrte = True,
     deps = [
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:string_view",
-        # copybara:uncomment "//third_party/neuro_pilot:latest_host_headers",
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_shared_library",
+        "//litert/cc/options:litert_mediatek_options",
+        "//third_party/neuro_pilot:v8_latest_host_headers",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+build_test(
+    name = "build_so_test",
+    targets = [
+        "//litert/vendors/mediatek/dispatch:dispatch_api_so",
+        "//litert/vendors/mediatek/compiler:compiler_plugin_so",
     ],
 )

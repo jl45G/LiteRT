@@ -17,12 +17,19 @@
 
 import copy
 import functools
-from typing import Iterable, Self
+import os
+import pathlib
+from typing import Iterable
 
+from litert.python.aot.core import common
 from litert.python.aot.core import components
 from litert.python.aot.core import types
 from litert.python.aot.vendors import import_vendor
 from litert.python.aot.vendors.qualcomm import target as target_lib
+
+COMPILER_PLUGIN_LIB_PATH = pathlib.Path(
+    "vendors/qualcomm/compiler/libLiteRtCompilerPlugin_Qualcomm.so"
+)
 
 
 @import_vendor.register_backend
@@ -60,7 +67,7 @@ class QualcommBackend(types.Backend):
     return target_lib._QUALCOMM_BACKEND_ID  # pylint: disable=protected-access
 
   @classmethod
-  def create(cls, config: types.Config) -> Self:
+  def create(cls, config: types.Config) -> "QualcommBackend":
     if config.get("backend_id", "") != cls.id():
       raise ValueError("Invalid backend id")
     return cls(config)
@@ -98,11 +105,31 @@ def _apply_plugin(
     input_model: types.Model,
     output_model: types.Model,
 ):
+  """Calls the apply plugin component."""
+  try:
+    # If the plugin is not built from source (i.e. using ai_edge_litert wheel),
+    # we find the plugin library directory from the package path.
+    # Otherwise we use the default library path.
+    plugin_path = common.get_resource(COMPILER_PLUGIN_LIB_PATH)
+    lib_dir = os.path.dirname(plugin_path)
+
+    try:
+      # pytype: disable=import-error
+      import ai_edge_litert_sdk_qualcomm  # pylint: disable=g-import-not-at-top
+      # pytype: enable=import-error
+
+      sdk_libs_path = str(ai_edge_litert_sdk_qualcomm.path_to_sdk_libs())
+    except ImportError:
+      sdk_libs_path = None
+    extra_kwargs = {"libs": lib_dir, "sdk_libs_path": sdk_libs_path}
+  except FileNotFoundError:
+    extra_kwargs = {}
   return component(
       input_model,
       output_model,
       backend.soc_manufacturer,
       backend.soc_model,
+      **extra_kwargs,
   )
 
 

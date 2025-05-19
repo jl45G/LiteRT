@@ -18,12 +18,6 @@
 #include <stddef.h>
 
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_compilation_options.h"
-#include "litert/c/litert_environment.h"
-#include "litert/c/litert_metrics.h"
-#include "litert/c/litert_model.h"
-#include "litert/c/litert_tensor_buffer.h"
-#include "litert/c/litert_tensor_buffer_requirements.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,16 +39,17 @@ extern "C" {
 // 5. Invoke the model with the input/output LiteRtTensorBuffer
 // 6. Evaluate the output LiteRtTensorBuffer
 
-LITERT_DEFINE_HANDLE(LiteRtCompiledModel);
-
 // Creates a LiteRtCompiledModel from a LiteRtModel object. Parameter
 // `jit_compilation_options` is optional and can be null, and is owned by the
 // caller.  The model is loaded into memory and the caller takes ownership of
 // the returned object.
-LiteRtStatus LiteRtCreateCompiledModel(
-    LiteRtEnvironment environment, LiteRtModel model,
-    LiteRtCompilationOptions compilation_options,
-    LiteRtCompiledModel* compiled_model);
+//
+// Caller owns the returned LiteRtCompiledModel. The owner is responsible for
+// calling LiteRtDestroyCompiledModel() to release the object.
+LiteRtStatus LiteRtCreateCompiledModel(LiteRtEnvironment environment,
+                                       LiteRtModel model,
+                                       LiteRtOptions compilation_options,
+                                       LiteRtCompiledModel* compiled_model);
 
 // Returns the buffer requirements for the given n-th input tensor. The returned
 // LiteRtTensorBufferRequirements is used to create the input tensor
@@ -65,6 +60,9 @@ LiteRtStatus LiteRtCreateCompiledModel(
 // - signature_index: the index of the signature in `LiteRtModel`.
 // - input_index: the index of the input tensor in the signature (subgraph).
 // - buffer_requirements: the returned `LiteRtTensorBufferRequirements`.
+//
+// Note: The returned LiteRtTensorBufferRequirements is still owned by the
+// LiteRtCompiledModel and should not outlive the LiteRtCompiledModel.
 LiteRtStatus LiteRtGetCompiledModelInputBufferRequirements(
     LiteRtCompiledModel compiled_model, LiteRtParamIndex signature_index,
     LiteRtParamIndex input_index,
@@ -79,10 +77,17 @@ LiteRtStatus LiteRtGetCompiledModelInputBufferRequirements(
 // - signature_index: the index of the signature in `LiteRtModel`.
 // - input_index: the index of the input tensor in the signature (subgraph).
 // - buffer_requirements: the returned `LiteRtTensorBufferRequirements`.
+//
+// Note: The returned LiteRtTensorBufferRequirements is still owned by the
+// LiteRtCompiledModel and should not outlive the LiteRtCompiledModel.
 LiteRtStatus LiteRtGetCompiledModelOutputBufferRequirements(
     LiteRtCompiledModel compiled_model, LiteRtParamIndex signature_index,
     LiteRtParamIndex output_index,
     LiteRtTensorBufferRequirements* buffer_requirements);
+
+// Returns the associated environment of the given compiled model.
+LiteRtStatus LiteRtGetCompiledModelEnvironment(
+    LiteRtCompiledModel compiled_model, LiteRtEnvironment* environment);
 
 // Runs the model of the given signature synchronously, with the provided
 // input/output LiteRtTensorBuffer.
@@ -128,6 +133,7 @@ LiteRtStatus LiteRtRunCompiledModelAsync(
     size_t num_input_buffers, LiteRtTensorBuffer* input_buffers,
     size_t num_output_buffers, LiteRtTensorBuffer* output_buffers, bool* async);
 
+// Destroy a owned LiteRtCompiledModel object.
 void LiteRtDestroyCompiledModel(LiteRtCompiledModel compiled_model);
 
 // Start collection of HW-specific metrics at a specific level of detail (>= 0).
@@ -137,6 +143,12 @@ LiteRtStatus LiteRtCompiledModelStartMetricsCollection(
 // Stop collection of HW-specific metrics and report the collected metrics.
 LiteRtStatus LiteRtCompiledModelStopMetricsCollection(
     LiteRtCompiledModel compiled_model, LiteRtMetrics metrics);
+
+// Returns true if the model is fully accelerated for all the selected HW
+// accelerator(s). For example, if both GPU and NPU are selected and the model
+// is only delegated to GPU, this method will still return true.
+LiteRtStatus LiteRtCompiledModelIsFullyAccelerated(
+    LiteRtCompiledModel compiled_model, bool* fully_accelerated);
 
 #ifdef __cplusplus
 }

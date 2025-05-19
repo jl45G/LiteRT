@@ -17,6 +17,7 @@
 
 #include <cstdint>
 
+#include "litert/c/litert_common.h"
 #include "litert/c/litert_event.h"
 #include "litert/c/litert_event_type.h"
 #include "litert/cc/litert_expected.h"
@@ -26,6 +27,7 @@
 extern "C" {
 // Forward declaration of OpenCL event to avoid including OpenCL headers.
 typedef struct _cl_event* cl_event;
+typedef void* EGLSyncKHR;
 }
 
 namespace litert {
@@ -34,31 +36,59 @@ class Event : public internal::Handle<LiteRtEvent, LiteRtDestroyEvent> {
  public:
   // Parameter `owned` indicates if the created TensorBufferRequirements object
   // should take ownership of the provided `requirements` handle.
-  explicit Event(LiteRtEvent event, bool owned = true)
+  explicit Event(LiteRtEvent event, OwnHandle owned)
       : internal::Handle<LiteRtEvent, LiteRtDestroyEvent>(event, owned) {}
 
   // Creates an Event object with the given `sync_fence_fd`.
+  //
+  // Warning: This is an old API that does not take LiteRtEnvironment. It is
+  // provided for backward compatibility. New code should use the other
+  // CreateFromSyncFenceFd() API.
   static Expected<Event> CreateFromSyncFenceFd(int sync_fence_fd,
                                                bool owns_fd) {
     LiteRtEvent event;
+    LITERT_RETURN_IF_ERROR(LiteRtCreateEventFromSyncFenceFd(
+        /*env=*/nullptr, sync_fence_fd, owns_fd, &event));
+    return Event(event, OwnHandle::kYes);
+  }
+
+  // Creates an Event object with the given `sync_fence_fd`.
+  static Expected<Event> CreateFromSyncFenceFd(LiteRtEnvironment env,
+                                               int sync_fence_fd,
+                                               bool owns_fd) {
+    LiteRtEvent event;
     LITERT_RETURN_IF_ERROR(
-        LiteRtCreateEventFromSyncFenceFd(sync_fence_fd, owns_fd, &event));
-    return Event(event);
+        LiteRtCreateEventFromSyncFenceFd(env, sync_fence_fd, owns_fd, &event));
+    return Event(event, OwnHandle::kYes);
   }
 
   // Creates an Event object with the given `cl_event`.
-  static Expected<Event> CreateFromOpenClEvent(cl_event cl_event) {
+  static Expected<Event> CreateFromOpenClEvent(LiteRtEnvironment env,
+                                               cl_event cl_event) {
     LiteRtEvent event;
-    LITERT_RETURN_IF_ERROR(LiteRtCreateEventFromOpenClEvent(cl_event, &event));
-    return Event(event);
+    LITERT_RETURN_IF_ERROR(
+        LiteRtCreateEventFromOpenClEvent(env, cl_event, &event));
+    return Event(event, OwnHandle::kYes);
+  }
+
+  // Creates an Event object with the given `egl_sync`.
+  // Note: This function assumes that all GL operations have been already added
+  // to the GPU command queue.
+  static Expected<Event> CreateFromEglSyncFence(LiteRtEnvironment env,
+                                                EGLSyncKHR egl_sync) {
+    LiteRtEvent event;
+    LITERT_RETURN_IF_ERROR(
+        LiteRtCreateEventFromEglSyncFence(env, egl_sync, &event));
+    return Event(event, OwnHandle::kYes);
   }
 
   // Creates a managed event of the given `type`. Currently only
   // LiteRtEventTypeOpenCl is supported.
-  static Expected<Event> CreateManaged(LiteRtEventType type) {
+  static Expected<Event> CreateManaged(LiteRtEnvironment env,
+                                       LiteRtEventType type) {
     LiteRtEvent event;
-    LITERT_RETURN_IF_ERROR(LiteRtCreateManagedEvent(type, &event));
-    return Event(event);
+    LITERT_RETURN_IF_ERROR(LiteRtCreateManagedEvent(env, type, &event));
+    return Event(event, OwnHandle::kYes);
   }
 
   Expected<int> GetSyncFenceFd() {
@@ -74,17 +104,39 @@ class Event : public internal::Handle<LiteRtEvent, LiteRtDestroyEvent> {
     return cl_event;
   }
 
+  Expected<EGLSyncKHR> GetEglSync() {
+    EGLSyncKHR egl_sync;
+    LITERT_RETURN_IF_ERROR(LiteRtGetEventEglSync(Get(), &egl_sync));
+    return egl_sync;
+  }
+
   // Pass -1 for timeout_in_ms for indefinite wait.
   Expected<void> Wait(int64_t timeout_in_ms = -1) {
-    LITERT_RETURN_IF_ERROR(LiteRtEventWait(Get(), timeout_in_ms));
+    LITERT_RETURN_IF_ERROR(LiteRtWaitEvent(Get(), timeout_in_ms));
     return {};
   }
 
-  // Singal the event.
+  // Signals the event.
   // Note: This is only supported for OpenCL events.
   Expected<void> Signal() {
-    LITERT_RETURN_IF_ERROR(LiteRtEventSignal(Get()));
+    LITERT_RETURN_IF_ERROR(LiteRtSignalEvent(Get()));
     return {};
+  }
+
+  // Returns true if the event is signaled.
+  // Note: This is only supported for sync fence events.
+  Expected<bool> IsSignaled() {
+    bool is_signaled;
+    LITERT_RETURN_IF_ERROR(LiteRtIsEventSignaled(Get(), &is_signaled));
+    return is_signaled;
+  }
+
+  // Returns a dup of the event's sync fence fd.
+  // Note: This is only supported for sync fence events.
+  Expected<int> DupFd() {
+    int dup_fd;
+    LITERT_RETURN_IF_ERROR(LiteRtDupFdEvent(Get(), &dup_fd));
+    return dup_fd;
   }
 
   // Returns the underlying event type.

@@ -39,6 +39,7 @@ if [ ! -d /root_dir ]; then
     -e DOCKER_PYTHON_VERSION=${DOCKER_PYTHON_VERSION} \
     -e BAZEL_CONFIG_FLAGS="${BAZEL_CONFIG_FLAGS}" \
     -e CUSTOM_BAZEL_FLAGS=${CUSTOM_BAZEL_FLAGS} \
+    -e TEST_MANYLINUX_COMPLIANCE="${TEST_MANYLINUX_COMPLIANCE}" \
     -e RELEASE_VERSION=${RELEASE_VERSION} \
     -e TEST_WHEEL=${TEST_WHEEL:-false} \
     --entrypoint /script_dir/build_pip_package_with_docker.sh \
@@ -79,6 +80,7 @@ else
 
   # Test build wheel
   if [[ "${TEST_WHEEL}" == "true" ]]; then
+    install_sdk
     install_wheel
     test_import
     uninstall_pip

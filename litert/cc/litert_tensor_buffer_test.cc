@@ -28,7 +28,9 @@
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_element_type.h"
+#include "litert/cc/litert_environment.h"
 #include "litert/cc/litert_event.h"
+#include "litert/cc/litert_handle.h"
 #include "litert/cc/litert_layout.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_platform_support.h"
@@ -40,15 +42,11 @@
 #include <android/hardware_buffer.h>
 #endif  // LITERT_HAS_AHWB_SUPPORT
 
-#if LITERT_HAS_OPENGL_SUPPORT
-#include "tflite/delegates/gpu/gl/egl_environment.h"  // from @org_tensorflow
-#endif  // LITERT_HAS_OPENGL_SUPPORT
-
 #if LITERT_HAS_OPENCL_SUPPORT
 #include "litert/runtime/gpu_environment.h"
 #include <CL/cl.h>
-#include "tflite/delegates/gpu/cl/buffer.h"  // from @org_tensorflow
-#include "tflite/delegates/gpu/cl/cl_command_queue.h"  // from @org_tensorflow
+#include "tflite/delegates/gpu/cl/buffer.h"
+#include "tflite/delegates/gpu/cl/cl_command_queue.h"
 #endif  // LITERT_HAS_OPENCL_SUPPORT
 
 namespace litert {
@@ -75,11 +73,12 @@ int GetReferenceCount(const TensorBuffer& tensor_buffer) {
 }
 
 TEST(TensorBuffer, HostMemory) {
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   const RankedTensorType kTensorType(kTestTensorType);
   constexpr auto kTensorBufferType = kLiteRtTensorBufferTypeHostMemory;
 
   auto tensor_buffer = TensorBuffer::CreateManaged(
-      kTensorBufferType, kTensorType, sizeof(kTensorData));
+      env.Get(), kTensorBufferType, kTensorType, sizeof(kTensorData));
   ASSERT_TRUE(tensor_buffer);
 
   auto tensor_buffer_type = tensor_buffer->BufferType();
@@ -123,12 +122,13 @@ TEST(TensorBuffer, Ahwb) {
     GTEST_SKIP() << "AHardwareBuffers are not supported on this platform; "
                     "skipping the test";
   }
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
 
   const RankedTensorType kTensorType(kTestTensorType);
   constexpr auto kTensorBufferType = kLiteRtTensorBufferTypeAhwb;
 
   auto tensor_buffer = TensorBuffer::CreateManaged(
-      kTensorBufferType, kTensorType, sizeof(kTensorData));
+      env.Get(), kTensorBufferType, kTensorType, sizeof(kTensorData));
   ASSERT_TRUE(tensor_buffer);
 
   auto tensor_buffer_type = tensor_buffer->BufferType();
@@ -172,12 +172,13 @@ TEST(TensorBuffer, Ion) {
     GTEST_SKIP()
         << "ION buffers are not supported on this platform; skipping the test";
   }
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
 
   const RankedTensorType kTensorType(kTestTensorType);
   constexpr auto kTensorBufferType = kLiteRtTensorBufferTypeIon;
 
   auto tensor_buffer = TensorBuffer::CreateManaged(
-      kTensorBufferType, kTensorType, sizeof(kTensorData));
+      env.Get(), kTensorBufferType, kTensorType, sizeof(kTensorData));
   ASSERT_TRUE(tensor_buffer);
 
   auto tensor_buffer_type = tensor_buffer->BufferType();
@@ -222,12 +223,13 @@ TEST(TensorBuffer, DmaBuf) {
         << "DMA-BUF buffers are not supported on this platform; skipping "
            "the test";
   }
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
 
   const RankedTensorType kTensorType(kTestTensorType);
   constexpr auto kTensorBufferType = kLiteRtTensorBufferTypeDmaBuf;
 
   auto tensor_buffer = TensorBuffer::CreateManaged(
-      kTensorBufferType, kTensorType, sizeof(kTensorData));
+      env.Get(), kTensorBufferType, kTensorType, sizeof(kTensorData));
   ASSERT_TRUE(tensor_buffer);
 
   auto tensor_buffer_type = tensor_buffer->BufferType();
@@ -272,12 +274,13 @@ TEST(TensorBuffer, FastRpc) {
         << "FastRPC buffers are not supported on this platform; skipping "
            "the test";
   }
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
 
   const RankedTensorType kTensorType(kTestTensorType);
   constexpr auto kTensorBufferType = kLiteRtTensorBufferTypeFastRpc;
 
   auto tensor_buffer = TensorBuffer::CreateManaged(
-      kTensorBufferType, kTensorType, sizeof(kTensorData));
+      env.Get(), kTensorBufferType, kTensorType, sizeof(kTensorData));
   ASSERT_TRUE(tensor_buffer);
 
   auto tensor_buffer_type = tensor_buffer->BufferType();
@@ -317,13 +320,14 @@ TEST(TensorBuffer, FastRpc) {
 }
 
 TEST(TensorBuffer, NotOwned) {
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   LiteRtTensorBuffer litert_tensor_buffer;
   ASSERT_EQ(LiteRtCreateManagedTensorBuffer(
-                kLiteRtTensorBufferTypeHostMemory, &kTestTensorType,
+                env.Get(), kLiteRtTensorBufferTypeHostMemory, &kTestTensorType,
                 sizeof(kTensorData), &litert_tensor_buffer),
             kLiteRtStatusOk);
 
-  TensorBuffer tensor_buffer(litert_tensor_buffer, /*owned=*/false);
+  TensorBuffer tensor_buffer(litert_tensor_buffer, litert::OwnHandle::kNo);
   ASSERT_EQ(tensor_buffer.Get(), litert_tensor_buffer);
 
   LiteRtDestroyTensorBuffer(litert_tensor_buffer);
@@ -358,6 +362,7 @@ TEST(TensorBuffer, CreateFromExternalHostMemory) {
 
 #if LITERT_HAS_AHWB_SUPPORT
 TEST(TensorBuffer, CreateFromAhwb) {
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   AHardwareBuffer* ahw_buffer = nullptr;
   if (__builtin_available(android 26, *)) {
     int error = 0;
@@ -391,7 +396,7 @@ TEST(TensorBuffer, CreateFromAhwb) {
     // Create a tensor buffer that wraps the AHardwareBuffer.
     const RankedTensorType kTensorType(kTestTensorType);
     auto tensor_buffer_from_ahwb =
-        TensorBuffer::CreateFromAhwb(kTensorType, ahw_buffer,
+        TensorBuffer::CreateFromAhwb(env.Get(), kTensorType, ahw_buffer,
                                      /*ahwb_offset=*/0);
 
     auto lock_and_addr_external_memory =
@@ -409,13 +414,14 @@ TEST(TensorBuffer, CreateFromAhwb) {
 #endif  // LITERT_HAS_AHWB_SUPPORT
 
 TEST(TensorBuffer, Duplicate) {
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   LiteRtTensorBuffer litert_tensor_buffer;
   ASSERT_EQ(LiteRtCreateManagedTensorBuffer(
-                kLiteRtTensorBufferTypeHostMemory, &kTestTensorType,
+                env.Get(), kLiteRtTensorBufferTypeHostMemory, &kTestTensorType,
                 sizeof(kTensorData), &litert_tensor_buffer),
             kLiteRtStatusOk);
 
-  TensorBuffer tensor_buffer(litert_tensor_buffer, /*owned=*/true);
+  TensorBuffer tensor_buffer(litert_tensor_buffer, litert::OwnHandle::kYes);
   ASSERT_EQ(GetReferenceCount(tensor_buffer), 1);
   {
     auto duplicated_tensor_buffer = tensor_buffer.Duplicate();
@@ -447,13 +453,14 @@ TEST(TensorBuffer, Duplicate) {
 }
 
 TEST(TensorBuffer, ReadWriteBasic) {
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   LiteRtTensorBuffer litert_tensor_buffer;
   ASSERT_EQ(LiteRtCreateManagedTensorBuffer(
-                kLiteRtTensorBufferTypeHostMemory, &kTestTensorType,
+                env.Get(), kLiteRtTensorBufferTypeHostMemory, &kTestTensorType,
                 sizeof(kTensorData), &litert_tensor_buffer),
             kLiteRtStatusOk);
 
-  TensorBuffer tensor_buffer(litert_tensor_buffer, /*owned=*/true);
+  TensorBuffer tensor_buffer(litert_tensor_buffer, litert::OwnHandle::kYes);
   auto write_success = tensor_buffer.Write<float>(absl::MakeSpan(
       kTensorData, sizeof(kTensorData) / sizeof(kTensorData[0])));
   ASSERT_TRUE(write_success);
@@ -464,9 +471,10 @@ TEST(TensorBuffer, ReadWriteBasic) {
 }
 
 TEST(TensorBuffer, ReadWriteBufferSizeMismatch) {
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer tensor_buffer,
-      TensorBuffer::CreateManaged(kLiteRtTensorBufferTypeHostMemory,
+      TensorBuffer::CreateManaged(env.Get(), kLiteRtTensorBufferTypeHostMemory,
                                   RankedTensorType(kTestTensorType),
                                   sizeof(kTensorData)));
   {
@@ -502,8 +510,11 @@ TEST(TensorBuffer, ReadWriteBufferSizeMismatch) {
 
 #if LITERT_HAS_OPENGL_SUPPORT
 TEST(TensorBuffer, CreateFromGlTexture) {
-  std::unique_ptr<tflite::gpu::gl::EglEnvironment> env;
-  ASSERT_TRUE(tflite::gpu::gl::EglEnvironment::NewEglEnvironment(&env).ok());
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
+  // User provides EGL environment.
+  std::unique_ptr<tflite::gpu::gl::EglEnvironment> egl_env;
+  ASSERT_TRUE(
+      tflite::gpu::gl::EglEnvironment::NewEglEnvironment(&egl_env).ok());
 
   // Create GL texture.
   tflite::gpu::gl::GlTexture gl_texture(GL_TEXTURE_2D, 1, GL_RGBA8, 1, 1,
@@ -515,7 +526,7 @@ TEST(TensorBuffer, CreateFromGlTexture) {
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer tensor_buffer,
       TensorBuffer::CreateFromGlTexture(
-          RankedTensorType(kTestTensorType), gl_texture.target(),
+          env.Get(), RankedTensorType(kTestTensorType), gl_texture.target(),
           gl_texture.id(), gl_texture.format(), gl_texture.bytes_size(),
           gl_texture.layer()));
 }
@@ -528,29 +539,77 @@ tflite::gpu::gl::GlBuffer CreateTestGlBuffer(size_t size_bytes) {
 }
 
 TEST(TensorBuffer, CreateFromGlBuffer) {
-  std::unique_ptr<tflite::gpu::gl::EglEnvironment> env;
-  ASSERT_TRUE(tflite::gpu::gl::EglEnvironment::NewEglEnvironment(&env).ok());
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
+  // User provides EGL environment.
+  std::unique_ptr<tflite::gpu::gl::EglEnvironment> egl_env;
+  ASSERT_TRUE(
+      tflite::gpu::gl::EglEnvironment::NewEglEnvironment(&egl_env).ok());
 
   // Create GL buffer.
   tflite::gpu::gl::GlBuffer gl_buffer = CreateTestGlBuffer(sizeof(kTensorData));
+  EXPECT_TRUE(gl_buffer.is_valid());
+  EXPECT_EQ(gl_buffer.target(), GL_SHADER_STORAGE_BUFFER);
 
   // Create tensor buffer from existing GL buffer.
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer tensor_buffer,
       TensorBuffer::CreateFromGlBuffer(
-          RankedTensorType(kTestTensorType), gl_buffer.target(), gl_buffer.id(),
-          gl_buffer.bytes_size(), gl_buffer.offset()));
+          env.Get(), RankedTensorType(kTestTensorType), gl_buffer.target(),
+          gl_buffer.id(), gl_buffer.bytes_size(), gl_buffer.offset()));
+
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      TensorBuffer::GlBuffer gl_buffer_from_tensor_buffer,
+      tensor_buffer.GetGlBuffer());
+  EXPECT_THAT(gl_buffer_from_tensor_buffer.target, Eq(gl_buffer.target()));
+  EXPECT_THAT(gl_buffer_from_tensor_buffer.id, Eq(gl_buffer.id()));
+  EXPECT_THAT(gl_buffer_from_tensor_buffer.size_bytes,
+              Eq(gl_buffer.bytes_size()));
+  EXPECT_THAT(gl_buffer_from_tensor_buffer.offset, Eq(gl_buffer.offset()));
+}
+
+TEST(TensorBuffer, CreateManagedGlBuffer) {
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
+  // EGL environment is provided by LiteRT if one is not provided by the user.
+  // This allows creation of managed GL buffers.
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      TensorBuffer tensor_buffer,
+      TensorBuffer::CreateManaged(env.Get(), kLiteRtTensorBufferTypeGlBuffer,
+                                  RankedTensorType(kTestTensorType),
+                                  sizeof(kTensorData)));
+  LITERT_ASSERT_OK_AND_ASSIGN(TensorBuffer::GlBuffer gl_buffer,
+                              tensor_buffer.GetGlBuffer());
+  EXPECT_THAT(gl_buffer.target, Eq(GL_SHADER_STORAGE_BUFFER));
+  EXPECT_THAT(gl_buffer.id, Ne(0));
+  EXPECT_THAT(gl_buffer.size_bytes, Eq(sizeof(kTensorData)));
+  EXPECT_THAT(gl_buffer.offset, Eq(0));
+}
+
+TEST(TensorBuffer, ClBufferFromGlBuffer) {
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
+  // TODO(b/383176413) Add check for GLSharing.
+  if (!HasOpenClSupport() || !HasOpenGlSupport()) {
+    GTEST_SKIP() << "OpenCL and/or GL are not supported on this platform; "
+                    "skipping the test";
+  }
+  // Create GL Tensor buffer.
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      TensorBuffer gl_tensor_buffer,
+      TensorBuffer::CreateManaged(env.Get(), kLiteRtTensorBufferTypeGlBuffer,
+                                  RankedTensorType(kTestTensorType),
+                                  sizeof(kTensorData)));
+
+  LITERT_ASSERT_OK_AND_ASSIGN(cl_mem cl_buffer,
+                              gl_tensor_buffer.GetOpenClMemory());
+  EXPECT_THAT(cl_buffer, Ne(nullptr));
 }
 
 #if LITERT_HAS_AHWB_SUPPORT
 TEST(TensorBuffer, GetGlBufferFromAhwb) {
-  std::unique_ptr<tflite::gpu::gl::EglEnvironment> env;
-  ASSERT_TRUE(tflite::gpu::gl::EglEnvironment::NewEglEnvironment(&env).ok());
-
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   // Create AHWB Tensor buffer.
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer ahwb_tensor_buffer,
-      TensorBuffer::CreateManaged(kLiteRtTensorBufferTypeAhwb,
+      TensorBuffer::CreateManaged(env.Get(), kLiteRtTensorBufferTypeAhwb,
                                   RankedTensorType(kTestTensorType),
                                   sizeof(kTensorData)));
 
@@ -587,10 +646,11 @@ TEST(TensorBuffer, GetClBufferFromAhwb) {
                     "skipping the "
                     "test";
   }
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   // Create AHWB Tensor buffer.
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer ahwb_tensor_buffer,
-      TensorBuffer::CreateManaged(kLiteRtTensorBufferTypeAhwb,
+      TensorBuffer::CreateManaged(env.Get(), kLiteRtTensorBufferTypeAhwb,
                                   RankedTensorType(kTestTensorType),
                                   sizeof(kTensorData)));
 
@@ -607,8 +667,9 @@ TEST(TensorBuffer, GetClBufferFromAhwb) {
   // TensorBuffer. ClBuffer::Unlock currently writes to CL buffer.
 
   tflite::gpu::cl::Buffer cl_buffer_from_ahwb(cl_buffer, sizeof(kTensorData));
-  tflite::gpu::cl::CLCommandQueue* queue =
-      internal::GpuEnvironmentSingleton::GetInstance().getCommandQueue();
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto gpu_env, litert::internal::GpuEnvironmentSingleton::GetInstance());
+  tflite::gpu::cl::CLCommandQueue* queue = gpu_env->getCommandQueue();
   std::vector<float> read_data;
   auto status = cl_buffer_from_ahwb.ReadData(queue, &read_data);
   ASSERT_TRUE(status.ok());
@@ -621,9 +682,10 @@ TEST(TensorBuffer, GetAhwb) {
     GTEST_SKIP() << "AHardwareBuffers are not supported on this platform; "
                     "skipping the test";
   }
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer tensor_buffer,
-      TensorBuffer::CreateManaged(kLiteRtTensorBufferTypeAhwb,
+      TensorBuffer::CreateManaged(env.Get(), kLiteRtTensorBufferTypeAhwb,
                                   RankedTensorType(kTestTensorType),
                                   sizeof(kTensorData)));
   LITERT_ASSERT_OK_AND_ASSIGN(AHardwareBuffer * ahwb, tensor_buffer.GetAhwb());
@@ -631,14 +693,16 @@ TEST(TensorBuffer, GetAhwb) {
 }
 
 TEST(TensorBuffer, Event) {
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, litert::Environment::Create({}));
   LITERT_ASSERT_OK_AND_ASSIGN(
       TensorBuffer tensor_buffer,
-      TensorBuffer::CreateManaged(kLiteRtTensorBufferTypeHostMemory,
+      TensorBuffer::CreateManaged(env.Get(), kLiteRtTensorBufferTypeHostMemory,
                                   RankedTensorType(kTestTensorType),
                                   sizeof(kTensorData)));
   // Create event.
   LITERT_ASSERT_OK_AND_ASSIGN(
-      Event event, Event::CreateFromSyncFenceFd(kFakeSyncFenceFd, true));
+      Event event,
+      Event::CreateFromSyncFenceFd(env.Get(), kFakeSyncFenceFd, true));
   // Move event into tensor buffer.
   LITERT_EXPECT_OK(tensor_buffer.SetEvent(std::move(event)));
   EXPECT_TRUE(tensor_buffer.HasEvent());

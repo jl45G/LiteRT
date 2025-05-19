@@ -18,12 +18,20 @@
 import pathlib
 from typing import cast
 
-from tqdm.tqdm import auto as autotqdm
+# pylint: disable=g-import-not-at-top
+# pytype: disable=import-error
+try:
+  from tqdm.tqdm import auto as autotqdm
+except ImportError:
+  from tqdm.tqdm.tqdm import auto as autotqdm
+# pytype: enable=import-error
 
 from litert.python.aot.core import common
 from litert.python.aot.core import components
 from litert.python.aot.core import types
 from litert.python.aot.vendors import import_vendor
+
+# pylint: enable=g-import-not-at-top
 
 
 def resolve_backend(config: types.Config) -> types.BackendT:
@@ -42,7 +50,7 @@ def prepare_for_npu_multiple_configs(
     transforms: components.MlirTransformsT | None = None,
     quantizer: components.AieQuantizerT | None = None,
     keep_going: bool = False,
-) -> types.CompiledModels:
+) -> types.CompilationResult:
   """Prepares a TFLite model for NPU execution."""
   backends = []
   for backend_class, config in configs:
@@ -64,7 +72,7 @@ def prepare_for_npu(
     transforms: components.MlirTransformsT | None = None,
     quantizer: components.AieQuantizerT | None = None,
     keep_going: bool = False,
-) -> types.CompiledModels:
+) -> types.CompilationResult:
   """Prepares a TFLite model for NPU execution.
 
   High level command that erforms various backend specific pre-processing steps
@@ -102,45 +110,42 @@ def compile_model(
     backends: list[types.Backend],
     pipeline: list[types.Component],
     keep_going: bool = False,
-) -> types.CompiledModels:
+) -> types.CompilationResult:
   """Compiles a TFLite model for NPU execution."""
   if flatbuffer.in_memory:
     base_name = "model"
   else:
     base_name = flatbuffer.path.name.removesuffix(common.DOT_TFLITE)
-  compile_models = types.CompiledModels()
+  compile_models = types.CompilationResult()
   with autotqdm.tqdm(backends, desc="Backend") as t_backends:
     for backend in t_backends:
       component_input = flatbuffer
       backend = cast(types.Backend, backend)
       input_name_pref = base_name + backend.target_id_suffix
-      t_backends.set_description(f"Backend {backend.id()}")
+      t_backends.set_description(f"Compiling {backend.target_id}")
       try:
-        with autotqdm.tqdm(
-            pipeline, desc="Component", leave=None
-        ) as t_pipeline:
-          for component in t_pipeline:
-            component = cast(types.Component, component)
-            t_pipeline.set_description(f"Component {component.component_name}")
-            component_output = types.Model.create_from_path(
-                output_dir
-                / f"{input_name_pref}_{component.component_name}{common.DOT_TFLITE}"
+        for component in pipeline:
+          component = cast(types.Component, component)
+          t_backends.set_description(
+              f"Compiling {backend.target_id}: {component.component_name}"
+          )
+          component_output = types.Model.create_from_path(
+              output_dir
+              / f"{input_name_pref}_{component.component_name}{common.DOT_TFLITE}"
+          )
+          backend.call_component(component_input, component_output, component)
+          if not component_output.in_memory and not common.is_tflite(
+              component_output.path
+          ):
+            raise ValueError(
+                f"{component.component_name} failed to produce a TFLite model."
             )
-            backend.call_component(
-                component_input, component_output, component
-            )
-            if not component_output.in_memory and not common.is_tflite(
-                component_output.path
-            ):
-              raise ValueError(
-                  f"{component.component_name} failed to produce a TFLite"
-                  " model."
-              )
-            component_input = component_output
+          component_input = component_output
         compile_models.models_with_backend.append((backend, component_input))
       except ValueError as e:
         if keep_going:
-          print(f"Failed to compile model for {backend.target}: {e}")
+          print(f"Skipping failed compilation for {backend.target}. Error: {e}")
+          compile_models.failed_backends.append((backend, str(e)))
         else:
           raise
 

@@ -16,8 +16,7 @@
 #define ODML_LITERT_LITERT_VENDORS_QUALCOMM_COMMON_H_
 
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_model.h"
-#include "litert/cc/litert_model.h"
+#include "litert/cc/litert_element_type.h"
 #include "third_party/qairt/latest/include/QNN/QnnCommon.h"
 #include "third_party/qairt/latest/include/QNN/QnnInterface.h"
 #include "third_party/qairt/latest/include/QNN/QnnTypes.h"
@@ -38,11 +37,14 @@ typedef QNN_INTERFACE_VER_TYPE QnnApi;
 // Pointers to functions of a dynamically loaded QNN system library.
 typedef QNN_SYSTEM_INTERFACE_VER_TYPE QnnSystemApi;
 
-// QNN backend library should be on DT_RUNPATH (-rpath).
+// QNN backend library should be on DT_RUNPATH (-rpath) (for linux).
 static const char kLibQnnHtpSo[] = "libQnnHtp.so";
 
-// QNN backend library should be on DT_RUNPATH (-rpath).
+// QNN backend library should be on DT_RUNPATH (-rpath) (for linux).
 static const char kLibQnnSystemSo[] = "libQnnSystem.so";
+
+// Android only library.
+static const char kLibQnnHtpPrepareSo[] = "libQnnHtpPrepare.so";
 
 // Map LiteRT element type to Qnn counterpart.
 inline LiteRtStatus LegalizeElementType(litert::ElementType litert_type,

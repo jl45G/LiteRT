@@ -23,20 +23,13 @@ cc_library(
     hdrs = ["compiler_plugin.h"],
     deps = [
         ":algo",
-        ":compiler_flags",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log:absl_check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/types:span",
         "//litert/c:litert_any",
         "//litert/c:litert_common",
+        "//litert/c:litert_environment_options",
         "//litert/c:litert_logging",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
-        "//litert/cc:litert_model",
         "//litert/cc:litert_op_options",
         "//litert/cc:litert_shared_library",
         "//litert/core:build_stamp",
@@ -47,6 +40,12 @@ cc_library(
         "//litert/core/model",
         "//litert/vendors/c:litert_compiler_plugin",
         "//litert/vendors/c:litert_compiler_plugin_api",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:absl_check",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -72,8 +71,8 @@ cc_library(
 #         "//litert/c:litert_common",
 #         "//litert/c:litert_model",
 #         "//litert/c:litert_op_code",
-#         "//litert/cc:litert_environment",
 #         "//litert/cc:litert_op_options",
+#         "//litert/cc/internal:litert_environment",
 #         "//litert/core:build_stamp",
 #         "//litert/core:filesystem",
 #         "//litert/core/model",
@@ -89,15 +88,15 @@ cc_library(
     srcs = ["algo.cc"],
     hdrs = ["algo.h"],
     deps = [
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log:absl_check",
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
         "//litert/c:litert_op_code",
         "//litert/core:insert_order_map",
         "//litert/core/model",
         "//litert/core/model:model_graph",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:absl_check",
     ],
 )
 
@@ -109,8 +108,6 @@ cc_test(
     ],
     deps = [
         ":algo",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/container:flat_hash_set",
         "//litert/c:litert_common",
         "//litert/c:litert_op_code",
         "//litert/cc:litert_model",
@@ -118,31 +115,7 @@ cc_test(
         "//litert/core/model",
         "//litert/core/model:graph_validation",
         "//litert/test:common",
-    ],
-)
-
-cc_library(
-    name = "compiler_flags",
-    srcs = ["compiler_flags.cc"],
-    hdrs = ["compiler_flags.h"],
-    deps = [
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:string_view",
-        "//litert/c:litert_common",
-        "//litert/cc:litert_expected",
-        "//litert/vendors/c:litert_compiler_plugin",
-    ],
-)
-
-cc_test(
-    name = "compiler_flags_test",
-    srcs = ["compiler_flags_test.cc"],
-    deps = [
-        ":compiler_flags",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/strings",
-        "//litert/c:litert_common",
-        "//litert/test:matchers",
-        "//litert/vendors/c:litert_compiler_plugin",
     ],
 )

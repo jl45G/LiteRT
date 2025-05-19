@@ -19,11 +19,11 @@
 #include <memory>
 
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_compilation_options.h"
 #include "litert/c/litert_environment.h"
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_metrics.h"
 #include "litert/c/litert_model.h"
+#include "litert/c/litert_options.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
 #include "litert/cc/litert_macros.h"
@@ -33,21 +33,17 @@
 extern "C" {
 #endif
 
-LiteRtStatus LiteRtCreateCompiledModel(
-    LiteRtEnvironment environment, LiteRtModel model,
-    LiteRtCompilationOptions jit_compilation_options,
-    LiteRtCompiledModel* compiled_model) {
+LiteRtStatus LiteRtCreateCompiledModel(LiteRtEnvironment environment,
+                                       LiteRtModel model,
+                                       LiteRtOptions jit_compilation_options,
+                                       LiteRtCompiledModel* compiled_model) {
   if (!environment || !model || !compiled_model) {
     return kLiteRtStatusErrorInvalidArgument;
   }
-  auto created_compiled_model =
-      LiteRtCompiledModelT::Create(environment, model, jit_compilation_options);
-  if (!created_compiled_model) {
-    LITERT_LOG(LITERT_ERROR, "%s",
-               created_compiled_model.Error().Message().c_str());
-    return created_compiled_model.Error().Status();
-  }
-  *compiled_model = created_compiled_model->release();
+  LITERT_ASSIGN_OR_RETURN(auto created_compiled_model,
+                          LiteRtCompiledModelT::Create(
+                              environment, model, jit_compilation_options));
+  *compiled_model = created_compiled_model.release();
   return kLiteRtStatusOk;
 }
 
@@ -84,6 +80,15 @@ LiteRtStatus LiteRtGetCompiledModelOutputBufferRequirements(
     return res.Error().Status();
   }
   *buffer_requirements = res.Value();
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus LiteRtGetCompiledModelEnvironment(
+    LiteRtCompiledModel compiled_model, LiteRtEnvironment* environment) {
+  if (!compiled_model || !environment) {
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+  LITERT_ASSIGN_OR_RETURN(*environment, compiled_model->GetEnvironment());
   return kLiteRtStatusOk;
 }
 
@@ -156,6 +161,18 @@ LiteRtStatus LiteRtCompiledModelStopMetricsCollection(
     return kLiteRtStatusErrorInvalidArgument;
   }
   LITERT_ASSIGN_OR_RETURN(*metrics, compiled_model->StopMetricsCollection());
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus LiteRtCompiledModelIsFullyAccelerated(
+    LiteRtCompiledModel compiled_model, bool* fully_accelerated) {
+  LITERT_RETURN_IF_ERROR(
+      compiled_model != nullptr && fully_accelerated != nullptr,
+      kLiteRtStatusErrorInvalidArgument);
+
+  LITERT_ASSIGN_OR_RETURN(bool has_non_delegated_ops,
+                          compiled_model->HasNonDelegatedOps());
+  *fully_accelerated = !has_non_delegated_ops;
   return kLiteRtStatusOk;
 }
 

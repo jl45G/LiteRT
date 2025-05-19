@@ -14,16 +14,15 @@
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:litert_stable_abi_users"],
+    default_visibility = ["//litert:litert_public"],
 )
 
 cc_library(
     name = "litert_compiler_plugin",
     hdrs = ["litert_compiler_plugin.h"],
     deps = [
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:string_view",
-        "//litert/c:litert_common",
+        "//litert/c:litert_environment_options",
+        "//litert/c:litert_options",
         "//litert/cc:litert_macros",
         "//litert/vendors/c:litert_compiler_plugin",
     ],
@@ -34,12 +33,12 @@ cc_library(
     hdrs = ["conversion.h"],
     deps = [
         ":backend_ir",
-        "@com_google_absl//absl/container:flat_hash_map",
         "//litert/c:litert_common",
         "//litert/c:litert_model",
         "//litert/c:litert_op_code",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_model",
+        "@com_google_absl//absl/container:flat_hash_map",
     ],
 )
 
@@ -83,12 +82,26 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "options_helper",
+    hdrs = ["options_helper.h"],
+    deps = [
+        "//litert/c:litert_common",
+        "//litert/c:litert_environment_options",
+        "//litert/c:litert_options",
+        "//litert/cc:litert_environment_options",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_handle",
+        "//litert/cc:litert_opaque_options",
+        "//litert/cc:litert_options",
+    ],
+)
+
 cc_test(
     name = "partition_with_capabilities_test",
     srcs = ["partition_with_capabilities_test.cc"],
     deps = [
         ":partition_with_capabilities",
-        "@com_google_googletest//:gtest_main",
         "//litert/c:litert_model",
         "//litert/c:litert_op_code",
         "//litert/cc:litert_model",
@@ -97,6 +110,7 @@ cc_test(
         "//litert/core/util:flatbuffer_tools_testonly",
         "//litert/vendors/examples:example_conversion_impl",
         "//litert/vendors/examples:example_ir",
+        "@com_google_googletest//:gtest_main",
         "@org_tensorflow//tensorflow/compiler/mlir/lite/schema:schema_fbs",
     ],
 )
@@ -107,9 +121,6 @@ cc_test(
     deps = [
         ":backend_ir",
         ":convert_graph",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/types:span",
         "//litert/c:litert_common",
         "//litert/c:litert_model",
         "//litert/c:litert_op_code",
@@ -121,6 +132,25 @@ cc_test(
         "//litert/test:matchers",
         "//litert/vendors/examples:example_conversion_impl",
         "//litert/vendors/examples:example_ir",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
         "@org_tensorflow//tensorflow/compiler/mlir/lite/schema:schema_fbs",
+    ],
+)
+
+cc_test(
+    name = "options_helper_test",
+    srcs = ["options_helper_test.cc"],
+    deps = [
+        ":options_helper",
+        "//litert/c:litert_common",
+        "//litert/c:litert_opaque_options",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_handle",
+        "//litert/cc:litert_macros",
+        "//litert/cc:litert_opaque_options",
+        "//litert/cc/internal:litert_options",
+        "@com_google_googletest//:gtest_main",
     ],
 )

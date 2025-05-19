@@ -19,7 +19,19 @@ import abc
 from collections.abc import Iterable
 import dataclasses
 import pathlib
-from typing import Any, MutableMapping, Protocol, Self, Type, TypeAlias
+import sys
+from typing import Any, MutableMapping, Protocol, Type
+
+# pylint: disable=g-importing-member
+# pylint: disable=g-import-not-at-top
+# pylint: disable=g-bad-import-order
+if sys.version_info < (3, 10):
+  from typing_extensions import TypeAlias
+else:
+  from typing import TypeAlias
+# pylint: enable=g-bad-import-order
+# pylint: enable=g-import-not-at-top
+# pylint: enable=g-importing-member
 
 
 @dataclasses.dataclass(frozen=True)
@@ -31,12 +43,25 @@ class SubgraphPartitionStats:
   num_total_ops: int
   num_partitions_offloaded: int
 
+  def __str__(self) -> str:
+    is_full_offload = self.num_ops_offloaded == self.num_total_ops
+    return (
+        'Subgraph'
+        f' {self.subgraph_index} {"fully" if is_full_offload else "partially"}'
+        f' compiled:\t{self.num_ops_offloaded} /'
+        f' {self.num_total_ops} ops offloaded to'
+        f' {self.num_partitions_offloaded} partitions.'
+    )
+
 
 @dataclasses.dataclass(frozen=True)
 class PartitionStats:
   """Model partition stats."""
 
   subgraph_stats: list[SubgraphPartitionStats]
+
+  def __str__(self) -> str:
+    return '\n'.join(str(s) for s in self.subgraph_stats)
 
 
 class Model:
@@ -85,11 +110,11 @@ class Model:
     return self.data_
 
   @classmethod
-  def create_from_path(cls, path: pathlib.Path) -> Self:
+  def create_from_path(cls, path: pathlib.Path) -> 'Model':
     return Model(path=path, model_bytes=None)
 
   @classmethod
-  def create_from_bytes(cls, model_bytes: bytes) -> Self:
+  def create_from_bytes(cls, model_bytes: bytes) -> 'Model':
     return Model(path=None, model_bytes=model_bytes)
 
   def set_path(self, path: pathlib.Path | str):
@@ -143,10 +168,13 @@ class Model:
 
 
 @dataclasses.dataclass()
-class CompiledModels:
-  """A collection of compiled models."""
+class CompilationResult:
+  """Compilation result, as a collection of compiled models."""
 
   models_with_backend: list[tuple['Backend', Model]] = dataclasses.field(
+      default_factory=list
+  )
+  failed_backends: list[tuple['Backend', str]] = dataclasses.field(
       default_factory=list
   )
 
@@ -165,17 +193,28 @@ class CompiledModels:
     output_dir.mkdir(parents=True, exist_ok=True)
     for backend, model in self.models_with_backend:
       model.save(
-          output_dir / (model_name + backend.target_id_suffix + '.tflite')
+          output_dir / (model_name + backend.target_id_suffix + '.tflite'),
+          export_only=True,
       )
 
   def compilation_report(self) -> str:
     """Returns a human readable compilation report."""
     report = []
     for backend, model in self.models_with_backend:
-      report.append(f'Backend: {backend.id()}')
-      report.append(f'  Target: {backend.target_id}')
-      report.append(f'  Partition Stats: {model.partition_stats}')
-    return '\n'.join(report)
+      report.append(f'{backend.target_id}')
+      report.append('==========================')
+      report.append(f'Partition Stats:\n{model.partition_stats}\n')
+    report = '\n'.join(report)
+
+    failed_report = []
+    if self.failed_backends:
+      failed_report.append('==========================')
+      failed_report.append('COMPILATION FAILURES:')
+      failed_report.append('==========================')
+      for backend, error in self.failed_backends:
+        failed_report.append(f'{backend.target_id}\t{error}')
+    failed_report = '\n'.join(failed_report)
+    return '\n'.join([report, failed_report])
 
 
 class Component(Protocol):
@@ -239,7 +278,7 @@ class Backend(metaclass=abc.ABCMeta):
 
   @classmethod
   @abc.abstractmethod
-  def create(cls, config: Config) -> Self:
+  def create(cls, config: Config) -> 'Backend':
     """Creates a backend instance.
 
     If no target is specified, the backend will represent all targets.
