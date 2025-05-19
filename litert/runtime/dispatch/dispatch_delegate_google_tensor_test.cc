@@ -19,6 +19,8 @@
 #include <utility>
 #include <vector>
 
+#include "litert/c/litert_tensor_buffer_types.h"
+
 #if defined(__ANDROID__)
 #include "platforms/darwinn/tachyon/core/fence/fence.h"
 #endif
@@ -31,10 +33,6 @@
 #include "absl/types/span.h"  // from @com_google_absl
 #include "third_party/darwinn/driver_shared/fence/fence_test_util.h"
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_dispatch_delegate.h"
-#include "litert/c/litert_environment.h"
-#include "litert/c/litert_environment_options.h"
-#include "litert/c/litert_tensor_buffer.h"
 #include "litert/cc/litert_buffer_ref.h"
 #include "litert/cc/litert_compiled_model.h"
 #include "litert/cc/litert_dispatch_delegate.h"
@@ -45,8 +43,8 @@
 #include "litert/cc/litert_options.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
-#include "litert/core/model/model_buffer.h"
 #include "litert/core/util/flatbuffer_tools.h"
+#include "litert/runtime/dispatch/dispatch_opaque_options.h"
 #include "litert/runtime/external_litert_buffer_context.h"
 #include "litert/test/common.h"
 #include "litert/test/matchers.h"
@@ -59,6 +57,7 @@
 using litert::testing::MakeRuntimeFromTestFile;
 using testing::FloatNear;
 using testing::Pointwise;
+using testing::litert::IsOkAndHolds;
 using Fence = std::shared_ptr<platforms::darwinn::tachyon::Fence>;
 using testing::ElementsAre;
 
@@ -79,12 +78,26 @@ litert::Expected<Environment> CreateDefaultEnvironment() {
   return litert::Environment::Create(absl::MakeConstSpan(environment_options));
 }
 
+litert::Expected<Options> CreateDispatchOptions(const uint8_t* base) {
+  LITERT_ASSIGN_OR_RETURN(auto dispatch_options,
+                          internal::DispatchDelegateOptions::Create());
+  LITERT_RETURN_IF_ERROR(dispatch_options.SetAllocBase(base));
+  LITERT_ASSIGN_OR_RETURN(auto options, Options::Create());
+  LITERT_RETURN_IF_ERROR(options.AddOpaqueOptions(std::move(dispatch_options)));
+  return options;
+}
+
 TEST(DispatchDelegate, CpuBuffer) {
+  // The dispatch delegate must be declared before the TFL interpreter so that
+  // it gets destroyed only after the interpreter and the dispatch delegate
+  // kernels are destroyed. While this order is guaranteed when using
+  // litert::CompiledModel, we must handle it manually when using the TFL
+  // interpreter directly.
+  DispatchDelegatePtr dispatch_delegate = {nullptr, nullptr};
+
   LITERT_ASSERT_OK_AND_ASSIGN(testing::TflRuntime::Ptr runtime,
                               MakeRuntimeFromTestFile(kPrecompiledTfliteFile));
   tflite::Interpreter& interpreter = runtime->Interpreter();
-
-  LITERT_ASSERT_OK_AND_ASSIGN(Environment env, CreateDefaultEnvironment());
 
   litert::internal::ExternalLiteRtBufferContext buffer_context;
   interpreter.SetExternalContext(kTfLiteLiteRtBufferContext, &buffer_context);
@@ -94,14 +107,13 @@ TEST(DispatchDelegate, CpuBuffer) {
   EXPECT_EQ(interpreter.outputs().size(), 1);
   ASSERT_EQ(interpreter.execution_plan().size(), 1);
 
-  LiteRtEnvironmentOptions env_options;
-  LiteRtGetEnvironmentOptions(env.Get(), &env_options);
-  auto dispatch_delegate_options =
-      CreateDispatchDelegateOptionsPtr(env_options);
-  LiteRtDispatchDelegateAddAllocBaseOption(dispatch_delegate_options.get(),
-                                           runtime->Flatbuffer().Buf().Data());
-  auto dispatch_delegate = CreateDispatchDelegatePtr(
-      env_options, std::move(dispatch_delegate_options));
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, CreateDefaultEnvironment());
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env_options, env.GetOptions());
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto options, CreateDispatchOptions(runtime->Flatbuffer().Buf().Data()));
+
+  dispatch_delegate =
+      CreateDispatchDelegatePtr(env_options.Get(), options.Get());
 
 #if !defined(__ANDROID__)
   GTEST_SKIP() << "The rest of this test is specific to Android devices with a "
@@ -148,8 +160,12 @@ TEST(DispatchDelegate, CpuBuffer) {
 }
 
 TEST(DispatchDelegate, HwBuffer) {
-  // Environment setup.
-  LITERT_ASSERT_OK_AND_ASSIGN(Environment env, CreateDefaultEnvironment());
+  // The dispatch delegate must be declared before the TFL interpreter so that
+  // it gets destroyed only after the interpreter and the dispatch delegate
+  // kernels are destroyed. While this order is guaranteed when using
+  // litert::CompiledModel, we must handle it manually when using the TFL
+  // interpreter directly.
+  DispatchDelegatePtr dispatch_delegate = {nullptr, nullptr};
 
   LITERT_ASSERT_OK_AND_ASSIGN(testing::TflRuntime::Ptr runtime,
                               MakeRuntimeFromTestFile(kPrecompiledTfliteFile));
@@ -163,15 +179,13 @@ TEST(DispatchDelegate, HwBuffer) {
   EXPECT_EQ(interpreter.outputs().size(), 1);
   ASSERT_EQ(interpreter.execution_plan().size(), 1);
 
-  LiteRtEnvironmentOptions env_options;
-  LiteRtGetEnvironmentOptions(env.Get(), &env_options);
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env, CreateDefaultEnvironment());
+  LITERT_ASSERT_OK_AND_ASSIGN(auto env_options, env.GetOptions());
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto options, CreateDispatchOptions(runtime->Flatbuffer().Buf().Data()));
 
-  auto dispatch_delegate_options =
-      CreateDispatchDelegateOptionsPtr(env_options);
-  LiteRtDispatchDelegateAddAllocBaseOption(dispatch_delegate_options.get(),
-                                           runtime->Flatbuffer().Buf().Data());
-  auto dispatch_delegate = CreateDispatchDelegatePtr(
-      env_options, std::move(dispatch_delegate_options));
+  dispatch_delegate =
+      CreateDispatchDelegatePtr(env_options.Get(), options.Get());
 
 #if !defined(__ANDROID__)
   GTEST_SKIP() << "The rest of this test is specific to Android devices with a "
@@ -187,13 +201,15 @@ TEST(DispatchDelegate, HwBuffer) {
     LITERT_ASSERT_OK_AND_ASSIGN(
         auto* input_buffer_requirements,
         buffer_context.GetBufferRequirements(interpreter.input_tensor(i)));
-    ASSERT_EQ(input_buffer_requirements->SupportedTypes()->at(0),
-              kLiteRtTensorBufferTypeAhwb);
+    LITERT_ASSERT_OK_AND_ASSIGN(const auto supported_types,
+                                input_buffer_requirements->SupportedTypes());
+    ASSERT_EQ(supported_types.at(0), kLiteRtTensorBufferTypeAhwb);
     LITERT_ASSERT_OK_AND_ASSIGN(
         TensorBuffer input_buffer,
         buffer_context.CreateBufferForTensor(interpreter.input_tensor(i)));
     ASSERT_TRUE(input_buffer.IsOwned());
-    ASSERT_EQ(*input_buffer.BufferType(), kLiteRtTensorBufferTypeAhwb);
+    ASSERT_THAT(input_buffer.BufferType(),
+                IsOkAndHolds(kLiteRtTensorBufferTypeAhwb));
     LITERT_ASSERT_OK_AND_ASSIGN(TensorBuffer duplicate_buffer,
                                 input_buffer.Duplicate());
     auto status = buffer_context.RegisterTensorBuffer(
@@ -208,13 +224,15 @@ TEST(DispatchDelegate, HwBuffer) {
         auto* output_buffer_requirements,
         buffer_context.GetBufferRequirements(interpreter.output_tensor(i)));
     ASSERT_NE(output_buffer_requirements, nullptr);
-    ASSERT_EQ(output_buffer_requirements->SupportedTypes()->at(0),
-              kLiteRtTensorBufferTypeAhwb);
+    LITERT_ASSERT_OK_AND_ASSIGN(const auto supported_types,
+                                output_buffer_requirements->SupportedTypes());
+    ASSERT_EQ(supported_types.at(0), kLiteRtTensorBufferTypeAhwb);
     LITERT_ASSERT_OK_AND_ASSIGN(
         TensorBuffer output_buffer,
         buffer_context.CreateBufferForTensor(interpreter.output_tensor(i)));
     ASSERT_TRUE(output_buffer.IsOwned());
-    ASSERT_EQ(*output_buffer.BufferType(), kLiteRtTensorBufferTypeAhwb);
+    ASSERT_THAT(output_buffer.BufferType(),
+                IsOkAndHolds(kLiteRtTensorBufferTypeAhwb));
     LITERT_ASSERT_OK_AND_ASSIGN(TensorBuffer duplicate_buffer,
                                 output_buffer.Duplicate());
     auto status = buffer_context.RegisterTensorBuffer(
@@ -542,11 +560,6 @@ TEST(DispatchDelegate, CompiledModelSharedInput) {
   }
 }
 
-// This test is disabled until the necessary DeviceGraph change
-// (thr_invocation_context_start_metrics_collection and
-// thr_invocation_context_stop_metrics_collection) is rolled out in the weekly
-// dogfood.
-#if 0
 TEST(DispatchDelegate, CompiledModelWithMetrics) {
   // Create Model and check signatures.
   std::string model_file_path =
@@ -576,9 +589,9 @@ TEST(DispatchDelegate, CompiledModelWithMetrics) {
   LITERT_ASSERT_OK_AND_ASSIGN(Environment env, CreateDefaultEnvironment());
 
   // Create CompiledModel.
-  LITERT_ASSERT_OK_AND_ASSIGN(auto compiled_model,
-                              CompiledModel::Create(env, model,
-                                                    kLiteRtHwAcceleratorCpu));
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto compiled_model,
+      CompiledModel::Create(env, model, kLiteRtHwAcceleratorCpu));
 
   // Create I/O tensor buffers.
   LITERT_ASSERT_OK_AND_ASSIGN(
@@ -592,7 +605,8 @@ TEST(DispatchDelegate, CompiledModelWithMetrics) {
   LITERT_ASSERT_OK(input_buffers[1].Write<float>(
       absl::MakeConstSpan(kTestInput1Tensor, kTestInput1Size)));
 
-  LITERT_ASSERT_OK(compiled_model.StartMetricsCollection(/*detail_level=*/100));
+  bool metrics_supported =
+      compiled_model.StartMetricsCollection(/*detail_level=*/100).HasValue();
 
   // Execute compiled model.
   LITERT_ASSERT_OK(
@@ -611,7 +625,7 @@ TEST(DispatchDelegate, CompiledModelWithMetrics) {
   }
 
   // Check collected metrics.
-  {
+  if (metrics_supported) {
     auto metrics = compiled_model.StopMetricsCollection();
     ASSERT_TRUE(metrics);
     for (int i = 0; i < metrics->metrics.size(); ++i) {
@@ -621,7 +635,6 @@ TEST(DispatchDelegate, CompiledModelWithMetrics) {
     }
   }
 }
-#endif
 
 TEST(DispatchDelegate, CompiledModelAsync) {
 #if !defined(__ANDROID__)
@@ -675,14 +688,14 @@ TEST(DispatchDelegate, CompiledModelAsync) {
   Fence input_fence_0 = platforms::darwinn::fence_util::CreateFence();
   LITERT_ASSERT_OK_AND_ASSIGN(
       Event input_event_0,
-      litert::Event::CreateFromSyncFenceFd(input_fence_0->GetFd(),
+      litert::Event::CreateFromSyncFenceFd(env.Get(), input_fence_0->GetFd(),
                                            /*owns_fd=*/false));
   input_buffers[0].SetEvent(std::move(input_event_0));
 
   Fence input_fence_1 = platforms::darwinn::fence_util::CreateFence();
   LITERT_ASSERT_OK_AND_ASSIGN(
       Event input_event_1,
-      litert::Event::CreateFromSyncFenceFd(input_fence_1->GetFd(),
+      litert::Event::CreateFromSyncFenceFd(env.Get(), input_fence_1->GetFd(),
                                            /*owns_fd=*/false));
   input_buffers[1].SetEvent(std::move(input_event_1));
 

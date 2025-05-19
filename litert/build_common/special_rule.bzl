@@ -22,6 +22,10 @@ def lite_rt_friends():
 
     return []
 
+def gl_native_deps():
+    """This is a no-op outside of Google."""
+    return []
+
 def gles_deps():
     """This is a no-op outside of Google."""
     return []
@@ -31,5 +35,10 @@ def gles_headers():
     return []
 
 def gles_linkopts():
-    """This is a no-op outside of Google."""
-    return []
+    return select({
+        "@org_tensorflow//tensorflow:android": [
+            "-lGLESv3",
+            "-lEGL",
+        ],
+        "//conditions:default": [],
+    })

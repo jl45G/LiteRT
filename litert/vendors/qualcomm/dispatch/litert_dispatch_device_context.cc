@@ -26,12 +26,12 @@
 #include "litert/vendors/qualcomm/common.h"
 #include "litert/vendors/qualcomm/dispatch/litert_dispatch_invocation_context.h"
 #include "litert/vendors/qualcomm/qnn_manager.h"
-#include "third_party/qairt/latest/include/QNN/HTP/QnnHtpMem.h"
-#include "third_party/qairt/latest/include/QNN/QnnBackend.h"
-#include "third_party/qairt/latest/include/QNN/QnnCommon.h"
-#include "third_party/qairt/latest/include/QNN/QnnInterface.h"
-#include "third_party/qairt/latest/include/QNN/QnnMem.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+#include "HTP/QnnHtpMem.h"  // from @qairt
+#include "QnnBackend.h"  // from @qairt
+#include "QnnCommon.h"  // from @qairt
+#include "QnnInterface.h"  // from @qairt
+#include "QnnMem.h"  // from @qairt
+#include "QnnTypes.h"  // from @qairt
 
 using litert::Expected;
 using litert::Unexpected;
@@ -112,8 +112,7 @@ Expected<Qnn_MemHandle_t> LiteRtDispatchDeviceContextT::RegisterTensorBuffer(
   uint32_t tensor_rank = tensor_type.layout.rank;
   uint32_t* tensor_dimensions = reinterpret_cast<uint32_t*>(
       const_cast<int32_t*>(tensor_type.layout.dimensions));
-  auto* tensor_strides = tensor_type.layout.strides;
-  if (tensor_strides != nullptr) {
+  if (tensor_type.layout.has_strides) {
     return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                       "Tensor strides are not supported by QNN");
   }

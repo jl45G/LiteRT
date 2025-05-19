@@ -35,6 +35,7 @@ pytype_strict_library(
 pytype_strict_library(
     name = "aot_compile",
     srcs = ["aot_compile.py"],
+    visibility = ["//visibility:public"],
     deps = [
         ":prepare_for_npu",
         "//litert/python/aot/core:apply_plugin",
@@ -50,11 +51,11 @@ pytype_strict_contrib_test(
     srcs = ["prepare_for_npu_test.py"],
     deps = [
         ":prepare_for_npu",
-        "@absl_py//absl/testing:absltest",
         "//litert/python/aot/core:common",
         "//litert/python/aot/core:components",
         "//litert/python/aot/core:test_common",
         "//litert/python/aot/core:types",
         "//litert/python/aot/vendors/example:example_backend",
+        "@absl_py//absl/testing:absltest",
     ],
 )

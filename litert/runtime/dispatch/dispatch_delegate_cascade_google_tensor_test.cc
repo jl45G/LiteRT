@@ -104,8 +104,9 @@ TEST(DispatchDelegate, CompiledModel) {
       auto env,
       litert::Environment::Create(absl::MakeConstSpan(environment_options)));
 
-  LITERT_ASSERT_OK_AND_ASSIGN(auto compiled_model,
-                              CompiledModel::Create(env, model));
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto compiled_model,
+      CompiledModel::Create(env, model, kLiteRtHwAcceleratorCpu));
 
   // Check CompiledModel buffer requirements. Input and output are supposed to
   // be Ahwb DmaBuf.
@@ -312,8 +313,9 @@ TEST(DispatchDelegate, CompiledModelAsync) {
       auto env,
       litert::Environment::Create(absl::MakeConstSpan(environment_options)));
 
-  LITERT_ASSERT_OK_AND_ASSIGN(auto compiled_model,
-                              CompiledModel::Create(env, model));
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto compiled_model,
+      CompiledModel::Create(env, model, kLiteRtHwAcceleratorCpu));
 
   // Create I/O tensor buffers.
   LITERT_ASSERT_OK_AND_ASSIGN(
@@ -346,19 +348,19 @@ TEST(DispatchDelegate, CompiledModelAsync) {
 
   LITERT_ASSERT_OK_AND_ASSIGN(
       Event input_event_0,
-      litert::Event::CreateFromSyncFenceFd(input_fence_0->GetFd(),
+      litert::Event::CreateFromSyncFenceFd(env.Get(), input_fence_0->GetFd(),
                                            /*owns_fd=*/false));
   LITERT_ASSERT_OK_AND_ASSIGN(
       Event input_event_1,
-      litert::Event::CreateFromSyncFenceFd(input_fence_1->GetFd(),
+      litert::Event::CreateFromSyncFenceFd(env.Get(), input_fence_1->GetFd(),
                                            /*owns_fd=*/false));
   LITERT_ASSERT_OK_AND_ASSIGN(
       Event input_event_2,
-      litert::Event::CreateFromSyncFenceFd(input_fence_2->GetFd(),
+      litert::Event::CreateFromSyncFenceFd(env.Get(), input_fence_2->GetFd(),
                                            /*owns_fd=*/false));
   LITERT_ASSERT_OK_AND_ASSIGN(
       Event input_event_3,
-      litert::Event::CreateFromSyncFenceFd(input_fence_3->GetFd(),
+      litert::Event::CreateFromSyncFenceFd(env.Get(), input_fence_3->GetFd(),
                                            /*owns_fd=*/false));
 
   input_buffers[0].SetEvent(std::move(input_event_0));

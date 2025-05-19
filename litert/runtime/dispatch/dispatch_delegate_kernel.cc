@@ -29,23 +29,21 @@
 #include "absl/container/node_hash_set.h"  // from @com_google_absl
 #include "absl/strings/str_format.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_dispatch_delegate.h"
-#include "litert/c/litert_event.h"
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_metrics.h"
 #include "litert/c/litert_model.h"
-#include "litert/c/litert_tensor_buffer.h"
-#include "litert/c/litert_tensor_buffer_requirements.h"
 #include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_buffer_ref.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_handle.h"
 #include "litert/cc/litert_macros.h"
-#include "litert/cc/litert_model.h"
+#include "litert/cc/litert_opaque_options.h"
+#include "litert/cc/litert_options.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
+#include "litert/cc/litert_tflite_error_status_builder.h"
 #include "litert/core/dispatch_op_schema.h"
-#include "litert/runtime/dispatch/dispatch_delegate_options.h"
+#include "litert/runtime/dispatch/dispatch_opaque_options.h"
 #include "litert/runtime/external_litert_buffer_context.h"
 #include "litert/runtime/tfl_utils.h"
 #include "litert/vendors/c/litert_dispatch.h"
@@ -65,10 +63,24 @@ DispatchDelegateKernel::~DispatchDelegateKernel() {
     all_tfl_tensors.insert(internal_tensors_.begin(), internal_tensors_.end());
 
     for (auto& tfl_tensor : all_tfl_tensors) {
-      const auto& port_connections =
-          io_tensors_port_connections_.find(tfl_tensor)->second;
-      const auto& tensor_buffer_info =
-          tensor_buffer_infos_.find(tfl_tensor)->second;
+      auto itpc_it = io_tensors_port_connections_.find(tfl_tensor);
+      if (itpc_it == io_tensors_port_connections_.end()) {
+        LITERT_LOG(LITERT_ERROR,
+                   "IO tensor port connections not found for tensor %p",
+                   tfl_tensor);
+        continue;
+      }
+      const auto& port_connections = itpc_it->second;
+
+      auto tbi_it = tensor_buffer_infos_.find(tfl_tensor);
+      if (tbi_it == tensor_buffer_infos_.end()) {
+        // Tensor buffer initialized but never consumed will not present in
+        // tensor_buffer_infos_.
+        LITERT_LOG(LITERT_WARNING, "Tensor buffer info not found for tensor %p",
+                   tfl_tensor);
+        continue;
+      }
+      const auto& tensor_buffer_info = tbi_it->second;
       for (auto& pc : port_connections) {
         auto* invocation_context = node_invocation_contexts_[pc.node_idx];
         if (pc.is_input_port) {
@@ -96,8 +108,8 @@ DispatchDelegateKernel::~DispatchDelegateKernel() {
 }
 
 Expected<DispatchDelegateKernel::Ptr> DispatchDelegateKernel::Create(
-    std::string&& graph_name, const LiteRtDispatchDelegateOptions& options,
-    LiteRtDispatchDeviceContext device_context) {
+    std::string&& graph_name, LiteRtEnvironmentOptions environment_options,
+    LiteRtOptions options, LiteRtDispatchDeviceContext device_context) {
   int capabilities;
   if (auto status = LiteRtDispatchGetCapabilities(&capabilities);
       status != kLiteRtStatusOk) {
@@ -111,16 +123,34 @@ Expected<DispatchDelegateKernel::Ptr> DispatchDelegateKernel::Create(
     LITERT_LOG(LITERT_INFO, "Found async dispatch capabilities");
   }
 
-  return Ptr(new DispatchDelegateKernel(options, std::move(graph_name),
-                                        device_context, async_dispatch));
+  return Ptr(new DispatchDelegateKernel(environment_options, options,
+                                        std::move(graph_name), device_context,
+                                        async_dispatch));
+}
+
+Expected<const void*> DispatchDelegateKernel::FindAllocBase() const {
+  Options cc_options(options_, OwnHandle::kNo);
+  LITERT_ASSIGN_OR_RETURN(auto opaque_options, cc_options.GetOpaqueOptions());
+  LITERT_ASSIGN_OR_RETURN(
+      auto dispatch_options,
+      FindOpaqueOptions<DispatchDelegateOptions>(opaque_options));
+  return dispatch_options.GetAllocBase();
+}
+
+Expected<int> DispatchDelegateKernel::FindAllocBaseFd() const {
+  Options cc_options(options_, OwnHandle::kNo);
+  LITERT_ASSIGN_OR_RETURN(auto opaque_options, cc_options.GetOpaqueOptions());
+  LITERT_ASSIGN_OR_RETURN(
+      auto dispatch_options,
+      FindOpaqueOptions<DispatchDelegateOptions>(opaque_options));
+  return dispatch_options.GetAllocBaseFd();
 }
 
 TfLiteStatus DispatchDelegateKernel::Init(
     TfLiteOpaqueContext* context, const TfLiteOpaqueDelegateParams* params) {
-  if (auto status = InitHelper(context, *params); !status) {
-    LITERT_LOG(LITERT_ERROR, "%s", status.Error().Message().c_str());
-    return kTfLiteError;
-  }
+  LITERT_RETURN_IF_ERROR(
+      InitHelper(context, *params),
+      AsTfLiteStatus(_ << "Couldn't initialize the dispatch delegate kernel"));
   return kTfLiteOk;
 }
 
@@ -393,19 +423,13 @@ DispatchDelegateKernel::CreateNodeInvocationContext(
   }
 
   // Find pointer to the start of the loaded model buffer.
-  const auto alloc_base = FindAllocBase(options_);
-  if (!alloc_base) {
-    return Unexpected(
-        kLiteRtStatusErrorRuntimeFailure,
-        "Could not find requried delegate options \"alloc_base\"");
-  }
-
-  const auto alloc_fd = FindAllocFd(options_);
+  LITERT_ASSIGN_OR_RETURN(const void* alloc_base, FindAllocBase());
+  LITERT_ASSIGN_OR_RETURN(const int alloc_fd, FindAllocBaseFd());
 
   // Get location of bytecode in the model buffer relative to alloc_base.
   LiteRtMemBuffer exec_bytecode_buffer = {
-      /*.fd=*/alloc_fd ? *alloc_fd : -1,
-      /*.base_addr=*/*alloc_base,
+      /*.fd=*/alloc_fd,
+      /*.base_addr=*/alloc_base,
       /*.offset=*/dispatch_opts.bytecode_offset,
       /*.size=*/dispatch_opts.bytecode_size};
   const auto& function_name = dispatch_opts.name;
@@ -461,20 +485,14 @@ DispatchDelegateKernel::GetBufferRequirements(int node_idx,
 
   LiteRtTensorBufferRequirements tensor_buffer_requirements;
   if (is_input) {
-    LITERT_RETURN_IF_ERROR(
-        LiteRtDispatchGetInputRequirements(
-            invocation_context, /*input_index=*/io_tensor_index,
-            &litert_tensor_type, &tensor_buffer_requirements),
-        Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                   "Failed to get tensor buffer requirements for input"));
-
+    LITERT_RETURN_IF_ERROR(LiteRtDispatchGetInputRequirements(
+        invocation_context, /*input_index=*/io_tensor_index,
+        &litert_tensor_type, &tensor_buffer_requirements))
+        << "Failed to get input tensor requirements";
   } else {
-    LITERT_RETURN_IF_ERROR(
-        LiteRtDispatchGetOutputRequirements(
-            invocation_context, /*output_index=*/io_tensor_index,
-            &litert_tensor_type, &tensor_buffer_requirements),
-        Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                   "Failed to get tensor buffer requirements for output"));
+    LITERT_RETURN_IF_ERROR(LiteRtDispatchGetOutputRequirements(
+        invocation_context, /*output_index=*/io_tensor_index,
+        &litert_tensor_type, &tensor_buffer_requirements));
   }
 
   return TensorBufferRequirements(tensor_buffer_requirements, OwnHandle::kYes);
@@ -674,7 +692,8 @@ Expected<TensorBuffer> DispatchDelegateKernel::AllocateTensorBuffer(
 
   LITERT_ASSIGN_OR_RETURN(
       auto tensor_buffer,
-      TensorBuffer::CreateManaged(buffer_type, tensor_type, buffer_size));
+      TensorBuffer::CreateManaged(buffer_context_->GetEnvironment(),
+                                  buffer_type, tensor_type, buffer_size));
   return tensor_buffer;
 }
 

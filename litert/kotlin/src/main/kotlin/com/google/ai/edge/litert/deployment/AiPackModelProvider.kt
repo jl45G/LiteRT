@@ -1,6 +1,22 @@
+/*
+ * Copyright 2025 Google LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.ai.edge.litert.deployment
 
-import android.app.Activity
+import android.content.Context
 import android.util.Log
 import com.google.ai.edge.litert.Accelerator
 import com.google.ai.edge.litert.ModelProvider
@@ -24,13 +40,26 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * NOTE: For install-time AiPack, use [ModelProvider.staticModel] instead.
  */
 class AiPackModelProvider(
-  private val activity: Activity,
+  private val context: Context,
   private val aiPackName: String,
   private val modelPath: String,
-  private val accelerator: Accelerator,
-  private vararg val moreAccelerators: Accelerator,
+  private val accelerators: Set<Accelerator>,
 ) : ModelProvider {
-  private val aiPackManager = AiPackManagerFactory.getInstance(activity)
+  private val aiPackManager = AiPackManagerFactory.getInstance(context)
+
+  constructor(
+    context: Context,
+    aiPackName: String,
+    modelPath: String,
+    vararg accelerators: Accelerator,
+  ) : this(context, aiPackName, modelPath, setOf(*accelerators))
+
+  constructor(
+    context: Context,
+    aiPackName: String,
+    modelPath: String,
+    acceleratorsProvider: () -> Set<Accelerator>,
+  ) : this(context, aiPackName, modelPath, acceleratorsProvider())
 
   /** It's always a file, for on-demand AiPack. */
   override fun getType() = ModelProvider.Type.FILE
@@ -52,7 +81,7 @@ class AiPackModelProvider(
     return aiPackManager.getAiAssetLocation(aiPackName, modelPath)!!.path()
   }
 
-  override fun getCompatibleAccelerators() = setOf(accelerator, *moreAccelerators)
+  override fun getCompatibleAccelerators() = accelerators
 
   override suspend fun download() {
     if (!isReady()) {

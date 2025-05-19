@@ -17,7 +17,7 @@ load("//litert/build_common:tfl_model_gen.bzl", "tfl_model_gen")
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
     default_visibility = [
-        "//litert:litert_stable_abi_users",
+        "//visibility:public",  # copybara:comment_replace "//litert:litert_public",
     ],
 )
 
@@ -52,8 +52,8 @@ cc_library(
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
         "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
-        "//litert/cc:litert_model_predicates",
         "//litert/core:filesystem",
         "//litert/core/model:model_buffer",
         "//litert/core/util:flatbuffer_tools",
@@ -62,11 +62,10 @@ cc_library(
         "//tflite/c:common",
         "//tflite/core:private_cc_api_stable",
         "//tflite/kernels:builtin_ops",
-        "@local_tsl//tsl/platform",
         "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/synchronization",
+        "@local_tsl//tsl/platform",
     ],
 )
 
@@ -78,6 +77,22 @@ cc_library(
     ],
     data = [
         "testdata/simple_model.tflite",
+    ],
+    deps = [
+        "//litert/c:litert_model",
+        "//litert/cc:litert_layout",
+    ],
+)
+
+cc_library(
+    name = "simple_model_custom_op",
+    testonly = 1,
+    srcs = [],
+    hdrs = [
+        "testdata/simple_model_custom_op_test_vectors.h",
+    ],
+    data = [
+        "testdata/simple_model_custom_op.tflite",
     ],
     deps = [
         "//litert/c:litert_model",
@@ -194,8 +209,10 @@ exports_files(srcs = [
     "testdata/shared_input_cpu_npu_google_tensor_precompiled.tflite",
     "testdata/simple_add_op_google_tensor_p25_precompiled.tflite",
     "testdata/simple_add_op_qc_v75_precompiled.tflite",
+    "testdata/simple_add_uint16_qualcomm.bin",
     "testdata/simple_model_google_tensor.bin",
     "testdata/simple_model_mtk.bin",
     "testdata/simple_model_npu_google_tensor_precompiled.tflite",
     "testdata/simple_model_qualcomm.bin",
+    "testdata/simple_quantized_ops.tflite",
 ])

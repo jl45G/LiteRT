@@ -18,7 +18,6 @@
 
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_environment.h"
 #include "litert/c/litert_logging.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
@@ -30,7 +29,7 @@
 // Define a function pointer to allow the accelerator registration to be
 // overridden by the LiteRT environment. This is to use the GPU accelerator
 // statically linked.
-extern "C" bool (*LiteRtRegisterStaticLinkedAcceleratorGpu)(
+extern "C" LiteRtStatus (*LiteRtRegisterStaticLinkedAcceleratorGpu)(
     LiteRtEnvironmentT& environment) = nullptr;
 
 namespace litert {
@@ -38,8 +37,7 @@ namespace litert {
 Expected<void> TriggerAcceleratorAutomaticRegistration(
     LiteRtEnvironmentT& environment) {
   // Register the NPU accelerator.
-  if (auto npu_registration =
-          LiteRtRegisterNpuAccelerator(&environment, /*options=*/nullptr);
+  if (auto npu_registration = LiteRtRegisterNpuAccelerator(&environment);
       npu_registration == kLiteRtStatusOk) {
     LITERT_LOG(LITERT_INFO, "NPU accelerator registered.");
   } else {
@@ -56,7 +54,7 @@ Expected<void> TriggerAcceleratorAutomaticRegistration(
     LITERT_LOG(LITERT_INFO, "Dynamically loaded GPU accelerator registered.");
   } else {
     LITERT_LOG(
-        LITERT_WARNING,
+        LITERT_INFO,
         "GPU accelerator could not be dynamically loaded and registered: %s.",
         gpu_registration.Error().Message().c_str());
     if (LiteRtRegisterStaticLinkedAcceleratorGpu != nullptr &&
@@ -67,8 +65,7 @@ Expected<void> TriggerAcceleratorAutomaticRegistration(
   }
 
   // Register the CPU accelerator.
-  if (auto cpu_registration =
-          LiteRtRegisterCpuAccelerator(&environment, /*options=*/nullptr);
+  if (auto cpu_registration = LiteRtRegisterCpuAccelerator(&environment);
       cpu_registration == kLiteRtStatusOk) {
     LITERT_LOG(LITERT_INFO, "CPU accelerator registered.");
   } else {

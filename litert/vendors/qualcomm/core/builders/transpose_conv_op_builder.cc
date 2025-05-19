@@ -14,8 +14,8 @@
 #include "litert/vendors/qualcomm/core/wrappers/op_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/quantize_params_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/tensor_wrapper.h"
-#include "third_party/qairt/latest/include/QNN/QnnOpDef.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+#include "QnnOpDef.h"  // from @qairt
+#include "QnnTypes.h"  // from @qairt
 
 namespace qnn {
 
@@ -108,7 +108,6 @@ std::vector<OpWrapper> BuildTransposeConvOp(
 
   TensorWrapper& output_tensor = outputs[kOutputIndex];
   conv_op.AddOutputTensor(output_tensor);
-  // TODO: fused activation
 
   // stride param
   const std::array<std::uint32_t, 2> stride_data{stride_h, stride_w};
