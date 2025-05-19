@@ -25,9 +25,11 @@ limitations under the License.
 #include "litert/cc/litert_compiled_model.h"
 #include "litert/cc/litert_environment.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_options.h"
 #include "litert/cc/litert_tensor_buffer.h"
+#include "litert/cc/options/accelerator_options.h"
 #include "tflite/c/c_api_types.h"
 #include "tflite/c/common.h"
 
@@ -40,8 +42,10 @@ using ::litert::TensorBuffer;
 Options CreateCompiledModelOptions(const BenchmarkParams& params) {
   auto use_gpu = params.Get<bool>("use_gpu");
   auto use_npu = params.Get<bool>("use_npu");
+  auto use_cpu = params.Get<bool>("use_cpu");
   auto require_full_delegation = params.Get<bool>("require_full_delegation");
-  Options compilation_options = *litert::Options::Create();
+  LITERT_ASSIGN_OR_ABORT(Options compilation_options,
+                         litert::Options::Create());
   if (use_npu) {
     if (require_full_delegation) {
       compilation_options.SetHardwareAccelerators(
@@ -52,8 +56,15 @@ Options CreateCompiledModelOptions(const BenchmarkParams& params) {
           LiteRtHwAccelerators::kLiteRtHwAcceleratorGpu |
           LiteRtHwAccelerators::kLiteRtHwAcceleratorCpu);
     }
+    return compilation_options;
   }
   if (use_gpu) {
+    LITERT_ASSIGN_OR_ABORT(auto gpu_options, GpuOptions::Create());
+    // Enable no immutable external tensors mode.
+    gpu_options.EnableNoImmutableExternalTensorsMode(/*enabled=*/true);
+    // Enable benchmark mode to run clFinish() after each inference.
+    gpu_options.EnableBenchmarkMode(/*enabled=*/true);
+    compilation_options.AddOpaqueOptions(std::move(gpu_options));
     if (require_full_delegation) {
       compilation_options.SetHardwareAccelerators(
           LiteRtHwAccelerators::kLiteRtHwAcceleratorGpu);
@@ -62,6 +73,11 @@ Options CreateCompiledModelOptions(const BenchmarkParams& params) {
           LiteRtHwAccelerators::kLiteRtHwAcceleratorGpu |
           LiteRtHwAccelerators::kLiteRtHwAcceleratorCpu);
     }
+    return compilation_options;
+  }
+  if (use_cpu) {
+    compilation_options.SetHardwareAccelerators(
+        LiteRtHwAccelerators::kLiteRtHwAcceleratorCpu);
   }
   return compilation_options;
 }
@@ -117,8 +133,8 @@ TfLiteStatus BenchmarkLiteRtModel::Init() {
       std::move(*compiled_model_result));
   auto signature = params_.Get<std::string>("signature_to_run_for");
   if (signature.empty()) {
-    auto s = model_->GetSignature(0);
-    signature = model_->GetSignature(0)->Key();
+    LITERT_ASSIGN_OR_RETURN(auto s, model_->GetSignature(0), kTfLiteError);
+    signature = s.Key();
   }
 
   auto input_buffers_result = compiled_model_->CreateInputBuffers(signature);

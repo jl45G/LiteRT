@@ -20,13 +20,10 @@
 #include <stdint.h>
 
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_environment.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-LITERT_DEFINE_HANDLE(LiteRtAccelerator);
 
 typedef size_t LiteRtAcceleratorId;
 
@@ -64,6 +61,11 @@ LiteRtStatus LiteRtGetAcceleratorVersion(LiteRtAccelerator accelerator,
 // `supported_hardware` is a bitfield of `LiteRtHwAccelerators` values.
 LiteRtStatus LiteRtGetAcceleratorHardwareSupport(
     LiteRtAccelerator accelerator, LiteRtHwAcceleratorSet* supported_hardware);
+
+// Fetches the accelerator environment.
+//
+LiteRtStatus LiteRtGetAcceleratorEnvironment(LiteRtAccelerator accelerator,
+                                             LiteRtEnvironment* environment);
 
 // Returns whether the accelerator TFLite delegate does some JIT compilation.
 LiteRtStatus LiteRtIsAcceleratorDelegateResponsibleForJitCompilation(

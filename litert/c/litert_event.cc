@@ -28,10 +28,12 @@
 extern "C" {
 #endif
 
-LiteRtStatus LiteRtCreateEventFromSyncFenceFd(int sync_fence_fd, bool owns_fd,
+LiteRtStatus LiteRtCreateEventFromSyncFenceFd(LiteRtEnvironment env,
+                                              int sync_fence_fd, bool owns_fd,
                                               LiteRtEvent* event) {
 #if LITERT_HAS_SYNC_FENCE_SUPPORT
-  *event = new LiteRtEventT{.type = LiteRtEventTypeSyncFenceFd,
+  *event = new LiteRtEventT{.env = env,
+                            .type = LiteRtEventTypeSyncFenceFd,
                             .fd = sync_fence_fd,
                             .owns_fd = owns_fd};
   return kLiteRtStatusOk;
@@ -40,10 +42,12 @@ LiteRtStatus LiteRtCreateEventFromSyncFenceFd(int sync_fence_fd, bool owns_fd,
 #endif
 }
 
-LiteRtStatus LiteRtCreateEventFromOpenClEvent(cl_event cl_event,
+LiteRtStatus LiteRtCreateEventFromOpenClEvent(LiteRtEnvironment env,
+                                              cl_event cl_event,
                                               LiteRtEvent* event) {
 #if LITERT_HAS_OPENCL_SUPPORT
   *event = new LiteRtEventT{
+      .env = env,
       .type = LiteRtEventTypeOpenCl,
       .opencl_event = cl_event,
   };
@@ -78,23 +82,62 @@ LiteRtStatus LiteRtGetEventOpenClEvent(LiteRtEvent event, cl_event* cl_event) {
   return kLiteRtStatusErrorUnsupported;
 }
 
-LiteRtStatus LiteRtCreateManagedEvent(LiteRtEventType type,
-                                      LiteRtEvent* event) {
-  auto event_res = LiteRtEventT::CreateManaged(type);
-  if (!event_res) {
-    return kLiteRtStatusErrorUnsupported;
+LiteRtStatus LiteRtGetEventEglSync(LiteRtEvent event, EGLSyncKHR* egl_sync) {
+#if LITERT_HAS_OPENGL_SUPPORT
+  if (event->type == LiteRtEventTypeEglSyncFence ||
+      event->type == LiteRtEventTypeEglNativeSyncFence) {
+    *egl_sync = event->egl_sync;
+    return kLiteRtStatusOk;
   }
-  *event = *event_res;
+#endif
+  return kLiteRtStatusErrorUnsupported;
+}
+
+LiteRtStatus LiteRtCreateEventFromEglSyncFence(LiteRtEnvironment env,
+                                               EGLSyncKHR egl_sync,
+                                               LiteRtEvent* event) {
+#if LITERT_HAS_OPENGL_SUPPORT
+  LITERT_ASSIGN_OR_RETURN(LiteRtEventType type,
+                          GetEventTypeFromEglSync(env, egl_sync));
+  *event = new LiteRtEventT{
+      .env = env,
+      .type = type,
+      .egl_sync = egl_sync,
+  };
+  return kLiteRtStatusOk;
+#else
+  return kLiteRtStatusErrorUnsupported;
+#endif
+}
+
+LiteRtStatus LiteRtCreateManagedEvent(LiteRtEnvironment env,
+                                      LiteRtEventType type,
+                                      LiteRtEvent* event) {
+  LITERT_ASSIGN_OR_RETURN(LiteRtEventT * event_res,
+                          LiteRtEventT::CreateManaged(env, type));
+  *event = event_res;
   return kLiteRtStatusOk;
 }
 
-LiteRtStatus LiteRtEventWait(LiteRtEvent event, int64_t timeout_in_ms) {
+LiteRtStatus LiteRtWaitEvent(LiteRtEvent event, int64_t timeout_in_ms) {
   LITERT_RETURN_IF_ERROR(event->Wait(timeout_in_ms));
   return kLiteRtStatusOk;
 }
 
-LiteRtStatus LiteRtEventSignal(LiteRtEvent event) {
+LiteRtStatus LiteRtSignalEvent(LiteRtEvent event) {
   LITERT_RETURN_IF_ERROR(event->Signal());
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus LiteRtIsEventSignaled(LiteRtEvent event, bool* is_signaled) {
+  LITERT_ASSIGN_OR_RETURN(auto is_signaled_res, event->IsSignaled());
+  *is_signaled = is_signaled_res;
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus LiteRtDupFdEvent(LiteRtEvent event, int* dup_fd) {
+  LITERT_ASSIGN_OR_RETURN(auto dup_fd_res, event->DupFd());
+  *dup_fd = dup_fd_res;
   return kLiteRtStatusOk;
 }
 

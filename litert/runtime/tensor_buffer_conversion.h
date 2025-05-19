@@ -15,7 +15,6 @@
 #ifndef ODML_LITERT_LITERT_RUNTIME_TENSOR_BUFFER_CONVERSION_H_
 #define ODML_LITERT_LITERT_RUNTIME_TENSOR_BUFFER_CONVERSION_H_
 
-#include "litert/c/litert_tensor_buffer.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/runtime/tensor_buffer.h"
 
@@ -26,7 +25,8 @@ namespace litert::internal {
 // and will involve a copy.
 // TODO(b/383176413): Investigate zero/fast-copy conversions.
 Expected<LiteRtTensorBufferT::Ptr> TensorBufferConvertTo(
-    LiteRtTensorBufferType buffer_type, LiteRtTensorBufferT& tensor_buffer);
+    LiteRtEnvironment env, LiteRtTensorBufferType buffer_type,
+    LiteRtTensorBufferT& tensor_buffer);
 
 }  // namespace litert::internal
 

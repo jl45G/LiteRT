@@ -35,15 +35,11 @@
 #include "absl/types/span.h"  // from @com_google_absl
 #include "litert/c/litert_any.h"
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_environment.h"
 #include "litert/c/litert_environment_options.h"
 #include "litert/c/litert_logging.h"
-#include "litert/c/litert_model.h"
-#include "litert/c/litert_options.h"
 #include "litert/cc/litert_buffer_ref.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
-#include "litert/cc/litert_model.h"
 #include "litert/cc/litert_op_options.h"
 #include "litert/cc/litert_shared_library.h"
 #include "litert/compiler/plugin/algo.h"
@@ -162,7 +158,6 @@ LiteRtStatus ResolvePluginApi(SharedLibrary& lib,
                    result.get_compiled_result_call_info);
   RESOLVE_API_FUNC(kLiteRtGetNumCompiledResultCalls,
                    result.get_compiled_result_num_calls);
-  RESOLVE_API_FUNC(kLiteRtCompilerPluginSetFlags, result.set_flags);
 
   return kLiteRtStatusOk;
 }
@@ -330,11 +325,11 @@ Expected<LiteRtHwAccelerators> CompilerPlugin::SupportedHardware() const {
 }
 
 Expected<std::vector<LiteRtOpWithPartitionIndex>> CompilerPlugin::Partition(
-    const Subgraph& subgraph, absl::string_view soc_model) {
+    LiteRtSubgraph subgraph, absl::string_view soc_model) {
   LiteRtOpListT ops;
   const char* soc_model_str = !soc_model.empty() ? soc_model.data() : nullptr;
   LITERT_RETURN_IF_ERROR(plugin_api_.compiler_plugin_partition(
-      plugin_handle_, soc_model_str, subgraph.Get(), &ops));
+      plugin_handle_, soc_model_str, subgraph, &ops));
   return ops.Values();
 }
 
@@ -388,7 +383,7 @@ Expected<PartitionResult> PartitionModel(
   //
   // There are two cases to consider:
   // 1. The composite op is an "odml.npu_call", in which case it represents a
-  // parition which was explictly requested by the model author.
+  // partition which was explicitly requested by the model author.
   //
   // In this case, the the composite itself is always selected, regardless of
   // whether the plugin selects it. Its subgraph is not passed to the partition
@@ -418,8 +413,8 @@ Expected<PartitionResult> PartitionModel(
   // subgraphs passed to the plugin and pass on auto-selected npu_call
   // partitions.
   absl::flat_hash_set<uint32_t> decomp_subgraphs;
-  std::vector<CompositeOptions> npu_calls;
-  const auto input_num_sgs = model.NumSubgraphs();
+  auto input_num_sgs = model.NumSubgraphs();
+  std::vector<size_t> selected_composite_subgraph_indexes;
 
   ForEachIr(&model, [&](LiteRtOp op) {
     auto info = GetOptionsAs<CompositeOptions>(op);
@@ -427,9 +422,6 @@ Expected<PartitionResult> PartitionModel(
       return;
     }
     decomp_subgraphs.insert(info->subgraph);
-    if (info->name == CompositeOptions::kNpuCall) {
-      npu_calls.push_back(std::move(*info));
-    }
   });
 
   // Build partition result via calling plugin on non-decomposition subgraphs.
@@ -443,11 +435,22 @@ Expected<PartitionResult> PartitionModel(
       continue;
     }
     auto* subgraph = model.Subgraphs()[i];
-    auto selected_ops =
-        compiler_plugin.Partition(Subgraph(subgraph), soc_model);
+    auto selected_ops = compiler_plugin.Partition(subgraph, soc_model);
     // TODO ensure selected ops don't contain npu_calls.
     if (!selected_ops) {
       return selected_ops.Error();
+    }
+    // Record all decomposition subgraph indexes, where its compositie op will
+    // be compiled without relying on the decomposition body.
+    for (auto& op : *selected_ops) {
+      auto info = GetOptionsAs<CompositeOptions>(op.first);
+      if (!info) {
+        continue;
+      }
+      if (info->name == CompositeOptions::kNpuCall) {
+        continue;
+      }
+      selected_composite_subgraph_indexes.push_back(info->subgraph);
     }
     auto num_selected_ops = selected_ops->size();
     auto num_ops = subgraph->Ops().size();
@@ -462,6 +465,25 @@ Expected<PartitionResult> PartitionModel(
                i, num_selected_ops, num_ops, num_partitions);
   }
   ABSL_DCHECK_EQ(dispatch_ops.size(), model.NumSubgraphs() - input_num_sgs);
+
+  // Update input_num_sgs to account for removed decomposition subgraphs.
+  input_num_sgs -= selected_composite_subgraph_indexes.size();
+  // Remove all decomposition subgraphs from the model.
+  model.Yank(std::move(selected_composite_subgraph_indexes));
+
+  // Collect all npu_call ops, and their decomposition subgraphs indexes.
+  // Note:  we do this after partitioning and removing decomposition subgraphs,
+  // so subgraph indexes of npu_calls are also updated.
+  std::vector<CompositeOptions> npu_calls;
+  ForEachIr(&model, [&](LiteRtOp op) {
+    auto info = GetOptionsAs<CompositeOptions>(op);
+    if (!info) {
+      return;
+    }
+    if (info->name == CompositeOptions::kNpuCall) {
+      npu_calls.push_back(std::move(*info));
+    }
+  });
 
   // Add collect all the subgraphs to be compiled. These are the bodies of
   // outlined partitions or npu_calls.

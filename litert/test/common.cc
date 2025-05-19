@@ -32,13 +32,12 @@
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
-#include "litert/cc/litert_model_predicates.h"
 #include "litert/core/filesystem.h"
 #include "litert/core/util/flatbuffer_tools.h"
 #include "tflite/interpreter.h"
 #include "tflite/kernels/register.h"
-#include "tsl/platform/platform.h"
 
 namespace litert::testing {
 
@@ -82,40 +81,39 @@ constexpr char kBaseDir[] = "/data/local/tmp/runfiles";
 constexpr char kBaseDir[] = "";
 #endif  // __ANDROID__
 
-std::string GetTestFilePath(absl::string_view filename) {
-  static constexpr absl::string_view kTestDataDir =
-      "odml/litert/litert/"
-      "test/testdata/";
+constexpr absl::string_view kLiteRtDir = "litert";
+constexpr absl::string_view kInternalPrefx = "third_party/odml/litert";
 
-  if constexpr (!tsl::kIsOpenSource) {
-    return internal::Join({kBaseDir, "third_party", kTestDataDir, filename});
+std::string GetTestFilePath(absl::string_view filename) {
+  static constexpr absl::string_view kTestDataDir = "test/testdata/";
+  if constexpr (!IsOss()) {
+    return internal::Join(
+        {kBaseDir, kInternalPrefx, kLiteRtDir, kTestDataDir, filename});
   } else {
-    return internal::Join({kBaseDir, kTestDataDir, filename});
+    return internal::Join({kBaseDir, kLiteRtDir, kTestDataDir, filename});
   }
 }
 
 std::string GetTfliteFilePath(absl::string_view filename) {
-  static constexpr absl::string_view kTestDataDir = "tensorflow/lite/";
-
-  if constexpr (!tsl::kIsOpenSource) {
-    return internal::Join({kBaseDir, "third_party", kTestDataDir, filename});
+  if constexpr (!IsOss()) {
+    return internal::Join({kBaseDir, "third_party/tensorflow/lite/", filename});
   } else {
-    return internal::Join({kBaseDir, kTestDataDir, filename});
+    return internal::Join({kBaseDir, "external/tflite/", filename});
   }
 }
 
 std::string GetLiteRtPath(absl::string_view rel_path) {
-  static constexpr absl::string_view kLiteRtRoot = "odml/litert/litert/";
-
-  if constexpr (!tsl::kIsOpenSource) {
-    return internal::Join({kBaseDir, "third_party", kLiteRtRoot, rel_path});
+  if constexpr (!IsOss()) {
+    return internal::Join({kBaseDir, kInternalPrefx, kLiteRtDir, rel_path});
   } else {
-    return internal::Join({kBaseDir, kLiteRtRoot, rel_path});
+    return internal::Join({kBaseDir, kLiteRtDir, rel_path});
   }
 }
 
 Model LoadTestFileModel(absl::string_view filename) {
-  return *Model::CreateFromFile(GetTestFilePath(filename));
+  LITERT_ASSIGN_OR_ABORT(auto model,
+                         Model::CreateFromFile(GetTestFilePath(filename)));
+  return model;
 }
 
 Expected<TflRuntime::Ptr> TflRuntime::CreateFromFlatBuffer(

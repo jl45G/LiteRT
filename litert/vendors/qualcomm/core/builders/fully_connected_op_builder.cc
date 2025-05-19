@@ -12,7 +12,7 @@
 #include "litert/vendors/qualcomm/core/tensor_pool.h"
 #include "litert/vendors/qualcomm/core/wrappers/op_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/tensor_wrapper.h"
-#include "third_party/qairt/latest/include/QNN/QnnOpDef.h"
+#include "QnnOpDef.h"  // from @qairt
 
 namespace qnn {
 
@@ -51,14 +51,12 @@ std::vector<OpWrapper> BuildFullyConnectedOp(
         output_tensor, {batch_size, num_units});
 
     fully_connected_op.AddOutputTensor(fully_connected_out);
-    // TODO: fused activation
 
     qnn::OpWrapper& reshape_op = CreateOpWrapper(res, QNN_OP_RESHAPE);
     reshape_op.AddInputTensor(fully_connected_out);
     reshape_op.AddOutputTensor(output_tensor);
   } else {
     fully_connected_op.AddOutputTensor(outputs[0]);
-    // TODO: fused activation
   }
 
   return res;

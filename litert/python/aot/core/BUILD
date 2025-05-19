@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@org_tensorflow//tensorflow:pytype.default.bzl", "pytype_strict_contrib_test", "pytype_strict_library")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+load("@org_tensorflow//tensorflow:pytype.default.bzl", "pytype_strict_contrib_test", "pytype_strict_library")
 load("//litert/python/aot/core:build_defs.bzl", "tflxx_deps_if_enabled")
 
 package(
@@ -47,11 +47,13 @@ pytype_strict_library(
 pytype_strict_library(
     name = "common",
     srcs = ["common.py"],
+    visibility = ["//visibility:public"],
 )
 
 pytype_strict_library(
     name = "types",
     srcs = ["types.py"],
+    visibility = ["//visibility:public"],
 )
 
 pytype_strict_library(
@@ -108,6 +110,7 @@ pytype_strict_library(
 pytype_strict_library(
     name = "components",
     srcs = ["components.py"],
+    visibility = ["//visibility:public"],
     deps = [":types"],
 )
 

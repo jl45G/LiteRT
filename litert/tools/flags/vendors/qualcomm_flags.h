@@ -21,37 +21,61 @@
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/options/litert_qualcomm_options.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/options/litert_qualcomm_options.h"
 
 // GENERAL SDK SETTINGS ////////////////////////////////////////////////////////
 
+#if defined(INCLUDE_QUALCOMM_COMPILE_FLAGS) || \
+    defined(INCLUDE_QUALCOMM_RUNTIME_FLAGS)
+
 ABSL_DECLARE_FLAG(LiteRtQualcommOptionsLogLevel, qualcomm_log_level);
-
-// COMPILATION OPTIONS /////////////////////////////////////////////////////////
-
-ABSL_DECLARE_FLAG(bool, enable_weight_sharing);
-
-// DISPATCH OPTIONS ////////////////////////////////////////////////////////////
-
-ABSL_DECLARE_FLAG(LiteRtQualcommOptionsPowerMode, qualcomm_power_mode);
-
-// PARSERS (internal) //////////////////////////////////////////////////////////
-
+std::string AbslUnparseFlag(LiteRtQualcommOptionsLogLevel options);
 bool AbslParseFlag(absl::string_view text,
                    LiteRtQualcommOptionsLogLevel* options, std::string* error);
 
-std::string AbslUnparseFlag(LiteRtQualcommOptionsLogLevel options);
+#endif
 
+// COMPILATION OPTIONS /////////////////////////////////////////////////////////
+
+#if defined(INCLUDE_QUALCOMM_COMPILE_FLAGS)
+
+ABSL_DECLARE_FLAG(bool, qualcomm_enable_weight_sharing);
+
+ABSL_DECLARE_FLAG(bool, qualcomm_use_htp_preference);
+
+ABSL_DECLARE_FLAG(bool, qualcomm_use_qint16_as_quint16);
+
+#endif
+
+// DISPATCH OPTIONS ////////////////////////////////////////////////////////////
+
+#if defined(INCLUDE_QUALCOMM_COMPILE_FLAGS)
+
+ABSL_DECLARE_FLAG(LiteRtQualcommOptionsHtpPerformanceMode,
+                  qualcomm_htp_performance_mode);
 bool AbslParseFlag(absl::string_view text,
-                   LiteRtQualcommOptionsPowerMode* options, std::string* error);
+                   LiteRtQualcommOptionsHtpPerformanceMode* options,
+                   std::string* error);
+std::string AbslUnparseFlag(LiteRtQualcommOptionsHtpPerformanceMode options);
 
-std::string AbslUnparseFlag(LiteRtQualcommOptionsPowerMode options);
+ABSL_DECLARE_FLAG(LiteRtQualcommOptionsProfiling, qualcomm_profiling);
+bool AbslParseFlag(absl::string_view text,
+                   LiteRtQualcommOptionsProfiling* options, std::string* error);
+std::string AbslUnparseFlag(LiteRtQualcommOptionsProfiling options);
+
+#endif
 
 // TO OBJECT (internal) ////////////////////////////////////////////////////////
+
+#if defined(INCLUDE_QUALCOMM_COMPILE_FLAGS) || \
+    defined(INCLUDE_QUALCOMM_RUNTIME_FLAGS)
 
 namespace litert::qualcomm {
 
 Expected<QualcommOptions> QualcommOptionsFromFlags();
 
 }  // namespace litert::qualcomm
+
+#endif
 
 #endif  // THIRD_PARTY_ODML_LITERT_LITERT_TOOLS_FLAGS_VENDORS_QUALCOMM_FLAGS_H_

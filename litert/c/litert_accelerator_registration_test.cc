@@ -56,8 +56,7 @@ class DummyAccelerator {
   }
 
   static LiteRtStatus CreateDelegate(LiteRtAccelerator accelerator,
-                                     LiteRtOpaqueOptions options,
-                                     void** delegate) {
+                                     LiteRtOptions options, void** delegate) {
     return kLiteRtStatusOk;
   }
 
@@ -113,7 +112,7 @@ TEST(LiteRtAcceleratorRegistrationTest, CreateDestroyAcceleratorDoesntLeak) {
 
 TEST(LiteRtAcceleratorRegistrationTest, RegisterAcceleratorWorks) {
   LiteRtEnvironment env_;
-  LiteRtEnvironmentCreate(/*num_options=*/0, /*options=*/nullptr, &env_);
+  LiteRtCreateEnvironment(/*num_options=*/0, /*options=*/nullptr, &env_);
   auto dummy_accelerator = DummyAccelerator::CpuAccelerator();
   LiteRtAccelerator accelerator;
   LiteRtCreateAccelerator(&accelerator);
@@ -129,7 +128,7 @@ TEST(LiteRtAcceleratorRegistrationTest, RegisterAcceleratorWorks) {
 TEST(LiteRtAcceleratorRegistrationTest,
      RegisterAcceleratorFailsForNullAccelerator) {
   LiteRtEnvironment env;
-  LiteRtEnvironmentCreate(/*num_options=*/0, /*options=*/nullptr, &env);
+  LiteRtCreateEnvironment(/*num_options=*/0, /*options=*/nullptr, &env);
   // We check that the memory is correctly deallocated if the registration
   // fails.
   auto dummy_accelerator = DummyAccelerator::CpuAccelerator();

@@ -13,8 +13,10 @@
 // limitations under the License.
 
 #include <gtest/gtest.h>
+#include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/cc/litert_shared_library.h"
 #include "litert/vendors/qualcomm/common.h"
+#include "litert/vendors/qualcomm/core/common.h"
 #include "litert/vendors/qualcomm/qnn_manager.h"
 
 namespace litert::test {
@@ -28,22 +30,27 @@ using ::litert::qnn::QnnManager;
 
 TEST(QnnSmokeTest, LoadLibsFromEnvPath) {
   auto lib_htp = SharedLibrary::Load(kLibQnnHtpSo, RtldFlags::Default());
-  ASSERT_TRUE(lib_htp);
+  EXPECT_TRUE(lib_htp);
 
   auto lib_system = SharedLibrary::Load(kLibQnnSystemSo, RtldFlags::Default());
-  ASSERT_TRUE(lib_system);
+  EXPECT_TRUE(lib_system);
+
+  auto lib_prepare =
+      SharedLibrary::Load(kLibQnnHtpPrepareSo, RtldFlags::Default());
+  EXPECT_TRUE(lib_prepare);
 
   auto lib_dispatch = SharedLibrary::Load(kDispatch, RtldFlags::Default());
-  ASSERT_TRUE(lib_dispatch);
+  EXPECT_TRUE(lib_dispatch);
 
   auto lib_plugin = SharedLibrary::Load(kPlugin, RtldFlags::Default());
-  ASSERT_TRUE(lib_plugin);
+  EXPECT_TRUE(lib_plugin);
 }
 
 TEST(QnnSmokeTest, QnnManagerCreate) {
   auto configs = QnnManager::DefaultBackendConfigs();
-  auto qnn = QnnManager::Create(configs);
-  ASSERT_TRUE(qnn);
+  auto options = ::qnn::Options();
+  auto qnn = QnnManager::Create(configs, options);
+  EXPECT_TRUE(qnn);
 }
 
 }  // namespace

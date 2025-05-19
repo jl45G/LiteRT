@@ -20,8 +20,8 @@
 #include "litert/vendors/c/litert_dispatch.h"
 #include "litert/vendors/qualcomm/dispatch/registry.h"
 #include "litert/vendors/qualcomm/qnn_manager.h"
-#include "third_party/qairt/latest/include/QNN/QnnInterface.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+#include "QnnInterface.h"  // from @qairt
+#include "QnnTypes.h"  // from @qairt
 
 class LiteRtDispatchDeviceContextT {
  public:

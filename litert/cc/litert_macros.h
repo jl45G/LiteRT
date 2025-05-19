@@ -15,7 +15,8 @@
 #ifndef ODML_LITERT_LITERT_CC_LITERT_MACROS_H_
 #define ODML_LITERT_LITERT_CC_LITERT_MACROS_H_
 
-#include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -23,9 +24,10 @@
 
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
-#include "litert/c/litert_common.h"  // IWYU pragma: keep
-#include "litert/c/litert_logging.h"  // IWYU pragma: keep
-#include "litert/cc/litert_expected.h"  // IWYU pragma: keep
+#include "litert/c/litert_common.h"
+#include "litert/c/litert_logging.h"
+#include "litert/cc/litert_expected.h"
+#include "litert/cc/litert_source_location.h"
 
 #define _CONCAT_NAME_IMPL(x, y) x##y
 
@@ -68,9 +70,10 @@
 // `litert::Expected` holding an error, a `LiteRtStatus` or a bool that
 // evaluated to `false`).
 //
-// Returns `return_value` if the result of `expr` represents an error.
+// `return_value` may be specified to return a custom value in case of error.
 //
-// The result of `expr` may be referenced as `status` in `return_expr`.
+// By when specifying `return_value`, an `ErrorStatusBuilder` variable called
+// `_` holding the result of `expr` can be used to customize the error message.
 //
 // By default, the return value is an `ErrorStatusBuilder` built from using the
 // result of `expr`. The error message of this builder can be customized by
@@ -96,7 +99,7 @@
 // `return_value` may be specified to return a custom value in case of error.
 //
 // By when specifying `return_value`, an `ErrorStatusBuilder` variable called
-// `_` can be used to customize the error message.
+// `_` holding the result of `expr` can be used to customize the error message.
 //
 // ```cpp
 // LITERT_ASSIGN_OR_RETURN(expr, _ << "Failed while trying to ...");
@@ -107,49 +110,19 @@
                                            LITERT_ASSIGN_OR_RETURN_HELPER_2))( \
       _CONCAT_NAME(expected_value_or_error_, __LINE__), DECL, __VA_ARGS__)
 
+// Works as `LITERT_RETURN_IF_ERROR` but aborts the process in case of error.
+#define LITERT_ABORT_IF_ERROR(EXPR)                                        \
+  if (auto status = (EXPR); ::litert::ErrorStatusBuilder::IsError(status)) \
+  ::litert::LogBeforeAbort(::litert::ErrorStatusBuilder(status))
+
+// Works as `LITERT_ASSIGN_OR` but aborts the process in case of error.
+#define LITERT_ASSIGN_OR_ABORT(DECL, ...)                                    \
+  LITERT_ASSIGN_OR_ABORT_SELECT_OVERLOAD((DECL, __VA_ARGS__,                 \
+                                          LITERT_ASSIGN_OR_ABORT_HELPER_3,   \
+                                          LITERT_ASSIGN_OR_ABORT_HELPER_2))( \
+      _CONCAT_NAME(expected_value_or_error_, __LINE__), DECL, __VA_ARGS__)
+
 namespace litert {
-
-#if defined(__has_builtin) && __has_builtin(__builtin_FILE) && \
-    __has_builtin(__builtin_LINE)
-#define LITERT_INTERNAL_BUILTIN_FILE __builtin_FILE()
-#define LITERT_INTERNAL_BUILTIN_LINE __builtin_LINE()
-#else
-#define LITERT_INTERNAL_BUILTIN_FILE "unknown"
-#define LITERT_INTERNAL_BUILTIN_LINE 0
-#endif
-
-// Stores a file and a line number.
-//
-// Mimics a subset of `std::source_location` to be replaced by it when we update
-// to C++20.
-class SourceLocation {
-  // We have this to prevent `current()` parameters from begin modified.
-  struct PrivateTag {};
-
- public:
-  // Creates a SourceLocation with the line and file corresponding to the
-  // call site.
-  static constexpr SourceLocation current(
-      PrivateTag = PrivateTag{},
-      const char* file = LITERT_INTERNAL_BUILTIN_FILE,
-      uint32_t line = LITERT_INTERNAL_BUILTIN_LINE) {
-    return SourceLocation{file, line};
-  }
-
-  constexpr const char* file_name() const { return file_; }
-  constexpr uint32_t line() const { return line_; }
-
- private:
-  // Builds a SourceLocation object.
-  //
-  // Note: This is private as `std::source_location` doesn't provide a way of
-  // manually building a source location.
-  constexpr SourceLocation(const char* file, uint32_t line)
-      : file_(file), line_(line) {}
-
-  const char* file_;
-  uint32_t line_;
-};
 
 // Converts implicitly to either `LiteRtStatus` or `litert::Expected` holding an
 // error. This allows returning a status in functions using either of these as a
@@ -211,20 +184,7 @@ class ErrorStatusBuilder {
   // Note: this conversion logs the error message if there is one unless NDEBUG
   // is set (generally in case of optimized builds).
   operator LiteRtStatus() const noexcept {
-#ifndef NDEBUG
-    if (ShouldLog()) {
-      LiteRtLogger logger = LiteRtGetDefaultLogger();
-      LiteRtLogSeverity __min_severity__;
-      if (LiteRtGetMinLoggerSeverity(logger, &__min_severity__) !=
-          kLiteRtStatusOk) {
-        __min_severity__ = kLiteRtLogSeverityVerbose;
-      }
-      if (log_level_ >= __min_severity__) {
-        LiteRtLoggerLog(logger, log_level_, "[%s:%u] %s", loc_.file_name(),
-                        loc_.line(), LogMessage().c_str());
-      }
-    }
-#endif
+    PrintLog();
     return error_.Status();
   }
 
@@ -252,6 +212,14 @@ class ErrorStatusBuilder {
   template <class T>
   static constexpr bool IsError(const litert::Expected<T>& expected) {
     return !expected.HasValue();
+  }
+
+  void PrintLog() const noexcept {
+#ifndef NDEBUG
+    if (ShouldLog()) {
+      LITERT_LOG(log_level_, "%s", LogMessage().c_str());
+    }
+#endif
   }
 
   // Appends data to the error message.
@@ -297,28 +265,33 @@ class ErrorStatusBuilder {
            (!error_.Message().empty() || extra_log_);
   }
 
-  std::string LogMessage() const {
-    if (!error_.Message().empty() && extra_log_) {
-      std::string res;
-      res.reserve(error_.Message().size() + extra_log_->tellp() + 2);
-      res.append(error_.Message());
-      res.append(" ");
-      res.append(extra_log_->str());
-      return res;
-    }
-    if (!error_.Message().empty()) {
-      return error_.Message();
-    }
-    if (extra_log_) {
-      return extra_log_->str();
-    }
-    return {};
-  }
+  std::string LogMessage() const;
 
   litert::Error error_;
   litert::SourceLocation loc_;
   std::unique_ptr<std::stringstream> extra_log_;
   LiteRtLogSeverity log_level_ = kLiteRtLogSeverityError;
+};
+
+class LogBeforeAbort {
+ public:
+  explicit LogBeforeAbort(ErrorStatusBuilder builder)
+      : builder_(std::move(builder)) {}
+
+  ~LogBeforeAbort() {
+    // Cast to a LiteRtStatus to trigger the logging mechanism.
+    [[maybe_unused]] LiteRtStatus s = static_cast<LiteRtStatus>(builder_);
+    std::abort();
+  }
+
+  template <class T>
+  LogBeforeAbort& operator<<(T&& val) {
+    builder_ << val;
+    return *this;
+  }
+
+ private:
+  ErrorStatusBuilder builder_;
 };
 
 }  // namespace litert
@@ -331,13 +304,14 @@ class ErrorStatusBuilder {
 #define LITERT_RETURN_IF_ERROR_SELECT_OVERLOAD(args) \
   LITERT_RETURN_IF_ERROR_SELECT_OVERLOAD_HELPER args
 
-#define LITERT_RETURN_IF_ERROR_1(EXPR) \
-  LITERT_RETURN_IF_ERROR_2(EXPR,       \
-                           ::litert::ErrorStatusBuilder{std::move(status)})
+#define LITERT_RETURN_IF_ERROR_1(EXPR) LITERT_RETURN_IF_ERROR_2(EXPR, _)
 
-#define LITERT_RETURN_IF_ERROR_2(EXPR, RETURN_VALUE)                       \
-  if (auto status = (EXPR); ::litert::ErrorStatusBuilder::IsError(status)) \
+// NOLINTBEGIN(readability/braces)
+#define LITERT_RETURN_IF_ERROR_2(EXPR, RETURN_VALUE)                     \
+  if (auto status = EXPR; ::litert::ErrorStatusBuilder::IsError(status)) \
+    if (::litert::ErrorStatusBuilder _(std::move(status)); true)         \
   return RETURN_VALUE
+// NOLINTEND(readability/braces)
 
 #define LITERT_ASSIGN_OR_RETURN_SELECT_OVERLOAD_HELPER(_1, _2, _3, OVERLOAD, \
                                                        ...)                  \
@@ -355,6 +329,24 @@ class ErrorStatusBuilder {
     [[maybe_unused]] ::litert::ErrorStatusBuilder _(std::move(TMP_VAR));    \
     return RETURN_VALUE;                                                    \
   }                                                                         \
+  DECL = std::move(TMP_VAR.Value());
+
+#define LITERT_ASSIGN_OR_ABORT_SELECT_OVERLOAD_HELPER(_1, _2, _3, OVERLOAD, \
+                                                      ...)                  \
+  OVERLOAD
+
+#define LITERT_ASSIGN_OR_ABORT_SELECT_OVERLOAD(args) \
+  LITERT_ASSIGN_OR_ABORT_SELECT_OVERLOAD_HELPER args
+
+#define LITERT_ASSIGN_OR_ABORT_HELPER_2(TMP_VAR, DECL, EXPR) \
+  LITERT_ASSIGN_OR_ABORT_HELPER_3(TMP_VAR, DECL, EXPR, _)
+
+#define LITERT_ASSIGN_OR_ABORT_HELPER_3(TMP_VAR, DECL, EXPR, LOG_EXPRESSION) \
+  auto&& TMP_VAR = (EXPR);                                                   \
+  if (::litert::ErrorStatusBuilder::IsError(TMP_VAR)) {                      \
+    ::litert::ErrorStatusBuilder _(std::move(TMP_VAR));                      \
+    ::litert::LogBeforeAbort(std::move((LOG_EXPRESSION)));                   \
+  }                                                                          \
   DECL = std::move(TMP_VAR.Value());
 
 #endif  // ODML_LITERT_LITERT_CC_LITERT_MACROS_H_
