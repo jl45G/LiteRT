@@ -19,14 +19,18 @@
 #include <stdint.h>
 
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_tensor_buffer.h"
+#include "litert/c/litert_tensor_buffer_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
 
-LITERT_DEFINE_HANDLE(LiteRtTensorBufferRequirements);
-
+// Create a LiteRtTensorBufferRequirements from a list of supported tensor
+// buffer types, buffer size, and strides.
+//
+// Caller owns the returned LiteRtTensorBufferRequirements. The owner is
+// responsible for calling LiteRtDestroyTensorBufferRequirements() to release
+// the object.
 LiteRtStatus LiteRtCreateTensorBufferRequirements(
     int num_supported_tensor_buffer_types,
     const LiteRtTensorBufferType* supported_tensor_buffer_types,
@@ -54,6 +58,7 @@ LiteRtStatus LiteRtJoinTensorBufferRequirements(
     LiteRtTensorBufferRequirements src_requirements_2,
     LiteRtTensorBufferRequirements* joined_requirements);
 
+// Destroy a owned LiteRtTensorBufferRequirements object.
 void LiteRtDestroyTensorBufferRequirements(
     LiteRtTensorBufferRequirements requirements);
 

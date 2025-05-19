@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"  // from @com_google_absl
+#include "absl/strings/string_view.h"  // from @com_google_absl
 #include "absl/types/span.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_gl_types.h"
@@ -82,43 +83,36 @@ class LiteRtTensorBufferT {
       size_t fastrpc_buffer_offset,
       LiteRtFastRpcDeallocator deallocator = nullptr);
 
+  static litert::Expected<Ptr> CreateFromGlBuffer(
+      LiteRtEnvironment env, const LiteRtRankedTensorType& tensor_type,
+      LiteRtGLenum target, LiteRtGLuint id, size_t size_bytes, size_t offset,
+      LiteRtGlBufferDeallocator deallocator = nullptr);
+
+  static litert::Expected<Ptr> CreateFromGlTexture(
+      LiteRtEnvironment env, const LiteRtRankedTensorType& tensor_type,
+      LiteRtGLenum target, LiteRtGLuint id, LiteRtGLenum format,
+      size_t size_bytes, LiteRtGLint layer,
+      LiteRtGlTextureDeallocator deallocator = nullptr);
+
+  static litert::Expected<Ptr> CreateManaged(
+      LiteRtEnvironment env, LiteRtTensorBufferType buffer_type,
+      const LiteRtRankedTensorType& tensor_type, size_t buffer_size);
+
 #if LITERT_HAS_OPENCL_SUPPORT
   static litert::Expected<Ptr> CreateFromOpenClMemory(
-      const LiteRtRankedTensorType& tensor_type,
+      LiteRtEnvironment env, const LiteRtRankedTensorType& tensor_type,
       LiteRtTensorBufferType buffer_type, cl_mem buffer,
       size_t opencl_buffer_size, LiteRtOpenClDeallocator deallocator = nullptr);
 #endif  // LITERT_HAS_OPENCL_SUPPORT
 
-  static litert::Expected<Ptr> CreateFromGlBuffer(
-      const LiteRtRankedTensorType& tensor_type, LiteRtGLenum target,
-      LiteRtGLuint id, size_t size_bytes, size_t offset,
-      LiteRtGlBufferDeallocator deallocator = nullptr);
-  static litert::Expected<Ptr> CreateFromGlTexture(
-      const LiteRtRankedTensorType& tensor_type, LiteRtGLenum target,
-      LiteRtGLuint id, LiteRtGLenum format, size_t size_bytes,
-      LiteRtGLint layer, LiteRtGlTextureDeallocator deallocator = nullptr);
-
-  static litert::Expected<Ptr> CreateManaged(
-      LiteRtTensorBufferType buffer_type,
-      const LiteRtRankedTensorType& tensor_type, size_t buffer_size);
-
   LiteRtRankedTensorType tensor_type() const { return tensor_type_; }
   LiteRtTensorBufferType buffer_type() const { return buffer_type_; }
-  bool is_opencl_memory() const {
-    switch (buffer_type_) {
-      case kLiteRtTensorBufferTypeOpenClBuffer:
-      case kLiteRtTensorBufferTypeOpenClBufferFp16:
-      case kLiteRtTensorBufferTypeOpenClTexture:
-      case kLiteRtTensorBufferTypeOpenClTextureFp16:
-      case kLiteRtTensorBufferTypeOpenClImageBuffer:
-      case kLiteRtTensorBufferTypeOpenClImageBufferFp16:
-        return true;
-      default:
-        return false;
-    }
-  }
+
+  size_t packed_buffer_size() const { return packed_buffer_size_; }
   size_t buffer_size() const { return buffer_size_; }
   size_t buffer_offset() const { return buffer_offset_; }
+
+  bool is_opencl_memory() const { return IsOpenClMemory(buffer_type_); }
 
   bool HasEvent() const { return event_ != nullptr; }
 
@@ -141,11 +135,11 @@ class LiteRtTensorBufferT {
   litert::Expected<std::pair<void*, int>> GetIonBuffer();
   litert::Expected<std::pair<void*, int>> GetDmaBufBuffer();
   litert::Expected<std::pair<void*, int>> GetFastRpcBuffer();
+  litert::Expected<litert::internal::GlBuffer*> GetGlBuffer();
+  litert::Expected<litert::internal::GlTexture*> GetGlTexture();
 #if LITERT_HAS_OPENCL_SUPPORT
   litert::Expected<litert::internal::OpenClMemory*> GetOpenClMemory();
 #endif  // LITERT_HAS_OPENCL_SUPPORT
-  litert::Expected<litert::internal::GlBuffer*> GetGlBuffer();
-  litert::Expected<litert::internal::GlTexture*> GetGlTexture();
 
   litert::Expected<void*> Lock();
   litert::Expected<void> Unlock();
@@ -207,7 +201,8 @@ class LiteRtTensorBufferT {
 #endif  // LITERT_HAS_OPENCL_SUPPORT
                    litert::internal::GlBuffer, litert::internal::GlTexture>;
 
-  LiteRtTensorBufferT(const LiteRtRankedTensorType& tensor_type,
+  LiteRtTensorBufferT(LiteRtEnvironment env,
+                      const LiteRtRankedTensorType& tensor_type,
                       LiteRtTensorBufferType buffer_type, size_t buffer_size,
                       size_t buffer_offset = 0);
 
@@ -227,20 +222,23 @@ class LiteRtTensorBufferT {
       const LiteRtRankedTensorType& tensor_type, size_t buffer_size);
 
   static litert::Expected<Ptr> CreateManagedOpenClMemory(
-      const LiteRtRankedTensorType& tensor_type,
+      LiteRtEnvironment env, const LiteRtRankedTensorType& tensor_type,
       LiteRtTensorBufferType buffer_type, size_t buffer_size);
 
   static litert::Expected<Ptr> CreateManagedGlBuffer(
-      const LiteRtRankedTensorType& tensor_type, size_t buffer_size);
+      LiteRtEnvironment env, const LiteRtRankedTensorType& tensor_type,
+      size_t buffer_size);
 
   litert::Expected<void> IsValid();
 
+  LiteRtEnvironment env_;
   LiteRtRankedTensorType tensor_type_;
   std::vector<std::decay_t<decltype(LiteRtLayout::dimensions[0])>> dimensions_;
   std::vector<std::decay_t<decltype(LiteRtLayout::strides[0])>> strides_;
   LiteRtTensorBufferType buffer_type_;
   size_t buffer_size_;
   size_t buffer_offset_;
+  size_t packed_buffer_size_;
   BufferVariant buffer_;
   std::unique_ptr<LiteRtEventT> event_;
   mutable std::atomic_int_fast32_t ref_;
@@ -250,5 +248,14 @@ class LiteRtTensorBufferT {
   absl::flat_hash_map<LiteRtTensorBufferType, BufferVariant>
       memory_backed_buffers_;
 };
+
+namespace litert::internal {
+
+// TODO: Also add ability to get tensor shape/dtype info, and forward to
+// the public c api.
+absl::string_view GetTensorBufferTypeName(
+    const LiteRtTensorBufferT& tensor_buffer);
+
+}  // namespace litert::internal
 
 #endif  // ODML_LITERT_LITERT_RUNTIME_TENSOR_BUFFER_H_

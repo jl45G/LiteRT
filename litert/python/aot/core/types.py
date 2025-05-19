@@ -19,7 +19,19 @@ import abc
 from collections.abc import Iterable
 import dataclasses
 import pathlib
-from typing import Any, MutableMapping, Protocol, Self, Type, TypeAlias
+import sys
+from typing import Any, MutableMapping, Protocol, Type
+
+# pylint: disable=g-importing-member
+# pylint: disable=g-import-not-at-top
+# pylint: disable=g-bad-import-order
+if sys.version_info < (3, 10):
+  from typing_extensions import TypeAlias
+else:
+  from typing import TypeAlias
+# pylint: enable=g-bad-import-order
+# pylint: enable=g-import-not-at-top
+# pylint: enable=g-importing-member
 
 
 @dataclasses.dataclass(frozen=True)
@@ -98,11 +110,11 @@ class Model:
     return self.data_
 
   @classmethod
-  def create_from_path(cls, path: pathlib.Path) -> Self:
+  def create_from_path(cls, path: pathlib.Path) -> 'Model':
     return Model(path=path, model_bytes=None)
 
   @classmethod
-  def create_from_bytes(cls, model_bytes: bytes) -> Self:
+  def create_from_bytes(cls, model_bytes: bytes) -> 'Model':
     return Model(path=None, model_bytes=model_bytes)
 
   def set_path(self, path: pathlib.Path | str):
@@ -156,8 +168,8 @@ class Model:
 
 
 @dataclasses.dataclass()
-class CompiledModels:
-  """A collection of compiled models."""
+class CompilationResult:
+  """Compilation result, as a collection of compiled models."""
 
   models_with_backend: list[tuple['Backend', Model]] = dataclasses.field(
       default_factory=list
@@ -181,7 +193,8 @@ class CompiledModels:
     output_dir.mkdir(parents=True, exist_ok=True)
     for backend, model in self.models_with_backend:
       model.save(
-          output_dir / (model_name + backend.target_id_suffix + '.tflite')
+          output_dir / (model_name + backend.target_id_suffix + '.tflite'),
+          export_only=True,
       )
 
   def compilation_report(self) -> str:
@@ -265,7 +278,7 @@ class Backend(metaclass=abc.ABCMeta):
 
   @classmethod
   @abc.abstractmethod
-  def create(cls, config: Config) -> Self:
+  def create(cls, config: Config) -> 'Backend':
     """Creates a backend instance.
 
     If no target is specified, the backend will represent all targets.

@@ -17,7 +17,7 @@
 #include "litert/vendors/qualcomm/core/utils/log.h"
 #include "litert/vendors/qualcomm/core/utils/miscs.h"
 #include "litert/vendors/qualcomm/core/wrappers/quantize_params_wrapper.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+#include "QnnTypes.h"  // from @qairt
 
 namespace qnn {
 
@@ -109,6 +109,8 @@ class TensorWrapper final {
   TensorWrapper(TensorWrapper&& other);
 
   ~TensorWrapper();
+
+  bool operator==(const TensorWrapper& other) const { return this == &other; }
 
   void CloneTo(Qnn_Tensor_t& dst) const;
 

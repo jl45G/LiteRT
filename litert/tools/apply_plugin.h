@@ -19,19 +19,17 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "absl/container/flat_hash_set.h"  // from @com_google_absl
-#include "absl/strings/string_view.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/cc/litert_environment.h"
+#include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_options.h"
-#include "litert/compiler/plugin/compiler_flags.h"
 #include "litert/tools/outstream.h"
 
 namespace litert::tools {
-
-using ::litert::internal::CompilerFlags;
 
 struct ApplyPluginRun {
   // NOTE: All StrFlagT are expected to have static storage duration.
@@ -146,10 +144,6 @@ struct ApplyPluginRun {
   // larger pipeline like an end2end test.
   UserStream dump_out;
 
-  // Compiler flags to pass to the plugin. Only relevant for "APPLY" and
-  // "COMPILE" commands.
-  CompilerFlags compiler_flags;
-
   // If provided, only the subgraphs with the given indices are applied with the
   // plugin.
   absl::flat_hash_set<uint32_t> subgraphs = {};
@@ -160,7 +154,10 @@ struct ApplyPluginRun {
   Options options;
 
   // Environment options.
-  Environment environment = *Environment::Create({});
+  Environment environment = [] {
+    LITERT_ASSIGN_OR_ABORT(Environment e, Environment::Create({}));
+    return e;
+  }();
 };
 
 LiteRtStatus ApplyPlugin(ApplyPluginRun::Ptr run);
