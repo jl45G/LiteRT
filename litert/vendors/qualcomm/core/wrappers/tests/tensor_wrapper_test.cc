@@ -15,7 +15,7 @@
 #include "absl/types/span.h"  // from @com_google_absl
 #include "litert/vendors/qualcomm/core/utils/miscs.h"
 #include "litert/vendors/qualcomm/core/wrappers/quantize_params_wrapper.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+#include "QnnTypes.h"  // from @qairt
 
 namespace qnn {
 namespace {
@@ -387,6 +387,13 @@ TEST(TensorWrapperTest, QnnTensorPerChannelQuantConstructTest) {
   EXPECT_EQ(ref.v2.memType, qnn_tensor.v2.memType);
   EXPECT_EQ(ref.v2.clientBuf.dataSize, qnn_tensor.v2.clientBuf.dataSize);
   EXPECT_EQ(ref.v2.clientBuf.data, qnn_tensor.v2.clientBuf.data);
+}
+
+TEST(TensorWrapperTest, SameTensorWrapperTest) {
+  TensorWrapper tensor_wrapper_1{};
+  EXPECT_EQ(tensor_wrapper_1, tensor_wrapper_1);
+  TensorWrapper& tensor_wrapper_ref = tensor_wrapper_1;
+  EXPECT_EQ(tensor_wrapper_1, tensor_wrapper_ref);
 }
 }  // namespace
 }  // namespace qnn

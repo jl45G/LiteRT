@@ -15,6 +15,7 @@
 #ifndef ODML_LITERT_LITERT_C_LITERT_TENSOR_BUFFER_TYPES_H_
 #define ODML_LITERT_LITERT_C_LITERT_TENSOR_BUFFER_TYPES_H_
 
+// LINT.IfChange(tensor_buffer_types)
 typedef enum {
   kLiteRtTensorBufferTypeUnknown = 0,
   kLiteRtTensorBufferTypeHostMemory = 1,
@@ -30,8 +31,16 @@ typedef enum {
   kLiteRtTensorBufferTypeOpenClBufferFp16 = 11,
   kLiteRtTensorBufferTypeOpenClTexture = 12,
   kLiteRtTensorBufferTypeOpenClTextureFp16 = 13,
-  kLiteRtTensorBufferTypeOpenClImageBuffer = 14,
-  kLiteRtTensorBufferTypeOpenClImageBufferFp16 = 15,
+  kLiteRtTensorBufferTypeOpenClBufferPacked = 14,
 } LiteRtTensorBufferType;
+// LINT.ThenChange(../kotlin/src/main/kotlin/com/google/ai/edge/litert/TensorBuffer.kt:tensor_buffer_types)
+
+inline bool IsOpenClMemory(LiteRtTensorBufferType buffer_type) {
+  return buffer_type == kLiteRtTensorBufferTypeOpenClBuffer ||
+         buffer_type == kLiteRtTensorBufferTypeOpenClBufferFp16 ||
+         buffer_type == kLiteRtTensorBufferTypeOpenClTexture ||
+         buffer_type == kLiteRtTensorBufferTypeOpenClTextureFp16 ||
+         buffer_type == kLiteRtTensorBufferTypeOpenClBufferPacked;
+}
 
 #endif  // ODML_LITERT_LITERT_C_LITERT_TENSOR_BUFFER_TYPES_H_

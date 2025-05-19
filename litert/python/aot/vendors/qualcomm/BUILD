@@ -16,7 +16,7 @@ load("@org_tensorflow//tensorflow:pytype.default.bzl", "pytype_strict_contrib_te
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:litert_python_internal_users"],
+    default_visibility = ["//visibility:public"],
 )
 
 pytype_strict_library(
@@ -24,6 +24,7 @@ pytype_strict_library(
     srcs = ["qualcomm_backend.py"],
     deps = [
         ":target",
+        "//litert/python/aot/core:common",
         "//litert/python/aot/core:components",
         "//litert/python/aot/core:types",
         "//litert/python/aot/vendors:import_vendor",
@@ -42,9 +43,9 @@ pytype_strict_contrib_test(
     deps = [
         ":qualcomm_backend",
         ":target",
-        "@absl_py//absl/testing:absltest",
         "//litert/python/aot/core:components",
         "//litert/python/aot/core:test_common",
         "//litert/python/aot/core:types",
+        "@absl_py//absl/testing:absltest",
     ],
 )

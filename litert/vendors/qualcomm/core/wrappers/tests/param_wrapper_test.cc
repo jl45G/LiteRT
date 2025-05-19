@@ -12,7 +12,7 @@
 #include <gtest/gtest.h>
 #include "litert/vendors/qualcomm/core/wrappers/quantize_params_wrapper.h"
 #include "litert/vendors/qualcomm/core/wrappers/tensor_wrapper.h"
-#include "third_party/qairt/latest/include/QNN/QnnTypes.h"
+#include "QnnTypes.h"  // from @qairt
 
 namespace qnn {
 namespace {

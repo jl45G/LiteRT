@@ -6,6 +6,19 @@ workspace(name = "litert")
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
+http_archive(
+    name = "rules_shell",
+    sha256 = "bc61ef94facc78e20a645726f64756e5e285a045037c7a61f65af2941f4c25e1",
+    strip_prefix = "rules_shell-0.4.1",
+    url = "https://github.com/bazelbuild/rules_shell/releases/download/v0.4.1/rules_shell-v0.4.1.tar.gz",
+)
+
+load("@rules_shell//shell:repositories.bzl", "rules_shell_dependencies", "rules_shell_toolchains")
+
+rules_shell_dependencies()
+
+rules_shell_toolchains()
+
 # Java rules
 http_archive(
     name = "rules_java",
@@ -167,3 +180,28 @@ kotlin_repositories()  # if you want the default. Otherwise see custom kotlinc d
 load("@rules_kotlin//kotlin:core.bzl", "kt_register_toolchains")
 
 kt_register_toolchains()  # to use the default toolchain, otherwise see toolchains below
+
+load("//third_party/stblib:workspace.bzl", stblib = "repo")
+
+stblib()
+
+# VENDOR SDKS ######################################################################################
+
+# QUALCOMM ---------------------------------------------------------------------------------------
+
+# The actual macro call will be set during configure for now.
+load("//third_party/qairt:workspace.bzl", "qairt")
+
+qairt()
+
+# MEDIATEK ---------------------------------------------------------------------------------------
+
+# Currently only works with local sdk
+load("//third_party/neuro_pilot:workspace.bzl", "neuro_pilot")
+
+neuro_pilot()
+
+# GOOGLE TENSOR ----------------------------------------------------------------------------------
+load("//third_party/google_tensor:workspace.bzl", "google_tensor")
+
+google_tensor()

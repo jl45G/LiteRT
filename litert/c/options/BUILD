@@ -14,7 +14,34 @@
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
-    default_visibility = ["//litert:litert_stable_abi_users"],
+    default_visibility = ["//litert:litert_public"],
+)
+
+cc_library(
+    name = "litert_cpu_options",
+    srcs = ["litert_cpu_options.cc"],
+    hdrs = ["litert_cpu_options.h"],
+    deps = [
+        "//litert/c:litert_common",
+        "//litert/c:litert_opaque_options",
+        "//litert/cc:litert_macros",
+        "//tflite/delegates/xnnpack:xnnpack_delegate",
+    ],
+)
+
+cc_test(
+    name = "litert_cpu_options_test",
+    srcs = ["litert_cpu_options_test.cc"],
+    deps = [
+        ":litert_cpu_options",
+        "//litert/c:litert_common",
+        "//litert/c:litert_opaque_options",
+        "//litert/cc:litert_macros",
+        "//litert/test:matchers",
+        "@com_google_absl//absl/cleanup",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
+    ],
 )
 
 # QUALCOMM #########################################################################################
@@ -24,7 +51,6 @@ cc_library(
     srcs = ["litert_qualcomm_options.cc"],
     hdrs = ["litert_qualcomm_options.h"],
     deps = [
-        "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
         "//litert/c:litert_opaque_options",
         "//litert/cc:litert_detail",
@@ -32,6 +58,7 @@ cc_library(
         "//litert/cc:litert_handle",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_opaque_options",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
@@ -40,11 +67,12 @@ cc_test(
     srcs = ["litert_qualcomm_options_test.cc"],
     deps = [
         ":litert_qualcomm_options",
-        "@com_google_googletest//:gtest_main",
         "//litert/c:litert_common",
         "//litert/c:litert_opaque_options",
         "//litert/cc:litert_opaque_options",
+        "//litert/cc/options:litert_qualcomm_options",
         "//litert/test:matchers",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -55,7 +83,6 @@ cc_library(
     srcs = ["litert_google_tensor_options.cc"],
     hdrs = ["litert_google_tensor_options.h"],
     deps = [
-        "@com_google_absl//absl/strings:string_view",
         "//litert/c:litert_common",
         "//litert/c:litert_opaque_options",
         "//litert/cc:litert_detail",
@@ -63,6 +90,7 @@ cc_library(
         "//litert/cc:litert_handle",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_opaque_options",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
@@ -71,8 +99,71 @@ cc_test(
     srcs = ["litert_google_tensor_options_test.cc"],
     deps = [
         ":litert_google_tensor_options",
+        "//litert/c:litert_opaque_options",
+        "//litert/cc/options:litert_google_tensor_options",
+        "//litert/test:matchers",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+# MEDIATEK ####################################################################################
+
+cc_library(
+    name = "litert_mediatek_options",
+    srcs = ["litert_mediatek_options.cc"],
+    hdrs = ["litert_mediatek_options.h"],
+    deps = [
+        "//litert/c:litert_common",
+        "//litert/c:litert_opaque_options",
+        "//litert/cc:litert_detail",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_handle",
+        "//litert/cc:litert_macros",
+        "//litert/cc:litert_opaque_options",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+cc_library(
+    name = "litert_gpu_options",
+    srcs = ["litert_gpu_options.cc"],
+    hdrs = ["litert_gpu_options.h"],
+    deps = [
+        "//litert/c:litert_common",
+        "//litert/c:litert_opaque_options",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+cc_test(
+    name = "litert_mediatek_options_test",
+    srcs = ["litert_mediatek_options_test.cc"],
+    deps = [
+        ":litert_mediatek_options",
+        "//litert/c:litert_common",
+        "//litert/c:litert_opaque_options",
+        "//litert/cc/options:litert_mediatek_options",
+        "//litert/test:matchers",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "litert_gpu_options_test",
+    srcs = ["litert_gpu_options_test.cc"],
+    deps = [
+        ":litert_gpu_options",
+        "//litert/c:litert_common",
         "//litert/c:litert_opaque_options",
         "//litert/test:matchers",
+        "@com_google_googletest//:gtest_main",
     ],
+)
+
+filegroup(
+    name = "options_headers",
+    srcs = glob(["litert_*.h"]),
+    visibility = ["//litert/c:__pkg__"],
 )

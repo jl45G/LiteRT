@@ -23,14 +23,11 @@
 #include "litert/c/litert_gl_types.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/runtime/ahwb_buffer.h"
 
 #if LITERT_HAS_OPENGL_SUPPORT
 #include "tflite/delegates/gpu/gl/gl_buffer.h"
 #endif  // LITERT_HAS_OPENGL_SUPPORT
-
-#if LITERT_HAS_AHWB_SUPPORT
-#include "litert/runtime/ahwb_buffer.h"
-#endif  // LITERT_HAS_AHWB_SUPPORT
 
 namespace litert::internal {
 
@@ -62,11 +59,13 @@ class GlBuffer {
   ~GlBuffer();
 
   static bool IsSupported() { return true; }
+  // Allocates a GL buffer. If an EGL environment has not been created on this
+  // thread, it will be created.
   static Expected<GlBuffer> Alloc(size_t size_bytes);
 
-#if LITERT_HAS_AHWB_SUPPORT
+  // Allocates a GL buffer from an AHardwareBuffer. If an EGL environment has
+  // not been created on this thread, it will be created.
   static Expected<GlBuffer> AllocFromAhwbBuffer(AhwbBuffer& ahwb_buffer);
-#endif  // LITERT_HAS_AHWB_SUPPORT
 
   template <typename T>
   Expected<T*> Lock();
@@ -78,12 +77,6 @@ class GlBuffer {
   LiteRtGLuint id() const;
   size_t size_bytes() const;
   size_t offset() const;
-
-  // Creates an EGL sync object on the GPU command queue and returns a native
-  // fence associated with the sync object.
-  // Note: This function assumes that all GL operations have been already added
-  // to the GPU command queue.
-  static Expected<int> CreateEglSyncAndFence();
 
  private:
   absl::Mutex mutex_;

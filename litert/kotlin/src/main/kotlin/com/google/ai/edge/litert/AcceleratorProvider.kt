@@ -1,3 +1,19 @@
+/*
+ * Copyright 2025 Google LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.ai.edge.litert
 
 import android.content.Context
@@ -11,31 +27,60 @@ import android.os.Build
  */
 interface NpuCompatibilityChecker {
   fun isDeviceSupported(): Boolean
-}
-
-/**
- * The default implementation of [NpuCompatibilityChecker], which is based on the SoC list supported
- * by vendors.
- */
-internal class DefaultNpuCompatibilityChecker : NpuCompatibilityChecker {
-  override fun isDeviceSupported(): Boolean {
-    // Build.SOC_MANUFACTURER and Build.SOC_MODEL is only available on Android S+
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      return SUPPORTED_SOCS.contains(Pair(Build.SOC_MANUFACTURER, Build.SOC_MODEL))
-    }
-    return false
-  }
 
   companion object {
-    // TODO(niuchl): get full list of supported SoCs.
-    private val SUPPORTED_SOCS =
+    internal val SUPPORTED_QUALCOMM_SOCS =
       setOf(
-        // Pair("Google", "Tensor G3"), // Pixel 8
-        // Pair("Google", "Tensor G4"), // Pixel 9
         Pair("QTI", "SM8750"), // Samsung S25
+        Pair("Qualcomm", "SM8750"), // Samsung S25
         Pair("QTI", "SM8650"), // Samsung S24
+        Pair("Qualcomm", "SM8650"), // Samsung S24
         Pair("QTI", "SM8550"), // Samsung S23
+        Pair("Qualcomm", "SM8550"), // Samsung S23
       )
+
+    /** Qualcomm NPU compatibility checker. */
+    val Qualcomm =
+      object : NpuCompatibilityChecker {
+        override fun isDeviceSupported(): Boolean {
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return SUPPORTED_QUALCOMM_SOCS.contains(Pair(Build.SOC_MANUFACTURER, Build.SOC_MODEL))
+          }
+          return false
+        }
+      }
+
+    // Medatek SOCs are only supported on Android 15 devices (API level 35), for now.
+    internal val SUPPORTED_MEDIATEK_SOCS =
+      setOf(
+        Triple("Mediatek", "MT6878", 35),
+        Triple("Mediatek", "MT6897", 35),
+        Triple("Mediatek", "MT6983", 35),
+        Triple("Mediatek", "MT6985", 35),
+        Triple("Mediatek", "MT6989", 35),
+        Triple("Mediatek", "MT6991", 35),
+      )
+
+    /** Mediatek NPU compatibility checker. */
+    val Mediatek =
+      object : NpuCompatibilityChecker {
+        override fun isDeviceSupported(): Boolean {
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return SUPPORTED_MEDIATEK_SOCS.contains(
+              Triple(Build.SOC_MANUFACTURER, Build.SOC_MODEL, Build.VERSION.SDK_INT)
+            )
+          }
+          return false
+        }
+      }
+
+    /** Default NPU compatibility checker for all vendors. */
+    val Default =
+      object : NpuCompatibilityChecker {
+        override fun isDeviceSupported(): Boolean {
+          return Qualcomm.isDeviceSupported() || Mediatek.isDeviceSupported()
+        }
+      }
   }
 }
 
@@ -65,7 +110,7 @@ class BuiltinNpuAcceleratorProvider
 @JvmOverloads
 constructor(
   private val context: Context,
-  private val npuCompatibilityChecker: NpuCompatibilityChecker = DefaultNpuCompatibilityChecker(),
+  private val npuCompatibilityChecker: NpuCompatibilityChecker = NpuCompatibilityChecker.Default,
 ) : NpuAcceleratorProvider {
   override fun isDeviceSupported(): Boolean {
     return npuCompatibilityChecker.isDeviceSupported()

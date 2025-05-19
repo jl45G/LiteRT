@@ -33,11 +33,14 @@ namespace litert {
 class Environment
     : public internal::Handle<LiteRtEnvironment, LiteRtDestroyEnvironment> {
  public:
-  explicit Environment(LiteRtEnvironment env) : Handle(env, OwnHandle::kYes) {}
+  explicit Environment(LiteRtEnvironment env, OwnHandle owned = OwnHandle::kYes)
+      : Handle(env, owned) {}
 
   enum class OptionTag {
     CompilerPluginLibraryDir = kLiteRtEnvOptionTagCompilerPluginLibraryDir,
     DispatchLibraryDir = kLiteRtEnvOptionTagDispatchLibraryDir,
+    EglContext = kLiteRtEnvOptionTagEglContext,
+    EglDisplay = kLiteRtEnvOptionTagEglDisplay,
   };
 
   struct Option {
@@ -58,7 +61,7 @@ class Environment
     }
     LiteRtEnvironment env;
     if (auto status =
-            LiteRtEnvironmentCreate(c_options->size(), c_options->data(), &env);
+            LiteRtCreateEnvironment(c_options->size(), c_options->data(), &env);
         status != kLiteRtStatusOk) {
       return Error(status);
     } else {

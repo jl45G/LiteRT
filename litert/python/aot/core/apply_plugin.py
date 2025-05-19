@@ -16,6 +16,7 @@
 """Wrapper for calling the apply plugin tooling."""
 
 
+import os
 import pathlib
 import re
 import subprocess
@@ -59,6 +60,8 @@ class ApplyPlugin(components.ApplyPluginT):
       output_model: types.Model,
       soc_manufacturer: str,
       soc_model: str,
+      sdk_libs_path: str | None = None,
+      **kwargs,
   ):
     """Applies a plugin to the input model.
 
@@ -67,6 +70,9 @@ class ApplyPlugin(components.ApplyPluginT):
       output_model: The path to the output model.
       soc_manufacturer: The SOC manufacturer of the plugin.
       soc_model: The SOC model of the plugin.
+      sdk_libs_path: The path to the SDK libs. If not provided,
+        the default SDK path will be used.
+      **kwargs: Additional arguments to pass to the underlying binary.
 
     Returns:
       The output model.
@@ -83,51 +89,58 @@ class ApplyPlugin(components.ApplyPluginT):
     binary = common.get_resource(_BINARY)
     args = [
         str(binary),
-        "apply",
+        "--cmd=apply",
         f"--model={str(input_model.path)}",
         f"--o={str(output_model.path)}",
-        f"--soc_man={soc_manufacturer}",
+        f"--soc_manufacturer={soc_manufacturer}",
         f"--soc_model={soc_model}",
         f"--err={self.default_err}",
     ]
+    extra_args = [f"--{key}={value}" for key, value in kwargs.items()]
+    args.extend(extra_args)
     if self._subgraphs_to_compile:
       subgraphs_to_compile = ",".join(
           str(s) for s in self._subgraphs_to_compile
       )
       args.append(f"--subgraphs={subgraphs_to_compile}")
-    try:
-      result = subprocess.run(
-          args,
-          check=True,
-          capture_output=self._experimental_capture_stderr,
-          text=True,
-      )
-    except subprocess.CalledProcessError as e:
-      tmp_file = tempfile.NamedTemporaryFile(mode="w", delete=False)
-      tmp_file.write(e.stderr)
-      tmp_file.close()
+    env = os.environ.copy()
+    ld_library_path = common.construct_ld_library_path()
+    if ld_library_path:
+      if sdk_libs_path:
+        ld_library_path = f"{sdk_libs_path}{os.pathsep}{ld_library_path}"
+      env["LD_LIBRARY_PATH"] = ld_library_path
+
+    result = subprocess.run(
+        args,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=env,
+    )
+    if result.returncode:
+      log_file = tempfile.NamedTemporaryFile(mode="w", delete=False)
+      log_file.write(result.stdout)
+      log_file.close()
       raise ValueError(
           f"{self.component_name} failed to apply plugin. See"
-          f" {tmp_file.name} for details."
-      ) from e
+          f" {log_file.name} for details."
+      )
 
     if not common.is_tflite(output_model.path):
       raise ValueError(f"{output_model.path} is not a TFLite model.")
+
+    partition_stats = _RE_PARTITION_STATS.findall(result.stdout)
+    output_model.partition_stats = types.PartitionStats(
+        subgraph_stats=[
+            types.SubgraphPartitionStats(
+                subgraph_index=int(s[0]),
+                num_ops_offloaded=int(s[1]),
+                num_total_ops=int(s[2]),
+                num_partitions_offloaded=int(s[3]),
+            )
+            for s in partition_stats
+        ]
+    )
     if tmp_file is not None:
       tmp_file.close()
-
-    # TODO(b/405256024): Use proper dataclass for passing stats
-    # instead of parsing.
-    if self._experimental_capture_stderr:
-      partition_stats = _RE_PARTITION_STATS.findall(result.stderr)
-      output_model.partition_stats = types.PartitionStats(
-          subgraph_stats=[
-              types.SubgraphPartitionStats(
-                  subgraph_index=int(s[0]),
-                  num_ops_offloaded=int(s[1]),
-                  num_total_ops=int(s[2]),
-                  num_partitions_offloaded=int(s[3]),
-              )
-              for s in partition_stats
-          ]
-      )

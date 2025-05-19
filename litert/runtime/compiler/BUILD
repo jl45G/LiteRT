@@ -12,78 +12,67 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("//litert/integration_test:litert_device.bzl", "litert_device_test")
+
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
     default_visibility = ["//litert:litert_internal_users"],
 )
 
-cc_test(
+litert_device_test(
     name = "jit_compilation_qualcomm_test",
     srcs = ["jit_compilation_qualcomm_test.cc"],
+    backend_id = "qualcomm",
     data = [
-        "//litert/test:simple_model",
+        "//litert/test:testdata/simple_model.tflite",
         "//litert/vendors/qualcomm/compiler:qnn_compiler_plugin_so",
-        "//litert/vendors/qualcomm/dispatch:dispatch_api_so",
     ],
-    linkopts = select({
-        "@org_tensorflow//tensorflow:android": ["-landroid"],
-        "//conditions:default": [],
-    }),
     deps = [
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:absl_log",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/types:span",
         "//litert/c:litert_common",
-        "//litert/cc:litert_compiled_model",
-        "//litert/cc:litert_environment",
         "//litert/cc:litert_model",
-        "//litert/cc:litert_tensor_buffer",
+        "//litert/cc/internal:litert_compiled_model",
+        "//litert/cc/internal:litert_environment",
+        "//litert/cc/internal:litert_tensor_buffer",
         "//litert/test:common",
         "//litert/test:matchers",
-        "//litert/test:simple_model_npu",
+        "//litert/test:simple_model",
         "//tflite:framework",
         "//tflite/c:c_api_opaque",
         "//tflite/c:common",
         "//tflite/kernels:builtin_ops",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
-cc_test(
+litert_device_test(
     name = "jit_compilation_mediatek_test",
     srcs = ["jit_compilation_mediatek_test.cc"],
+    backend_id = "mediatek",
     data = [
-        "//litert/test:simple_model",
+        "//litert/test:testdata/simple_model.tflite",
         "//litert/vendors/mediatek/compiler:compiler_plugin_so",
-        "//litert/vendors/mediatek/dispatch:dispatch_api_so",
-    ],
-    linkopts = select({
-        "@org_tensorflow//tensorflow:android": ["-landroid"],
-        "//conditions:default": [],
-    }),
-    tags = [
-        "no_oss",
-        "nobuilder",
-        "notap",
     ],
     deps = [
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:absl_log",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_absl//absl/types:span",
         "//litert/c:litert_common",
-        "//litert/cc:litert_compiled_model",
-        "//litert/cc:litert_environment",
         "//litert/cc:litert_model",
-        "//litert/cc:litert_tensor_buffer",
+        "//litert/cc/internal:litert_compiled_model",
+        "//litert/cc/internal:litert_environment",
+        "//litert/cc/internal:litert_tensor_buffer",
         "//litert/test:common",
         "//litert/test:matchers",
-        "//litert/test:simple_model_npu",
+        "//litert/test:simple_model",
         "//tflite:framework",
         "//tflite/c:c_api_opaque",
         "//tflite/c:common",
         "//tflite/kernels:builtin_ops",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
     ],
 )

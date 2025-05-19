@@ -19,7 +19,7 @@
 #include <cstdio>
 #include <iostream>
 
-#include "third_party/qairt/latest/include/QNN/QnnLog.h"
+#include "QnnLog.h"  // from @qairt
 
 namespace litert::qnn {
 namespace {
@@ -54,7 +54,7 @@ void DefaultStdOutLogger(const char* fmt, QnnLog_Level_t level,
   buffer1[sizeof(buffer1) - 1] = 0;
   vsnprintf(buffer2, sizeof(buffer2), fmt, argp);
   buffer2[sizeof(buffer1) - 2] = 0;
-  std::cout << buffer1 << buffer2;
+  printf("%s %s", buffer1, buffer2);
 }
 
 }  // namespace

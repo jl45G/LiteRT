@@ -29,6 +29,7 @@
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
+#include "litert/runtime/ahwb_buffer.h"
 
 #if LITERT_HAS_OPENGL_SUPPORT
 #include <EGL/egl.h>
@@ -36,6 +37,8 @@
 #include <GLES3/gl31.h>
 #include <GLES3/gl32.h>
 
+#include "litert/runtime/gpu_environment.h"
+#include "tflite/delegates/gpu/gl/egl_environment.h"
 #include "tflite/delegates/gpu/gl/gl_buffer.h"
 #endif  // LITERT_HAS_OPENGL_SUPPORT
 
@@ -46,13 +49,8 @@ namespace internal {
 
 PFNGLBUFFERSTORAGEEXTERNALEXTPROC glBufferStorageExternalEXT;
 PFNEGLGETNATIVECLIENTBUFFERANDROIDPROC eglGetNativeClientBufferANDROID;
-PFNEGLDUPNATIVEFENCEFDANDROIDPROC eglDupNativeFenceFDANDROID;
-PFNEGLCREATESYNCKHRPROC eglCreateSyncKHR;
-PFNEGLWAITSYNCKHRPROC eglWaitSyncKHR;
-PFNEGLCLIENTWAITSYNCKHRPROC eglClientWaitSyncKHR;
-PFNEGLDESTROYSYNCKHRPROC eglDestroySyncKHR;
 
-bool IsAhwbToGlInteropSupported() {
+bool IsAhwbToGlBufferInteropSupported() {
   static const bool extensions_allowed = [] {
     eglGetNativeClientBufferANDROID =
         reinterpret_cast<PFNEGLGETNATIVECLIENTBUFFERANDROIDPROC>(
@@ -60,27 +58,23 @@ bool IsAhwbToGlInteropSupported() {
     glBufferStorageExternalEXT =
         reinterpret_cast<PFNGLBUFFERSTORAGEEXTERNALEXTPROC>(
             eglGetProcAddress("glBufferStorageExternalEXT"));
-    eglDupNativeFenceFDANDROID =
-        reinterpret_cast<PFNEGLDUPNATIVEFENCEFDANDROIDPROC>(
-            eglGetProcAddress("eglDupNativeFenceFDANDROID"));
-    eglCreateSyncKHR = reinterpret_cast<PFNEGLCREATESYNCKHRPROC>(
-        eglGetProcAddress("eglCreateSyncKHR"));
-    eglWaitSyncKHR = reinterpret_cast<PFNEGLWAITSYNCKHRPROC>(
-        eglGetProcAddress("eglWaitSyncKHR"));
-    eglClientWaitSyncKHR = reinterpret_cast<PFNEGLCLIENTWAITSYNCKHRPROC>(
-        eglGetProcAddress("eglClientWaitSyncKHR"));
-    eglDestroySyncKHR = reinterpret_cast<PFNEGLDESTROYSYNCKHRPROC>(
-        eglGetProcAddress("eglDestroySyncKHR"));
-    return eglClientWaitSyncKHR && eglWaitSyncKHR &&
-           eglGetNativeClientBufferANDROID && glBufferStorageExternalEXT &&
-           eglCreateSyncKHR && eglDupNativeFenceFDANDROID && eglDestroySyncKHR;
+    return eglGetNativeClientBufferANDROID && glBufferStorageExternalEXT;
   }();
   return extensions_allowed;
 }
 
+#endif  // LITERT_HAS_AHWB_SUPPORT
+
 Expected<GlBuffer> GlBuffer::AllocFromAhwbBuffer(AhwbBuffer& ahwb_buffer) {
+#if LITERT_HAS_AHWB_SUPPORT
+  LITERT_ASSIGN_OR_RETURN(
+      auto env, litert::internal::GpuEnvironmentSingleton::GetInstance());
+  tflite::gpu::gl::EglEnvironment* egl_env = env->getEglEnvironment();
+  LITERT_RETURN_IF_ERROR(egl_env != nullptr,
+                         Unexpected(kLiteRtStatusErrorRuntimeFailure,
+                                    "Failed to get EGL environment"));
   LITERT_RETURN_IF_ERROR(
-      IsAhwbToGlInteropSupported(),
+      IsAhwbToGlBufferInteropSupported(),
       Unexpected(kLiteRtStatusErrorRuntimeFailure,
                  "AHardwareBuffer to GL interop is not supported"));
   LITERT_RETURN_IF_ERROR(
@@ -129,8 +123,11 @@ Expected<GlBuffer> GlBuffer::AllocFromAhwbBuffer(AhwbBuffer& ahwb_buffer) {
                                              size_bytes, /*offset=*/0,
                                              /*has_ownership=*/true);
   return GlBuffer(std::move(tflite_gl_buffer), ahwb_buffer.ahwb);
-}
+#else
+  return Unexpected(kLiteRtStatusErrorRuntimeFailure,
+                    "AHWB support is not enabled.");
 #endif  // LITERT_HAS_AHWB_SUPPORT
+}
 
 GlBuffer::GlBuffer(LiteRtGLenum target, LiteRtGLuint id, size_t size_bytes,
                    size_t offset, LiteRtGlBufferDeallocator deallocator) {
@@ -219,6 +216,12 @@ size_t GlBuffer::offset() const {
 
 Expected<GlBuffer> GlBuffer::Alloc(size_t size_bytes) {
 #if LITERT_HAS_OPENGL_SUPPORT
+  LITERT_ASSIGN_OR_RETURN(
+      auto env, litert::internal::GpuEnvironmentSingleton::GetInstance());
+  tflite::gpu::gl::EglEnvironment* egl_env = env->getEglEnvironment();
+  LITERT_RETURN_IF_ERROR(egl_env != nullptr,
+                         Unexpected(kLiteRtStatusErrorRuntimeFailure,
+                                    "Failed to get EGL environment"));
   tflite::gpu::gl::GlBuffer tflite_gl_buffer;
 
   if (!tflite::gpu::gl::CreateReadWriteShaderStorageBuffer<std::byte>(
@@ -300,38 +303,6 @@ Expected<void> GlBuffer::Unlock() {
   return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                     "GlBuffer::Unlock() is not supported");
 #endif  // LITERT_HAS_OPENGL_SUPPORT
-}
-
-Expected<int> GlBuffer::CreateEglSyncAndFence() {
-#if LITERT_HAS_OPENGL_SUPPORT && LITERT_HAS_AHWB_SUPPORT
-  LITERT_RETURN_IF_ERROR(
-      IsAhwbToGlInteropSupported(),
-      Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                 "AHardwareBuffer to GL interop is not supported"));
-
-  auto egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-  LITERT_RETURN_IF_ERROR(egl_display != EGL_NO_DISPLAY,
-                         Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                                    "Failed to get EGL display"));
-
-  EGLSyncKHR egl_sync =
-      eglCreateSyncKHR(egl_display, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
-  LITERT_RETURN_IF_ERROR(
-      egl_sync != EGL_NO_SYNC_KHR,
-      Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                 "Failed to create EGL sync from AHardwareBuffer"));
-
-  int native_fence = eglDupNativeFenceFDANDROID(egl_display, egl_sync);
-  LITERT_RETURN_IF_ERROR(
-      native_fence != -1,
-      Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                 "Failed to dup native fence from AHardwareBuffer"));
-
-  return native_fence;
-#else
-  return Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                    "AHardwareBuffer to GL interop is not supported");
-#endif  // LITERT_HAS_OPENGL_SUPPORT && LITERT_HAS_AHWB_SUPPORT
 }
 
 }  // namespace internal

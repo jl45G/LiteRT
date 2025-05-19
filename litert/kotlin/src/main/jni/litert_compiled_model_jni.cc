@@ -1,7 +1,23 @@
+// Copyright 2025 Google LLC.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "litert/kotlin/src/main/jni/litert_compiled_model_jni.h"
 
 #include <jni.h>
 
+#include <cstring>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -15,6 +31,8 @@
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_options.h"
 #include "litert/c/litert_tensor_buffer.h"
+#include "litert/c/options/litert_cpu_options.h"
+#include "litert/c/options/litert_gpu_options.h"
 #include "litert/cc/litert_compiled_model.h"
 #include "litert/cc/litert_handle.h"
 #include "litert/cc/litert_tensor_buffer.h"
@@ -23,6 +41,65 @@
 namespace {
 
 using ::litert::jni::ThrowLiteRtException;
+
+// Keys for CPU options, the values should match the ones in Kotlin.
+enum CpuOptionsKey {
+  kNumThreads = 0,
+  kXnnPackFlags = 1,
+  kXnnPackWeightCachePath = 2,
+};
+
+// Keys for GPU options, the values should match the ones in Kotlin.
+enum GpuOptionsKey {
+  kConstantTensorSharing = 0,
+  kInfiniteFloatCapping = 1,
+  kBenchmarkModel = 2,
+  kAllowSrcQuantizedFcConvOps = 3,
+  kPrecision = 4,
+  kBufferStorageType = 5,
+};
+
+// Precision for GPU options, the values should match the ones in Kotlin.
+enum Precision {
+  kPrecisionDefault = 0,
+  kPrecisionFp16 = 1,
+  kPrecisionFp32 = 2,
+};
+
+// Converts the precision string to LiteRtDelegatePrecision.
+LiteRtDelegatePrecision ToLiteRtDelegatePrecision(const char* precision_str) {
+  auto precision = std::stoi(precision_str);
+  switch (precision) {
+    case kPrecisionFp16:
+      return kLiteRtDelegatePrecisionFp16;
+    case kPrecisionFp32:
+      return kLiteRtDelegatePrecisionFp32;
+    default:
+      return kLiteRtDelegatePrecisionDefault;
+  }
+}
+
+// Buffer storage type for GPU options, the values should match the ones in
+// Kotlin.
+enum BufferStorageType {
+  kBufferStorageTypeDefault = 0,
+  kBufferStorageTypeBuffer = 1,
+  kBufferStorageTypeTexture2D = 2,
+};
+
+// Converts the buffer storage type string to LiteRtDelegateBufferStorageType.
+LiteRtDelegateBufferStorageType ToLiteRtDelegateBufferStorageType(
+    const char* buffer_storage_type_str) {
+  auto type = std::stoi(buffer_storage_type_str);
+  switch (type) {
+    case kBufferStorageTypeBuffer:
+      return kLiteRtDelegateBufferStorageTypeBuffer;
+    case kBufferStorageTypeTexture2D:
+      return kLiteRtDelegateBufferStorageTypeTexture2D;
+    default:
+      return kLiteRtDelegateBufferStorageTypeDefault;
+  }
+}
 
 // Creates a CompiledModel from the given handles.
 // The handles are not owned by the returned CompiledModel.
@@ -37,6 +114,141 @@ litert::CompiledModel CreateCompileModel(jlong compiled_model_handle,
                                litert::OwnHandle::kNo);
 }
 
+// Creates a LiteRtOpaqueOptions from the given cpu options.
+// The number of given options must be greater than 0.
+LiteRtStatus CreateCpuOptions(JNIEnv* env, LiteRtOpaqueOptions* options,
+                              jintArray cpu_options_keys,
+                              jobjectArray cpu_options_values) {
+  AUTO_CLEANUP_JNI_INT_ARRAY(env, cpu_options_keys);
+  AUTO_CLEANUP_JNI_STRING_ARRAY(env, cpu_options_values);
+  auto cpu_options_keys_size = env->GetArrayLength(cpu_options_keys);
+  ABSL_CHECK(cpu_options_keys_size == cpu_options_values_size);
+
+  auto status = LiteRtCreateCpuOptions(options);
+  if (status != kLiteRtStatusOk) {
+    LITERT_LOG(LITERT_ERROR, "Failed to create CPU options.");
+    return status;
+  }
+  LiteRtCpuOptions cpu_options = nullptr;
+  status = LiteRtFindCpuOptions(*options, &cpu_options);
+  if (status != kLiteRtStatusOk) {
+    LITERT_LOG(LITERT_ERROR, "Failed to find CPU options.");
+    return status;
+  }
+  for (int i = 0; i < cpu_options_keys_size; ++i) {
+    if (cpu_options_keys_array[i] == CpuOptionsKey::kNumThreads) {
+      status = LiteRtSetCpuOptionsNumThread(
+          cpu_options, std::stoi(cpu_options_values_vector[i]));
+      if (status != kLiteRtStatusOk) {
+        LITERT_LOG(LITERT_ERROR, "Failed to set CPU options num_threads.");
+        return status;
+      }
+    } else if (cpu_options_keys_array[i] == CpuOptionsKey::kXnnPackFlags) {
+      status = LiteRtSetCpuOptionsXNNPackFlags(
+          cpu_options, std::stoi(cpu_options_values_vector[i]));
+      if (status != kLiteRtStatusOk) {
+        LITERT_LOG(LITERT_ERROR, "Failed to set CPU options xnnpack_flags.");
+        return status;
+      }
+    } else if (cpu_options_keys_array[i] ==
+               CpuOptionsKey::kXnnPackWeightCachePath) {
+      status = LiteRtSetCpuOptionsXnnPackWeightCachePath(
+          cpu_options, cpu_options_values_vector[i]);
+      if (status != kLiteRtStatusOk) {
+        LITERT_LOG(LITERT_ERROR,
+                   "Failed to set CPU options xnnpack_weight_cache_path.");
+        return status;
+      }
+    } else {
+      LITERT_LOG(LITERT_ERROR, "Unknown CPU options key: %d.",
+                 cpu_options_keys_array[i]);
+    }
+  }
+  return kLiteRtStatusOk;
+}
+
+// Creates a LiteRtOpaqueOptions from the given gpu options.
+// The number of given options must be greater than 0.
+LiteRtStatus CreateGpuOptions(JNIEnv* env, LiteRtOpaqueOptions* gpu_options,
+                              jintArray gpu_options_keys,
+                              jobjectArray gpu_options_values) {
+  AUTO_CLEANUP_JNI_INT_ARRAY(env, gpu_options_keys);
+  AUTO_CLEANUP_JNI_STRING_ARRAY(env, gpu_options_values);
+  auto gpu_options_keys_size = env->GetArrayLength(gpu_options_keys);
+  ABSL_CHECK(gpu_options_keys_size == gpu_options_values_size);
+
+  LiteRtStatus status = LiteRtCreateGpuOptions(gpu_options);
+  if (status != kLiteRtStatusOk) {
+    LITERT_LOG(LITERT_ERROR, "Failed to create GPU options.");
+    return status;
+  }
+  for (int i = 0; i < gpu_options_keys_size; ++i) {
+    switch (gpu_options_keys_array[i]) {
+      case GpuOptionsKey::kConstantTensorSharing:
+        status = LiteRtSetGpuOptionsConstantTensorSharing(
+            *gpu_options, strcmp(gpu_options_values_vector[i], "true") == 0);
+        if (status != kLiteRtStatusOk) {
+          LITERT_LOG(LITERT_ERROR,
+                     "Failed to set GPU options constantTensorSharing.");
+          return status;
+        }
+        break;
+      case GpuOptionsKey::kInfiniteFloatCapping:
+        status = LiteRtSetGpuOptionsInfiniteFloatCapping(
+            *gpu_options, strcmp(gpu_options_values_vector[i], "true") == 0);
+        if (status != kLiteRtStatusOk) {
+          LITERT_LOG(LITERT_ERROR,
+                     "Failed to set GPU options infiniteFloatCapping.");
+          return status;
+        }
+        break;
+      case GpuOptionsKey::kBenchmarkModel:
+        status = LiteRtSetGpuOptionsBenchmarkMode(
+            *gpu_options, strcmp(gpu_options_values_vector[i], "true") == 0);
+        if (status != kLiteRtStatusOk) {
+          LITERT_LOG(LITERT_ERROR, "Failed to set GPU options benchmarkModel.");
+          return status;
+        }
+        break;
+      case GpuOptionsKey::kAllowSrcQuantizedFcConvOps:
+        status =
+            LiteRtSetGpuAcceleratorCompilationOptionsAllowSrcQuantizedFcConvOps(
+                *gpu_options,
+                strcmp(gpu_options_values_vector[i], "true") == 0);
+        if (status != kLiteRtStatusOk) {
+          LITERT_LOG(LITERT_ERROR,
+                     "Failed to set GPU options allowSrcQuantizedFcConvOps.");
+          return status;
+        }
+        break;
+      case GpuOptionsKey::kPrecision:
+        status = LiteRtSetGpuAcceleratorCompilationOptionsPrecision(
+            *gpu_options,
+            ToLiteRtDelegatePrecision(gpu_options_values_vector[i]));
+        if (status != kLiteRtStatusOk) {
+          LITERT_LOG(LITERT_ERROR, "Failed to set GPU options precision.");
+          return status;
+        }
+        break;
+      case GpuOptionsKey::kBufferStorageType:
+        status = LiteRtSetGpuAcceleratorCompilationOptionsUseBufferStorageType(
+            *gpu_options,
+            ToLiteRtDelegateBufferStorageType(gpu_options_values_vector[i]));
+        if (status != kLiteRtStatusOk) {
+          LITERT_LOG(LITERT_ERROR,
+                     "Failed to set GPU options bufferStorageType.");
+          return status;
+        }
+        break;
+      default:
+        LITERT_LOG(LITERT_ERROR, "Unknown GPU options key: %d.",
+                   gpu_options_keys_array[i]);
+        return kLiteRtStatusErrorInvalidArgument;
+    }
+  }
+  return kLiteRtStatusOk;
+}
+
 }  // namespace
 
 #ifdef __cplusplus
@@ -44,30 +256,30 @@ extern "C" {
 #endif  // __cplusplus
 
 JNIEXPORT jlong JNICALL
-Java_com_google_ai_edge_litert_CompiledModel_nativeCreate(JNIEnv* env,
-                                                          jclass clazz,
-                                                          jlong env_handle,
-                                                          jlong model_handle,
-                                                          jintArray options) {
-  int options_size = env->GetArrayLength(options);
-  AUTO_CLEANUP_JNI_INT_ARRAY(env, options);
-  LiteRtHwAcceleratorSet accelerators = kLiteRtHwAcceleratorNone;
-  for (int i = 0; i < options_size; ++i) {
-    switch (options_array[i]) {
+Java_com_google_ai_edge_litert_CompiledModel_nativeCreate(
+    JNIEnv* env, jclass clazz, jlong env_handle, jlong model_handle,
+    jintArray accelerators, jintArray cpu_options_keys,
+    jobjectArray cpu_options_values, jintArray gpu_options_keys,
+    jobjectArray gpu_options_values) {
+  int accelerators_size = env->GetArrayLength(accelerators);
+  AUTO_CLEANUP_JNI_INT_ARRAY(env, accelerators);
+  LiteRtHwAcceleratorSet acceleratorSet = kLiteRtHwAcceleratorNone;
+  for (int i = 0; i < accelerators_size; ++i) {
+    switch (accelerators_array[i]) {
       case litert::jni::kAccelatorNone:
         break;
       case litert::jni::kAccelatorCpu:
-        accelerators |= kLiteRtHwAcceleratorCpu;
+        acceleratorSet |= kLiteRtHwAcceleratorCpu;
         break;
       case litert::jni::kAccelatorGpu:
-        accelerators |= kLiteRtHwAcceleratorGpu;
+        acceleratorSet |= kLiteRtHwAcceleratorGpu;
         break;
       case litert::jni::kAccelatorNpu:
-        accelerators |= kLiteRtHwAcceleratorNpu;
+        acceleratorSet |= kLiteRtHwAcceleratorNpu;
         break;
       default:
         LITERT_LOG(LITERT_ERROR, "Unsupported accelerator: %d.",
-                   options_array[i]);
+                   accelerators_array[i]);
     }
   }
 
@@ -79,11 +291,45 @@ Java_com_google_ai_edge_litert_CompiledModel_nativeCreate(JNIEnv* env,
     return 0;
   }
   status =
-      LiteRtSetOptionsHardwareAccelerators(compilation_options, accelerators);
+      LiteRtSetOptionsHardwareAccelerators(compilation_options, acceleratorSet);
   if (status != kLiteRtStatusOk) {
     LITERT_LOG(LITERT_ERROR, "Failed to set hardware accelerators.");
     ThrowLiteRtException(env, status, "Failed to set hardware accelerators.");
     return 0;
+  }
+
+  if (env->GetArrayLength(cpu_options_keys) > 0) {
+    LiteRtOpaqueOptions options = nullptr;
+    status =
+        CreateCpuOptions(env, &options, cpu_options_keys, cpu_options_values);
+    if (status != kLiteRtStatusOk) {
+      LITERT_LOG(LITERT_ERROR, "Failed to create CPU options.");
+      ThrowLiteRtException(env, status, "Failed to create CPU options.");
+      return 0;
+    }
+    status = LiteRtAddOpaqueOptions(compilation_options, options);
+    if (status != kLiteRtStatusOk) {
+      LITERT_LOG(LITERT_ERROR, "Failed to add CPU options.");
+      ThrowLiteRtException(env, status, "Failed to add CPU options.");
+      return 0;
+    }
+  }
+
+  if (env->GetArrayLength(gpu_options_keys) > 0) {
+    LiteRtOpaqueOptions options = nullptr;
+    status =
+        CreateGpuOptions(env, &options, gpu_options_keys, gpu_options_values);
+    if (status != kLiteRtStatusOk) {
+      LITERT_LOG(LITERT_ERROR, "Failed to create GPU options.");
+      ThrowLiteRtException(env, status, "Failed to create GPU options.");
+      return 0;
+    }
+    status = LiteRtAddOpaqueOptions(compilation_options, options);
+    if (status != kLiteRtStatusOk) {
+      LITERT_LOG(LITERT_ERROR, "Failed to add GPU options.");
+      ThrowLiteRtException(env, status, "Failed to add GPU options.");
+      return 0;
+    }
   }
 
   auto litert_env = reinterpret_cast<LiteRtEnvironment>(env_handle);
@@ -124,6 +370,29 @@ Java_com_google_ai_edge_litert_CompiledModel_nativeCreateInputBuffer(
 }
 
 JNIEXPORT jlong JNICALL
+Java_com_google_ai_edge_litert_CompiledModel_nativeGetInputBufferRequirements(
+    JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
+    jstring signature, jstring input_name) {
+  auto compiled_model = CreateCompileModel(compiled_model_handle, model_handle);
+
+  AUTO_CLEANUP_JNI_STRING(env, signature);
+  AUTO_CLEANUP_JNI_STRING(env, input_name);
+  auto requirements =
+      signature_str == nullptr
+          ? compiled_model.GetInputBufferRequirements(input_name_str)
+          : compiled_model.GetInputBufferRequirements(signature_str,
+                                                      input_name_str);
+  if (!requirements) {
+    LITERT_LOG(LITERT_ERROR, "Failed to get input buffer requirements: %s",
+               requirements.Error().Message().c_str());
+    ThrowLiteRtException(env, requirements.Error().Status(),
+                         requirements.Error().Message());
+    return 0;
+  }
+  return reinterpret_cast<jlong>(std::move(requirements->Release()));
+}
+
+JNIEXPORT jlong JNICALL
 Java_com_google_ai_edge_litert_CompiledModel_nativeCreateOutputBuffer(
     JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
     jstring signature, jstring output_name) {
@@ -143,6 +412,29 @@ Java_com_google_ai_edge_litert_CompiledModel_nativeCreateOutputBuffer(
     return 0;
   }
   return reinterpret_cast<jlong>(std::move(tensor_buffer->Release()));
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_google_ai_edge_litert_CompiledModel_nativeGetOutputBufferRequirements(
+    JNIEnv* env, jclass clazz, jlong compiled_model_handle, jlong model_handle,
+    jstring signature, jstring output_name) {
+  auto compiled_model = CreateCompileModel(compiled_model_handle, model_handle);
+
+  AUTO_CLEANUP_JNI_STRING(env, signature);
+  AUTO_CLEANUP_JNI_STRING(env, output_name);
+  auto requirements =
+      signature_str == nullptr
+          ? compiled_model.GetOutputBufferRequirements(output_name_str)
+          : compiled_model.GetOutputBufferRequirements(signature_str,
+                                                       output_name_str);
+  if (!requirements) {
+    LITERT_LOG(LITERT_ERROR, "Failed to get outpput buffer requirements: %s",
+               requirements.Error().Message().c_str());
+    ThrowLiteRtException(env, requirements.Error().Status(),
+                         requirements.Error().Message());
+    return 0;
+  }
+  return reinterpret_cast<jlong>(std::move(requirements->Release()));
 }
 
 JNIEXPORT jlongArray JNICALL
