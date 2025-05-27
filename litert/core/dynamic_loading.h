@@ -15,8 +15,14 @@
 #ifndef ODML_LITERT_LITERT_CORE_DYNAMIC_LOADING_H_
 #define ODML_LITERT_LITERT_CORE_DYNAMIC_LOADING_H_
 
-#include <dlfcn.h>
 #include <stdlib.h>
+
+// Platform-specific includes for dynamic loading
+#ifdef _WIN32
+// On Windows, the dlfcn.h functions are implemented in litert_shared_library.cc
+#else
+#include <dlfcn.h>
+#endif
 
 #include <iostream>
 #include <ostream>

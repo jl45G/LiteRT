@@ -64,20 +64,78 @@ RtldFlags SanitizeFlagsInCaseOfAsan(RtldFlags flags) {
 #endif
 
 #if LITERT_WINDOWS_OS
-// Implement dummy functions from dlfnc.h on Windows.
+#include <windows.h>
+#include <string>
+
+// Implement dlfcn.h functions using Windows API
 namespace {
 
+thread_local std::string g_last_error;
+
 const char* dlerror() {
-  return "Windows is not supported for loading shared libraries.";
+  return g_last_error.empty() ? nullptr : g_last_error.c_str();
 }
 
-void* dlopen(const char*, int) { return NULL; }
+void* dlopen(const char* filename, int) {
+  if (!filename) {
+    return GetModuleHandle(NULL);
+  }
+  
+  // Clear any previous error
+  g_last_error.clear();
+  
+  // Windows uses LoadLibrary for dynamic loading
+  HMODULE handle = LoadLibraryA(filename);
+  if (!handle) {
+    DWORD error = GetLastError();
+    char buffer[256];
+    FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                   NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                   buffer, sizeof(buffer), NULL);
+    g_last_error = std::string("LoadLibrary failed: ") + buffer;
+  }
+  return handle;
+}
 
-void dlclose(void*) {}
+void dlclose(void* handle) {
+  if (handle) {
+    FreeLibrary(static_cast<HMODULE>(handle));
+  }
+}
 
-void* dlsym(void*, const char*) { return NULL; }
+void* dlsym(void* handle, const char* symbol) {
+  if (!handle || !symbol) {
+    g_last_error = "Invalid handle or symbol";
+    return NULL;
+  }
+  
+  // Clear any previous error
+  g_last_error.clear();
+  
+  void* addr = reinterpret_cast<void*>(
+      GetProcAddress(static_cast<HMODULE>(handle), symbol));
+  if (!addr) {
+    DWORD error = GetLastError();
+    char buffer[256];
+    FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                   NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                   buffer, sizeof(buffer), NULL);
+    g_last_error = std::string("GetProcAddress failed for '") + symbol + "': " + buffer;
+  }
+  return addr;
+}
 
-int dlinfo(void*, int, void*) { return -1; }
+int dlinfo(void*, int, void*) { 
+  g_last_error = "dlinfo is not supported on Windows";
+  return -1; 
+}
+
+// RTLD_* flags for Windows compatibility
+#define RTLD_LAZY     0x00001
+#define RTLD_NOW      0x00002
+#define RTLD_GLOBAL   0x00100
+#define RTLD_LOCAL    0x00000
+#define RTLD_DEEPBIND 0x00008
 
 #define RTLD_NEXT (void*)-1;
 #define RTLD_DEFAULT (void*)0;

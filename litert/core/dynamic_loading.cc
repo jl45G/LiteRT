@@ -14,9 +14,15 @@
 
 #include "litert/core/dynamic_loading.h"
 
+// Platform-specific includes
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#define access _access
+#define R_OK 4
+#else
 #include <dlfcn.h>
 #include <unistd.h>
-
 // clang-format off
 #ifndef __ANDROID__
 #if __has_include(<link.h>)
@@ -24,6 +30,7 @@
 #endif
 #endif
 // clang-format on
+#endif
 
 #include <cstdlib>
 #include <filesystem>  // NOLINT
@@ -36,22 +43,33 @@
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
 #include "litert/cc/litert_macros.h"
+#include "litert/cc/litert_shared_library.h"
 #include "litert/core/filesystem.h"
 
 namespace litert::internal {
 
 namespace {
 
+#ifdef _WIN32
+static constexpr absl::string_view kLdLibraryPath = "PATH";
+static constexpr absl::string_view kPathSeparator = ";";
+#else
 static constexpr absl::string_view kLdLibraryPath = "LD_LIBRARY_PATH";
+static constexpr absl::string_view kPathSeparator = ":";
+#endif
 
 bool EnvPathContains(absl::string_view path, absl::string_view var_value) {
   return absl::EndsWith(var_value, path) ||
-         absl::StrContains(var_value, absl::StrCat(path, ":"));
+         absl::StrContains(var_value, absl::StrCat(path, kPathSeparator));
 }
 
 }  // namespace
 
+#ifdef _WIN32
+static constexpr absl::string_view kSo = ".dll";
+#else
 static constexpr absl::string_view kSo = ".so";
+#endif
 
 LiteRtStatus FindLiteRtSharedLibsHelper(const std::string& search_path,
                                         const std::string& lib_pattern,
@@ -136,12 +154,55 @@ LiteRtStatus PutLibOnLdPath(absl::string_view search_path,
   if (ld.empty()) {
     new_ld = lib_dir;
   } else {
-    new_ld = absl::StrCat(ld, ":", lib_dir);
+    new_ld = absl::StrCat(ld, kPathSeparator, lib_dir);
   }
 
-  LITERT_LOG(LITERT_INFO, "Adding %s to LD_LIBRARY_PATH", new_ld.c_str());
+  LITERT_LOG(LITERT_INFO, "Adding %s to %s", new_ld.c_str(), kLdLibraryPath.data());
+#ifdef _WIN32
+  _putenv_s(kLdLibraryPath.data(), new_ld.c_str());
+#else
   setenv(kLdLibraryPath.data(), new_ld.c_str(), /*overwrite=*/1);
+#endif
 
+  return kLiteRtStatusOk;
+}
+
+LiteRtStatus OpenLib(absl::string_view so_path, void** lib_handle,
+                     bool log_failure) {
+  if (!lib_handle) {
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+
+  *lib_handle = nullptr;
+  
+  if (so_path.empty()) {
+    if (log_failure) {
+      LITERT_LOG(LITERT_ERROR, "Cannot open library with empty path");
+    }
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+
+  // Use SharedLibrary class for cross-platform support
+  auto lib_result = ::litert::SharedLibrary::Load(so_path, ::litert::RtldFlags::Default());
+  
+  if (!lib_result.ok()) {
+    if (log_failure) {
+      LITERT_LOG(LITERT_ERROR, "Failed to open library %s: %s", 
+                 std::string(so_path).c_str(), lib_result.Error().message().c_str());
+    }
+    return kLiteRtStatusErrorDynamicLoading;
+  }
+
+  // Extract the handle from the SharedLibrary object
+  // Note: We need to leak the SharedLibrary object here because the caller
+  // expects to manage the raw handle directly
+  auto* shared_lib = new ::litert::SharedLibrary(std::move(lib_result.Value()));
+  *lib_handle = shared_lib->Handle();
+  
+  // Important: We're intentionally leaking the SharedLibrary object here
+  // because the API expects raw handles. In a proper implementation,
+  // we should track these objects and provide a CloseLib function.
+  
   return kLiteRtStatusOk;
 }
 
