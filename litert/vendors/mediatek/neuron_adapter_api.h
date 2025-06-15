@@ -59,7 +59,7 @@ class NeuronAdapterApi {
 
   static Expected<Ptr> Create(
       std::optional<std::string> shared_library_dir,
-      std::optional<LiteRtOpaqueOptions> opaque_options = std::nullopt);
+      ::litert::Expected<litert::mediatek::MediatekOptions>& mediatek_options);
 
   const Api& api() const { return *api_; }
 
@@ -158,6 +158,11 @@ struct NeuronAdapterApi::Api {
   decltype(&Neuron_getVersion) get_version = nullptr;
   decltype(&NeuronModel_relaxComputationFloat32toFloat16) relax_fp32_to_fp16 =
       nullptr;
+  decltype(&Neuron_getL1MemorySizeKb) get_l1_memory_size_kb = nullptr;
+  decltype(&NeuronCompilation_setL1MemorySizeKb)
+      compilation_set_l1_memory_size_kb = nullptr;
+  decltype(&NeuronCompilation_setOptimizationHint)
+      compilation_set_optimization_hint = nullptr;
 };
 
 }  // namespace litert::mediatek

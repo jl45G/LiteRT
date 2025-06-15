@@ -27,6 +27,36 @@ package(
 #### LiteRT C++ APIs which don't use C API calls to framework.
 
 cc_library(
+    name = "litert_c_types_printing",
+    hdrs = ["litert_c_types_printing.h"],
+    visibility = [
+        "//litert:litert_public",
+    ],
+    deps = [
+        ":litert_logging",
+        "//litert/c:litert_layout",
+        "//litert/c:litert_model_types",
+        "//litert/c:litert_op_code",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_test(
+    name = "litert_c_types_printing_test",
+    srcs = ["litert_c_types_printing_test.cc"],
+    deps = [
+        ":litert_c_types_printing",
+        "//litert/c:litert_layout",
+        "//litert/c:litert_model",
+        "//litert/c:litert_op_code",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
     name = "litert_any",
     hdrs = ["litert_any.h"],
     visibility = [
@@ -419,7 +449,11 @@ cc_library(
     srcs = ["litert_shared_library.cc"],
     hdrs = ["litert_shared_library.h"],
     visibility = [
-        "//litert:litert_public",
+        # copybara:uncomment_begin(oss)
+        # "//litert:litert_public",
+        # copybara:uncomment_end_and_comment_begin
+        "//visibility:public",
+        # copybara:comment_end
     ],
     deps = [
         ":litert_expected",
@@ -551,6 +585,44 @@ cc_test(
         "//litert/c:litert_environment_options",
         "@com_google_googletest//:gtest_main",
     ],
+)
+
+cc_library(
+    name = "litert_rng",
+    srcs = ["litert_rng.cc"],
+    hdrs = ["litert_rng.h"],
+    visibility = [
+        "//litert:litert_public",
+    ],
+    deps = [
+        ":litert_detail",
+        ":litert_numerics",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+cc_test(
+    name = "litert_rng_test",
+    srcs = ["litert_rng_test.cc"],
+    deps = [
+        ":litert_numerics",
+        ":litert_rng",
+        "//litert/test:rng_fixture",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "litert_numerics",
+    hdrs = ["litert_numerics.h"],
+    visibility = [
+        "//litert:litert_public",
+    ],
+    deps = [":litert_detail"],
 )
 
 ### LiteRT C++ APIs which will use libLiteRtRuntimeCApi.so.
@@ -731,6 +803,8 @@ cc_library(
         # "//third_party/odml/infra/ml_drift_delegate:__pkg__",
         # "//third_party/odml/infra/genai/inference/executor/google_tensor:__pkg__",
         # "//third_party/odml/infra/genai/inference/executor/llm_context_handler:__pkg__",
+        # "//third_party/odml/infra/genai/inference/ml_drift/llm:__pkg__",
+        # "//third_party/odml/infra/genai/inference/executor:__pkg__",
         # copybara:uncomment_end_and_comment_begin
         "//visibility:public",
         # copybara:comment_end
@@ -766,6 +840,7 @@ cc_test(
         ":litert_element_type",
         ":litert_environment",
         ":litert_event",
+        ":litert_expected",
         ":litert_handle",
         ":litert_layout",
         ":litert_macros",
@@ -783,9 +858,10 @@ cc_test(
         "//tflite/delegates/gpu/cl:cl_command_queue",
         "//tflite/delegates/gpu/cl:cl_context",
         "//tflite/delegates/gpu/cl:cl_device",
-        "//tflite/delegates/gpu/cl:environment",
         "//tflite/delegates/gpu/cl:opencl_wrapper",
         "@com_google_absl//absl/debugging:leak_check",
+        "@com_google_absl//absl/log:absl_check",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@opencl_headers",
@@ -914,6 +990,7 @@ cc_library(
         ":litert_macros",
         ":litert_model",
         ":litert_options",
+        ":litert_profiler",
         ":litert_tensor_buffer",
         "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -937,6 +1014,7 @@ cc_test(
         ":litert_compiled_model",
         ":litert_environment",
         ":litert_model",
+        ":litert_profiler",
         ":litert_tensor_buffer",
         "//litert/c:litert_common",
         "//litert/c:litert_tensor_buffer",
@@ -988,6 +1066,32 @@ litert_device_test(
     }),
 )
 
+litert_device_test(
+    name = "litert_compiled_model_qualcomm_test",
+    srcs = ["litert_compiled_model_qualcomm_test.cc"],
+    backend_id = "qualcomm",
+    data = [
+        "//litert/test:testdata/simple_model_qualcomm_sm8650_precompiled.tflite",
+    ],
+    deps = [
+        ":litert_compiled_model",
+        ":litert_environment",
+        ":litert_event",
+        ":litert_model",
+        ":litert_platform_support",
+        ":litert_tensor_buffer",
+        "//litert/c:litert_common",
+        "//litert/c:litert_dispatch_headers",
+        "//litert/test:common",
+        "//litert/test:matchers",
+        "//litert/test:simple_model",
+        "@com_google_absl//absl/log:absl_log",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 # copybara:uncomment_begin(google-only)
 # cc_test(
 #     name = "litert_compiled_model_gpu_test",
@@ -1009,6 +1113,7 @@ litert_device_test(
 #         ":litert_model",
 #         ":litert_options",
 #         ":litert_platform_support",
+#         ":litert_profiler",
 #         ":litert_tensor_buffer",
 #         "@com_google_googletest//:gtest_main",
 #         "@com_google_absl//absl/debugging:leak_check",
@@ -1019,6 +1124,7 @@ litert_device_test(
 #         "//litert/c:litert_environment_options",
 #         "//litert/c:litert_event",
 #         "//litert/c:litert_event_type",
+#         "//litert/c:litert_profiler_event",
 #         "//litert/c:litert_tensor_buffer_types",
 #         "//litert/cc/options:litert_gpu_options",
 #         "//litert/runtime/accelerators/gpu:ml_drift_cl_accelerator",  # buildcleaner: keep
@@ -1073,6 +1179,27 @@ cc_library(
             "//litert/c:litert_runtime_c_api_shared_lib",
         ],
     }),
+)
+
+cc_library(
+    name = "litert_profiler",
+    hdrs = ["litert_profiler.h"],
+    visibility = [
+        # copybara:uncomment_begin(oss litert_lm)
+        # "//litert:litert_external_users",
+        # "//litert:litert_internal_users_with_public_cc",
+        # copybara:uncomment_end_and_comment_begin
+        "//visibility:public",
+        # copybara:comment_end
+    ],
+    deps = [
+        ":litert_expected",
+        ":litert_handle",
+        ":litert_macros",
+        "//litert/c:litert_common",
+        "//litert/c:litert_profiler",
+        "//litert/c:litert_profiler_event",
+    ],
 )
 
 exports_files(glob([
