@@ -110,9 +110,10 @@ TEST(LiteRtMediatekOptionsTest, PerformanceMode) {
   // Check default value
   LITERT_ASSERT_OK(
       LiteRtMediatekOptionsGetPerformanceMode(options_data, &performance_mode));
+
   ASSERT_EQ(
       performance_mode,
-      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferFastSingleAnswer);
+      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferSustainedSpeed);
 
   // Set to LowPower
   LITERT_ASSERT_OK(LiteRtMediatekOptionsSetPerformanceMode(
@@ -123,15 +124,15 @@ TEST(LiteRtMediatekOptionsTest, PerformanceMode) {
   ASSERT_EQ(performance_mode,
             kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferLowPower);
 
-  // Set to SustainedSpeed
+  // Set to FastSingleAnswer
   LITERT_ASSERT_OK(LiteRtMediatekOptionsSetPerformanceMode(
       options_data,
-      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferSustainedSpeed));
+      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferFastSingleAnswer));
   LITERT_ASSERT_OK(
       LiteRtMediatekOptionsGetPerformanceMode(options_data, &performance_mode));
   ASSERT_EQ(
       performance_mode,
-      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferSustainedSpeed);
+      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferFastSingleAnswer);
 
   LiteRtDestroyOpaqueOptions(options);
 }
@@ -153,6 +154,116 @@ TEST(LiteRtMediatekOptionsTest, PerformanceModeInvalidArguments) {
             kLiteRtStatusErrorInvalidArgument);
   EXPECT_EQ(LiteRtMediatekOptionsGetPerformanceMode(nullptr, &performance_mode),
             kLiteRtStatusErrorInvalidArgument);
+
+  LiteRtDestroyOpaqueOptions(options);
+}
+
+TEST(LiteRtMediatekOptionsTest, L1CacheOptimizations) {
+  LiteRtOpaqueOptions options;
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsCreate(&options));
+  LiteRtMediatekOptions options_data;
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGet(options, &options_data));
+
+  bool l1_cache_optimizations;
+  // Check default value (false)
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGetL1CacheOptimizations(
+      options_data, &l1_cache_optimizations));
+  ASSERT_FALSE(l1_cache_optimizations);
+
+  // Set to true
+  LITERT_ASSERT_OK(
+      LiteRtMediatekOptionsSetL1CacheOptimizations(options_data, true));
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGetL1CacheOptimizations(
+      options_data, &l1_cache_optimizations));
+  ASSERT_TRUE(l1_cache_optimizations);
+
+  // Set to false
+  LITERT_ASSERT_OK(
+      LiteRtMediatekOptionsSetL1CacheOptimizations(options_data, false));
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGetL1CacheOptimizations(
+      options_data, &l1_cache_optimizations));
+  ASSERT_FALSE(l1_cache_optimizations);
+
+  LiteRtDestroyOpaqueOptions(options);
+}
+
+TEST(LiteRtMediatekOptionsTest, L1CacheOptimizationsInvalidArguments) {
+  LiteRtOpaqueOptions options;
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsCreate(&options));
+  LiteRtMediatekOptions options_data;
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGet(options, &options_data));
+  bool l1_cache_optimizations;
+
+  EXPECT_EQ(LiteRtMediatekOptionsSetL1CacheOptimizations(nullptr, true),
+            kLiteRtStatusErrorInvalidArgument);
+
+  EXPECT_EQ(LiteRtMediatekOptionsGetL1CacheOptimizations(options_data, nullptr),
+            kLiteRtStatusErrorInvalidArgument);
+  EXPECT_EQ(LiteRtMediatekOptionsGetL1CacheOptimizations(
+                nullptr, &l1_cache_optimizations),
+            kLiteRtStatusErrorInvalidArgument);
+
+  LiteRtDestroyOpaqueOptions(options);
+}
+TEST(LiteRtMediatekOptionsTest, OptimizationHint) {
+  LiteRtOpaqueOptions options;
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsCreate(&options));
+  LiteRtMediatekOptions options_data;
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGet(options, &options_data));
+
+  LiteRtMediatekNeuronAdapterOptimizationHint optimization_hint;
+  // Check default value
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGetOptimizationHint(
+      options_data, &optimization_hint));
+
+  ASSERT_EQ(optimization_hint,
+            kLiteRtMediatekNeuronAdapterOptimizationHintNormal);
+
+  // Set to LowLatency
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsSetOptimizationHint(
+      options_data, kLiteRtMediatekNeuronAdapterOptimizationHintLowLatency));
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGetOptimizationHint(
+      options_data, &optimization_hint));
+  ASSERT_EQ(optimization_hint,
+            kLiteRtMediatekNeuronAdapterOptimizationHintLowLatency);
+
+  // Set to DeepFusion
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsSetOptimizationHint(
+      options_data, kLiteRtMediatekNeuronAdapterOptimizationHintDeepFusion));
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGetOptimizationHint(
+      options_data, &optimization_hint));
+  ASSERT_EQ(optimization_hint,
+            kLiteRtMediatekNeuronAdapterOptimizationHintDeepFusion);
+
+  // Set to BatchProcessing
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsSetOptimizationHint(
+      options_data,
+      kLiteRtMediatekNeuronAdapterOptimizationHintBatchProcessing));
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGetOptimizationHint(
+      options_data, &optimization_hint));
+  ASSERT_EQ(optimization_hint,
+            kLiteRtMediatekNeuronAdapterOptimizationHintBatchProcessing);
+
+  LiteRtDestroyOpaqueOptions(options);
+}
+
+TEST(LiteRtMediatekOptionsTest, OptimizationHintInvalidArguments) {
+  LiteRtOpaqueOptions options;
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsCreate(&options));
+  LiteRtMediatekOptions options_data;
+  LITERT_ASSERT_OK(LiteRtMediatekOptionsGet(options, &options_data));
+  LiteRtMediatekNeuronAdapterOptimizationHint optimization_hint;
+
+  EXPECT_EQ(
+      LiteRtMediatekOptionsSetOptimizationHint(
+          nullptr, kLiteRtMediatekNeuronAdapterOptimizationHintLowLatency),
+      kLiteRtStatusErrorInvalidArgument);
+
+  EXPECT_EQ(LiteRtMediatekOptionsGetOptimizationHint(options_data, nullptr),
+            kLiteRtStatusErrorInvalidArgument);
+  EXPECT_EQ(
+      LiteRtMediatekOptionsGetOptimizationHint(nullptr, &optimization_hint),
+      kLiteRtStatusErrorInvalidArgument);
 
   LiteRtDestroyOpaqueOptions(options);
 }
@@ -200,16 +311,39 @@ TEST(MediatekOptionsTest, CppApi) {
   // Test Performance Mode
   EXPECT_EQ(
       options->GetPerformanceMode(),
-      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferFastSingleAnswer);
+      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferSustainedSpeed);
   options->SetPerformanceMode(
       kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferLowPower);
   EXPECT_EQ(options->GetPerformanceMode(),
             kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferLowPower);
   options->SetPerformanceMode(
-      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferSustainedSpeed);
+      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferFastSingleAnswer);
   EXPECT_EQ(
       options->GetPerformanceMode(),
-      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferSustainedSpeed);
+      kLiteRtMediatekNeuronAdapterPerformanceModeNeuronPreferFastSingleAnswer);
+
+  // Test L1 Cache Optimizations
+  EXPECT_FALSE(options->GetEnableL1CacheOptimizations());
+  options->SetEnableL1CacheOptimizations(true);
+  EXPECT_TRUE(options->GetEnableL1CacheOptimizations());
+  options->SetEnableL1CacheOptimizations(false);
+  EXPECT_FALSE(options->GetEnableL1CacheOptimizations());
+
+  // Test Optimization Hint
+  EXPECT_EQ(options->GetOptimizationHint(),
+            kLiteRtMediatekNeuronAdapterOptimizationHintNormal);
+  options->SetOptimizationHint(
+      kLiteRtMediatekNeuronAdapterOptimizationHintLowLatency);
+  EXPECT_EQ(options->GetOptimizationHint(),
+            kLiteRtMediatekNeuronAdapterOptimizationHintLowLatency);
+  options->SetOptimizationHint(
+      kLiteRtMediatekNeuronAdapterOptimizationHintDeepFusion);
+  EXPECT_EQ(options->GetOptimizationHint(),
+            kLiteRtMediatekNeuronAdapterOptimizationHintDeepFusion);
+  options->SetOptimizationHint(
+      kLiteRtMediatekNeuronAdapterOptimizationHintBatchProcessing);
+  EXPECT_EQ(options->GetOptimizationHint(),
+            kLiteRtMediatekNeuronAdapterOptimizationHintBatchProcessing);
 }
 
 }  // namespace

@@ -14,6 +14,7 @@
 
 #include "litert/vendors/mediatek/compiler/compile_model.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -21,14 +22,22 @@
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/options/litert_mediatek_options.h"
 #include "litert/vendors/mediatek/neuron_adapter_api.h"
 
 namespace litert::mediatek {
 
+constexpr int kDecodePartitionIndex = 0;
+constexpr int kPrefillPartitionIndex = 1;
+
 Expected<NeuronCompilationPtr> CompileModel(
     const NeuronAdapterApi& neuron_adapter_api, NeuronModel* model,
-    std::optional<std::string> soc_model) {
-#if defined(__ANDROID__)
+    std::optional<std::string> soc_model,
+    ::litert::Expected<litert::mediatek::MediatekOptions>& mediatek_opts,
+    const int subgraph_index) {
+  // LITERT_USE_JIT is automatically defined based on the build target.
+  // It is defined on devices with MediaTek hardwares.
+#if LITERT_USE_JIT
   if (soc_model) {
     return Error(kLiteRtStatusErrorInvalidArgument,
                  "JIT compilation for a specific SoC is not supported");
@@ -43,13 +52,23 @@ Expected<NeuronCompilationPtr> CompileModel(
   // The code below takes care of those conditions.
 
   // NOLINTBEGIN
-  const auto compile_options =
-#if __ANDROID__
+  auto compile_options =
+#if LITERT_USE_JIT
       std::string(neuron_adapter_api.JitCompileOptions());
 #else
       std::string(neuron_adapter_api.AotCompileOptions());
 #endif
   // NOLINTEND
+
+  if (mediatek_opts->GetEnableGemmaCompilerOptimizations()) {
+    if (subgraph_index == kDecodePartitionIndex) {
+      compile_options = " --option-bundle=gemma-decode-accuracy";
+    }
+
+    if (subgraph_index == kPrefillPartitionIndex) {
+      compile_options = " --option-bundle=gemma-prefill-accuracy";
+    }
+  }
 
   // This is needed in order to support FP32 acativations since TFLite doesn't
   // contain support for FP16 activations currently.
@@ -63,7 +82,7 @@ Expected<NeuronCompilationPtr> CompileModel(
   }
 
   auto compilation =
-#if __ANDROID__
+#if LITERT_USE_JIT
       neuron_adapter_api.CreateCompilation(model);
 #else
       neuron_adapter_api.CreateCompilation(model, compile_options);
@@ -78,27 +97,56 @@ Expected<NeuronCompilationPtr> CompileModel(
                  "Failed to set compilation priority");
   }
 
+  LITERT_LOG(LITERT_INFO,
+             "NeuronCompilation_setPreference being set with value: %d",
+             mediatek_opts->GetPerformanceMode());
+
   if (neuron_adapter_api.api().compilation_set_preference(
-          compilation->get(), NEURON_PREFER_SUSTAINED_SPEED) !=
+          compilation->get(), mediatek_opts->GetPerformanceMode()) !=
       NEURON_NO_ERROR) {
     return Error(kLiteRtStatusErrorRuntimeFailure,
                  "Failed to set compilation preference");
   }
 
-#if __ANDROID__
-  if (!compile_options.empty()) {
-    if (auto status =
-            neuron_adapter_api.api().compilation_set_optimization_string(
-                compilation->get(), compile_options.c_str());
-        status != NEURON_NO_ERROR) {
-      LITERT_LOG(LITERT_INFO,
-                 "NeuronCompilation_setOptimizationString failed with error %d",
-                 status);
-      return Error(kLiteRtStatusErrorRuntimeFailure,
-                   "Failed to set optimization string");
+  if (mediatek_opts->GetEnableL1CacheOptimizations()) {
+    uint32_t apu_mem_size = 0;
+    if (neuron_adapter_api.api().get_l1_memory_size_kb(&apu_mem_size) ==
+            NEURON_NO_ERROR &&
+        apu_mem_size > 0) {
+      if (neuron_adapter_api.api().compilation_set_l1_memory_size_kb(
+              compilation->get(), apu_mem_size) != NEURON_NO_ERROR) {
+        LITERT_LOG(LITERT_INFO,
+                   "NeuronCompilation_setL1MemorySizeKb failed with error %d",
+                   neuron_adapter_api.api().compilation_set_l1_memory_size_kb(
+                       compilation->get(), apu_mem_size));
+      }
     }
   }
-#endif
+
+  if (auto status = neuron_adapter_api.api().compilation_set_optimization_hint(
+          compilation->get(), mediatek_opts->GetOptimizationHint());
+      status != NEURON_NO_ERROR) {
+    LITERT_LOG(LITERT_INFO,
+               "NeuronCompilation_setOptimizationHint failed with error %d",
+               status);
+    LITERT_LOG(LITERT_INFO,
+               "NeuronCompilation_setOptimizationHint failed attempting to set "
+               "optimization hint enum value to %d",
+               mediatek_opts->GetOptimizationHint());
+    return Error(kLiteRtStatusErrorRuntimeFailure,
+                 "Failed to set optimization hint");
+  }
+
+  if (auto status =
+          neuron_adapter_api.api().compilation_set_optimization_string(
+              compilation->get(), compile_options.c_str());
+      status != NEURON_NO_ERROR) {
+    LITERT_LOG(LITERT_INFO,
+               "NeuronCompilation_setOptimizationString failed with error %d",
+               status);
+    return Error(kLiteRtStatusErrorRuntimeFailure,
+                 "Failed to set optimization string");
+  }
 
   if (auto status =
           neuron_adapter_api.api().compilation_finish(compilation->get());
