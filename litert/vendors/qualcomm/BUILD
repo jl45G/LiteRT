@@ -114,6 +114,7 @@ litert_test(
         ":qnn_manager",
         "//litert/test:common",
         "//litert/test:matchers_oss",
+        "//litert/vendors/qualcomm/core:common",
         "//litert/vendors/qualcomm/tools:dump",
     ],
 )
@@ -134,20 +135,6 @@ cc_library(
         "//litert/c:litert_logging",
         "//litert/cc:litert_expected",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
-        "@com_google_absl//absl/strings:string_view",
-        "@qairt//:qnn_lib_headers",
-    ],
-)
-
-cc_library(
-    name = "qnn_tensor",
-    srcs = ["qnn_tensor.cc"],
-    hdrs = ["qnn_tensor.h"],
-    deps = [
-        "//litert/c:litert_common",
-        "//litert/c:litert_logging",
-        "//litert/cc:litert_expected",
-        "@com_google_absl//absl/log:absl_check",
         "@com_google_absl//absl/strings:string_view",
         "@qairt//:qnn_lib_headers",
     ],

@@ -36,6 +36,7 @@
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_options.h"
+#include "litert/cc/litert_profiler.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
 
@@ -96,7 +97,7 @@ class CompiledModel
   // automatically which means the provided `compilation_options` are
   // meaningless.
   static Expected<CompiledModel> Create(
-      litert::Environment& env, litert::Model& model,
+      litert::Environment& env, const litert::Model& model,
       const Options& jit_compilation_options) {
     LiteRtModel litert_model = model.Get();
     LiteRtCompiledModel compiled_model;
@@ -113,7 +114,7 @@ class CompiledModel
   // is used automatically which means the provided `hardware_accelerator` is
   // meaningless.
   static Expected<CompiledModel> Create(
-      litert::Environment& env, litert::Model& model,
+      litert::Environment& env, const litert::Model& model,
       LiteRtHwAccelerators hardware_accelerator) {
     LITERT_ASSIGN_OR_RETURN(auto jit_compilation_options, Options::Create());
     jit_compilation_options.SetHardwareAccelerators(hardware_accelerator);
@@ -398,6 +399,11 @@ class CompiledModel
   Expected<Environment> GetEnvironment() const {
     return Environment(env_, OwnHandle::kNo);
   }
+
+  // Sets the profiler for the model. Caller owns the profiler,Profiler needs
+  // to be maintained during the model execution, the caller is responsible for
+  // disposing the profiler after the model execution.
+  Expected<bool> SetProfiler(Profiler& profiler);
 
  private:
   // Returns the signature input index for the given input tensor name.
