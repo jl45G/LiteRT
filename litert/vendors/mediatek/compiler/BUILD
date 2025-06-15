@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib", "litert_test")
+load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib", "litert_test", "make_rpaths")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
@@ -80,6 +80,7 @@ cc_library(
         "//litert/vendors/mediatek/compiler/legalizations:reshape_op_legalization",
         "//litert/vendors/mediatek/compiler/legalizations:resize_bilinear_op_legalization",
         "//litert/vendors/mediatek/compiler/legalizations:resize_nearest_neighbor_op_legalization",
+        "//litert/vendors/mediatek/compiler/legalizations:rms_norm_op_legalization",
         "//litert/vendors/mediatek/compiler/legalizations:rsqrt_op_legalization",
         "//litert/vendors/mediatek/compiler/legalizations:softmax_op_legalization",
         "//litert/vendors/mediatek/compiler/legalizations:squared_difference_op_legalization",
@@ -95,18 +96,17 @@ cc_library(
     name = "compile_model",
     srcs = ["compile_model.cc"],
     hdrs = ["compile_model.h"],
+    local_defines = select({
+        "@org_tensorflow//tensorflow:android": ["LITERT_USE_JIT=1"],
+        "@org_tensorflow//tensorflow:chromiumos": ["LITERT_USE_JIT=1"],
+        "//conditions:default": [],
+    }),
     deps = [
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
-        "//litert/c:litert_op_code",
-        "//litert/c:litert_op_options",
         "//litert/cc:litert_expected",
-        "//litert/cc:litert_macros",
-        "//litert/cc:litert_model",
-        "//litert/cc:litert_model_predicates",
+        "//litert/cc/options:litert_mediatek_options",
         "//litert/vendors/mediatek:neuron_adapter_api",
-        "//litert/vendors/mediatek/schema:mediatek_litert_schema",
-        "@com_google_absl//absl/strings:string_view",
         "@neuro_pilot//:v8_latest_host_headers",
     ],
 )
@@ -120,6 +120,14 @@ litert_test(
         "//litert/test:mlir_test_data",
         "//litert/test:tflite_test_data",
     ],
+    linkopts = select({
+        "@org_tensorflow//tensorflow:android": [],
+        "//conditions:default": [
+            make_rpaths([
+                "//litert/c:litert_runtime_c_api_so",
+            ]),
+        ],
+    }),
     linkstatic = True,
     tags = [
         # Tests with ungrte deps do not currently work on forge.
