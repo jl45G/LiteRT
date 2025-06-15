@@ -87,7 +87,7 @@ TEST(OpWrapperTest, OpConfigTest) {
       std::accumulate(dummy_dims.begin(), dummy_dims.end(),
                       sizeof(decltype(data)::value_type), std::multiplies<>());
 
-  TensorWrapper tensor_wrapper{0,
+  TensorWrapper tensor_wrapper{"",
                                QNN_TENSOR_TYPE_APP_WRITE,
                                QNN_DATATYPE_UFIXED_POINT_8,
                                QuantizeParamsWrapperVariant(),
@@ -131,7 +131,7 @@ TEST(OpWrapperTest, MoveConstructorTest) {
   std::vector<std::uint32_t> dummy_dims = {1, 1, 3};
   std::vector<std::uint8_t> data = {1, 2, 3};
   void* data_ptr = reinterpret_cast<void*>(data.data());
-  TensorWrapper tensor_wrapper{0,
+  TensorWrapper tensor_wrapper{"",
                                QNN_TENSOR_TYPE_APP_WRITE,
                                QNN_DATATYPE_UFIXED_POINT_8,
                                QuantizeParamsWrapperVariant(),
@@ -178,7 +178,7 @@ TEST(OpWrapperTest, GetInputOutputTensorTest) {
   EXPECT_EQ(op_wrapper.GetOutputTensor(0), tensor_wrapper_output);
 }
 
-TEST(OpWrapperTest, StealOutputsTest) {
+TEST(OpWrapperTest, SwapOutputsTest) {
   TensorWrapper input_1{};
   TensorWrapper output_1{};
   OpWrapper op_wrapper_1{"name", "OP_TYPE", QnnOpCode::kUnknown};
@@ -192,8 +192,10 @@ TEST(OpWrapperTest, StealOutputsTest) {
   op_wrapper_2.AddOutputTensor(output_2);
 
   EXPECT_EQ(op_wrapper_1.GetOutputTensor(0), output_1);
-  op_wrapper_1.StealOutputs(op_wrapper_2);
+  op_wrapper_1.SwapOutputs(op_wrapper_2);
   EXPECT_EQ(op_wrapper_1.GetOutputTensor(0), output_2);
+  op_wrapper_1.SwapOutputs(op_wrapper_2);
+  EXPECT_EQ(op_wrapper_1.GetOutputTensor(0), output_1);
 }
 
 }  // namespace

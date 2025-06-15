@@ -17,6 +17,7 @@
 
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_opaque_options.h"
+#include "litert/c/options/litert_google_tensor_options_type.h"
 
 #ifdef __cplusplus
 #include <string>
@@ -42,21 +43,6 @@ LiteRtStatus LiteRtGoogleTensorOptionsGet(
 
 // COMPILATION OPTIONS /////////////////////////////////////////////////////////
 
-// float_truncation_type -------------------------------------------------------
-
-typedef enum LiteRtGoogleTensorOptionsTruncationType {
-  kLiteRtGoogleTensorFloatTruncationTypeUnspecified = 0,
-  kLiteRtGoogleTensorFloatTruncationTypeNoTruncation = 1,
-  kLiteRtGoogleTensorFloatTruncationTypeBfloat16 = 2,
-  kLiteRtGoogleTensorFloatTruncationTypeHalf = 3,
-} LiteRtGoogleTensorOptionsTruncationType;
-
-typedef enum LiteRtGoogleTensorOptionsShardingIntensity {
-  kLiteRtGoogleTensorShardingIntensityMinimal = 0,
-  kLiteRtGoogleTensorShardingIntensityModerate = 1,
-  kLiteRtGoogleTensorShardingIntensityExtensive = 2,
-  kLiteRtGoogleTensorShardingIntensityMaximum = 3,
-} LiteRtGoogleTensorOptionsShardingIntensity;
 
 LiteRtStatus LiteRtGoogleTensorOptionsSetFloatTruncationType(
     LiteRtGoogleTensorOptions options,
@@ -76,9 +62,13 @@ LiteRtStatus LiteRtGoogleTensorOptionsGetInt64ToInt32Truncation(
 
 // output_dir ------------------------------------------------------------------
 
+// Sets the output directory for the generated files.
+// The `output_dir` string is copied and stored in the `options` object.
 LiteRtStatus LiteRtGoogleTensorOptionsSetOutputDir(
     LiteRtGoogleTensorOptions options, const char* output_dir);
 
+// Returns the output directory for the generated files.
+// The `output_dir` string is owned by the `options` object.
 LiteRtStatus LiteRtGoogleTensorOptionsGetOutputDir(
     LiteRtGoogleTensorOptions options, const char** output_dir);
 

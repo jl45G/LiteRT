@@ -56,12 +56,14 @@ litert_dynamic_lib(
     visibility = ["//litert:litert_public"],
     deps = [
         "@com_google_absl//absl/log:absl_check",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
         "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/c:litert_options",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
+        "//litert/cc:litert_element_type",
         "//litert/cc:litert_environment_options",
         # TODO: Remove this dependency.
         "//litert/core/util:tensor_type_util",
@@ -71,6 +73,7 @@ litert_dynamic_lib(
         "//litert/vendors/qualcomm:context_binary_info",
         "//litert/vendors/qualcomm:qnn_manager",
         "//litert/vendors/qualcomm/core/utils:miscs",
+        "//litert/vendors/qualcomm/core/wrappers:quantize_params_wrapper",
         "//litert/vendors/qualcomm/core/wrappers:tensor_wrapper",
         "@qairt//:qnn_lib_headers",
     ],

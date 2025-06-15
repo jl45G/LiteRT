@@ -22,7 +22,18 @@ extern "C" {
 #endif  // __cplusplus
 
 // Declares canonical opaque type.
+
+#ifdef __cplusplus
 #define LITERT_DEFINE_HANDLE(name) \
+  typedef class name##T* name;    \
+  typedef const class name##T* name##Const
+#else  // __cplusplus
+#define LITERT_DEFINE_HANDLE(name) \
+  typedef struct name##T* name;    \
+  typedef const struct name##T* name##Const
+#endif  // __cplusplus
+
+#define LITERT_DEFINE_HANDLE_STRUCT(name) \
   typedef struct name##T* name;    \
   typedef const struct name##T* name##Const
 
@@ -61,11 +72,13 @@ LITERT_DEFINE_HANDLE(LiteRtOp);
 // LiteRtOptions object. (litert_opaque_options.h)
 LITERT_DEFINE_HANDLE(LiteRtOpaqueOptions);
 // The compilation options for the LiteRtCompiledModel. (litert_options.h)
-LITERT_DEFINE_HANDLE(LiteRtOptions);
+LITERT_DEFINE_HANDLE_STRUCT(LiteRtOptions);
 // LiteRT TensorBuffer object. (litert_tensor_buffer.h)
 LITERT_DEFINE_HANDLE(LiteRtTensorBuffer);
 // LiteRT TensorBufferRequirements object. (litert_tensor_buffer_requirements.h)
 LITERT_DEFINE_HANDLE(LiteRtTensorBufferRequirements);
+// LiteRT Profiler object. (litert_profiler.h)
+LITERT_DEFINE_HANDLE(LiteRtProfiler);
 
 #if __ANDROID_API__ >= 26
 #define LITERT_HAS_AHWB_SUPPORT 1
@@ -197,7 +210,18 @@ typedef size_t LiteRtParamIndex;
 
 #define posix_memalign(p, a, s) \
   (((*(p)) = _aligned_malloc((s), (a))), *(p) ? 0 : errno)
-#endif  // defined(_WIN32)
+
+// Memory allocated by _aligned_malloc() on Windows needs to be freed by
+// _aligned_free(). Use aligned_free() instead of free() for the memory
+// allocated by posix_memalign() for cross-platform compatibility.
+// https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc?view=msvc-170
+// litert_ prefix is added to avoid name conflicts with one defined in
+// base/port.h, for example, included in unittests.
+#define litert_aligned_free _aligned_free
+
+#else  // _WIN32
+#define litert_aligned_free free
+#endif  // _WIN32
 
 #ifdef __cplusplus
 }
