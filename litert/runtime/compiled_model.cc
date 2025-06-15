@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -36,6 +37,7 @@
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_options.h"
+#include "litert/c/litert_profiler_event.h"
 #include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
 #include "litert/c/litert_tensor_buffer_types.h"
@@ -44,8 +46,11 @@
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_handle.h"
 #include "litert/cc/litert_macros.h"
+#include "litert/cc/litert_opaque_options.h"
+#include "litert/cc/litert_options.h"
 #include "litert/cc/litert_tensor_buffer.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
+#include "litert/cc/litert_tensor_buffer_utils.h"
 #include "litert/compiler/plugin/compiler_plugin.h"
 #include "litert/core/build_stamp.h"
 #include "litert/core/model/model.h"
@@ -56,14 +61,18 @@
 #include "litert/runtime/custom_op_dispatcher.h"
 #include "litert/runtime/dispatch/dispatch_opaque_options.h"
 #include "litert/runtime/external_litert_buffer_context.h"
+#include "litert/runtime/litert_cpu_options.h"
+#include "litert/runtime/litert_runtime_options.h"
 #include "litert/runtime/metrics.h"
 #include "litert/runtime/tensor_buffer.h"
 #include "tensorflow/compiler/mlir/lite/allocation.h"
 #include "tflite/builtin_ops.h"
 #include "tflite/c/common.h"
+#include "tflite/core/api/profiler.h"
 #include "tflite/core/interpreter_builder.h"
 #include "tflite/delegates/utils/simple_opaque_delegate.h"
 #include "tflite/interpreter.h"
+#include "tflite/interpreter_options.h"
 #include "tflite/kernels/register.h"
 #include "tflite/model_builder.h"
 
@@ -73,7 +82,6 @@ using ::litert::TensorBuffer;
 using ::litert::Unexpected;
 using ::litert::internal::DispatchDelegateOptions;
 using ::litert::internal::ExternalLiteRtBufferContext;
-using ::litert::internal::GetTensorBufferTypeName;
 using ::litert::internal::SerializeModel;
 
 Expected<void> LiteRtCompiledModelT::InitializeRuntime(
@@ -91,7 +99,32 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
     }
   }
 
-  tflite::InterpreterBuilder(*fb_model_, resolver)(&interp_);
+  tflite::InterpreterOptions interpreter_options;
+  interpreter_options.SetUseSignatureTensorNames(true);
+  int num_threads = 1;
+  if (jit_compilation_options) {
+    litert::Options cc_options(jit_compilation_options, litert::OwnHandle::kNo);
+    LITERT_ASSIGN_OR_RETURN(litert::OpaqueOptions opaque_options,
+                            cc_options.GetOpaqueOptions());
+
+    if (auto runtime_options = litert::FindOpaqueData<LiteRtRuntimeOptionsT>(
+            opaque_options, LiteRtRuntimeOptionsT::Identifier());
+        runtime_options) {
+      interpreter_options.SetShloCompositeInlining(
+          (*runtime_options)->shlo_composite_inlining);
+    }
+
+    if (auto cpu_options = litert::FindOpaqueData<LiteRtCpuOptionsT>(
+            opaque_options, LiteRtCpuOptionsT::Identifier());
+        cpu_options) {
+      num_threads = (*cpu_options)->xnn.num_threads;
+    }
+  }
+
+  tflite::InterpreterBuilder builder(*fb_model_, resolver,
+                                     &interpreter_options);
+  builder(&interp_);
+  interp_->SetNumThreads(num_threads);
   if (interp_ == nullptr) {
     return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                       "Failed to build TFL interpreter");
@@ -111,6 +144,20 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
 
   return {};
 }
+
+namespace {
+
+int GetAllocationFd(const tflite::Allocation* allocation) {
+  if (allocation != nullptr &&
+      allocation->type() == tflite::Allocation::Type::kMMap) {
+    auto& mmap_allocation =
+        static_cast<const tflite::MMAPAllocation&>(*allocation);
+    return mmap_allocation.fd();
+  }
+  return -1;
+}
+
+}  // namespace
 
 Expected<void> LiteRtCompiledModelT::InitializeModel(
     LiteRtModelT& model, LiteRtHwAcceleratorSet hw_accelerators,
@@ -148,6 +195,7 @@ Expected<void> LiteRtCompiledModelT::InitializeModel(
         "Flatbuffer model initialized directly from incoming litert model.");
     fb_model_ = tflite::FlatBufferModel::BuildFromBuffer(tfl_buf.StrData(),
                                                          tfl_buf.Size());
+    fb_model_fd_ = GetAllocationFd(tfl_wrapper.FlatbufferModel().allocation());
     return {};
   }
 
@@ -165,6 +213,7 @@ Expected<void> LiteRtCompiledModelT::InitializeModel(
     return Unexpected(kLiteRtStatusErrorFileIO,
                       "Failed to build flatbuffer from buffer");
   }
+  fb_model_fd_ = GetAllocationFd(tfl_wrapper.FlatbufferModel().allocation());
 
   return {};
 }
@@ -197,16 +246,6 @@ class ScopedCompilationOptionsModifier {
   litert::OpaqueOptions& accelerator_options_;
   int num_appended_options_ = 0;
 };
-
-int GetAllocationFd(const tflite::Allocation* allocation) {
-  if (allocation != nullptr &&
-      allocation->type() == tflite::Allocation::Type::kMMap) {
-    auto& mmap_allocation =
-        static_cast<const tflite::MMAPAllocation&>(*allocation);
-    return mmap_allocation.fd();
-  }
-  return -1;
-}
 
 }  // namespace
 
@@ -247,8 +286,8 @@ Expected<LiteRtCompiledModelT::Ptr> LiteRtCompiledModelT::Create(
                             DispatchDelegateOptions::Create());
     LITERT_RETURN_IF_ERROR(
         dispatch_options.SetAllocBase(compiled_model->GetModelBase()));
-    LITERT_RETURN_IF_ERROR(dispatch_options.SetAllocBaseFd(
-        GetAllocationFd(compiled_model->fb_model_->allocation())));
+    LITERT_RETURN_IF_ERROR(
+        dispatch_options.SetAllocBaseFd(compiled_model->fb_model_fd_));
     LITERT_RETURN_IF_ERROR(scoped_modifier.Append(std::move(dispatch_options)));
   }
 
@@ -469,7 +508,7 @@ Expected<void> LiteRtCompiledModelT::RegisterBuffer(
   LITERT_DEBUG_CODE({
     absl::string_view io = is_input ? "input" : "output";
     absl::string_view name = tensor_name ? tensor_name : "<unnamed>";
-    auto buffer_type = GetTensorBufferTypeName(*buffer);
+    auto buffer_type = litert::BufferTypeToString(buffer->buffer_type());
     LITERT_LOG(LITERT_DEBUG,
                "Registering %s tensor from TfliteTensor %p to "
                "LiteRtTensorBuffer %p of type %s",
@@ -588,6 +627,12 @@ Expected<void> LiteRtCompiledModelT::Run(
     absl::string_view signature_key,
     const std::vector<LiteRtTensorBuffer>& input_buffers,
     const std::vector<LiteRtTensorBuffer>& output_buffers, bool& async) {
+  uint64_t event_handle = std::numeric_limits<uint64_t>::max();
+  if (profiler_ && profiler_->IsProfiling()) {
+    profiler_->SetCurrentEventSource(ProfiledEventSource::LITERT);
+    event_handle = profiler_->BeginEvent("LiteRT::Run[buffer registration]",
+                          tflite::Profiler::EventType::DEFAULT, 0, 0);
+  }
   auto runner = GetSignatureRunner(signature_key);
   if (runner == nullptr) {
     return Unexpected(kLiteRtStatusErrorNotFound,
@@ -651,6 +696,11 @@ Expected<void> LiteRtCompiledModelT::Run(
                        res.Error().Message()));
     }
   }
+  if (profiler_ && profiler_->IsProfiling() &&
+      event_handle != std::numeric_limits<uint64_t>::max()) {
+    profiler_->SetCurrentEventSource(ProfiledEventSource::LITERT);
+    profiler_->EndEvent(event_handle);
+  }
 
   if (auto res = runner->AllocateTensors(); res != kTfLiteOk) {
     return Unexpected(kLiteRtStatusErrorRuntimeFailure,
@@ -664,9 +714,15 @@ Expected<void> LiteRtCompiledModelT::Run(
     return Unexpected(kLiteRtStatusErrorRuntimeFailure, "Failed to invoke");
   }
 
+  if (profiler_ && profiler_->IsProfiling()) {
+    profiler_->SetCurrentEventSource(ProfiledEventSource::LITERT);
+    event_handle = profiler_->BeginEvent("LiteRT::Run[Buffer sync]",
+                          tflite::Profiler::EventType::DEFAULT, 0, 0);
+  }
+
   if (async) {
-    // If the caller requested async execution, then set async to true if any of
-    // the output buffers have been assigned a synchronization event.
+    // If the caller requested async execution, then set async to true if any
+    // of the output buffers have been assigned a synchronization event.
     async = false;
     for (auto& tb : output_buffers) {
       async |= tb->HasEvent();
@@ -684,6 +740,11 @@ Expected<void> LiteRtCompiledModelT::Run(
         }
       }
     }
+  }
+  if (profiler_ && profiler_->IsProfiling() &&
+      event_handle != std::numeric_limits<uint64_t>::max()) {
+    profiler_->SetCurrentEventSource(ProfiledEventSource::LITERT);
+    profiler_->EndEvent(event_handle);
   }
 
   return {};

@@ -28,12 +28,14 @@
 #include "litert/c/litert_common.h"
 #include "litert/cc/litert_buffer_ref.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_tensor_buffer_requirements.h"
 #include "litert/core/environment.h"
 #include "litert/runtime/accelerator.h"
 #include "litert/runtime/custom_op_dispatcher.h"
 #include "litert/runtime/external_litert_buffer_context.h"
 #include "litert/runtime/metrics.h"
+#include "litert/runtime/profiler.h"
 #include "tensorflow/compiler/mlir/lite/allocation.h"
 #include "tflite/delegates/utils/simple_opaque_delegate.h"
 #include "tflite/interpreter.h"
@@ -117,6 +119,20 @@ class LiteRtCompiledModelT {
 
   // Returns the environment associated with the compiled model.
   litert::Expected<LiteRtEnvironmentT*> GetEnvironment() { return env_; }
+
+  // Sets the profiler to be used by the compiled model.
+  litert::Expected<void> SetProfiler(LiteRtProfilerT* profiler) {
+    LITERT_RETURN_IF_ERROR(profiler,
+                           litert::ErrorStatusBuilder::InvalidArgument())
+        << "profiler is null.";
+
+    profiler_ = profiler;
+    interp_->SetProfiler(profiler_);
+    return {};
+  }
+
+  // Returns the profiler used by the compiled model.
+  litert::Expected<LiteRtProfilerT*> GetProfiler() { return profiler_; }
 
  private:
   // A opaque delegate and its metrics collection functions.
@@ -233,6 +249,10 @@ class LiteRtCompiledModelT {
   std::unique_ptr<::tflite::FlatBufferModel> fb_model_;
   litert::OwningBufferRef<uint8_t> model_buf_;
   std::vector<const std::string*> signature_keys_;
+  // If JIT compilation hasn't happened, the flatbuffer fd belongs to the
+  // incoming literal model. If JIT compilation has happened, the fd belongs to
+  // a newly serialized flatbuffer owned by the compiled model.
+  int fb_model_fd_ = -1;
 
   // The buffer requirement maps for CPU buffers. For delegates with CPU
   // buffers, they don't register TensorBufferRequirements. Instead, the
@@ -256,6 +276,10 @@ class LiteRtCompiledModelT {
   // The set of CPU Tensors. This is used to manage TensorBufferRequirements
   // for shared CPU Tensors.
   absl::flat_hash_set<const void*> cpu_tensors_;
+
+  // The profiler used by the compiled model. This is used to forward the
+  // profiler events to the TFLite interpreter.
+  LiteRtProfilerT* profiler_ = nullptr;
 };
 
 #endif  // ODML_LITERT_LITERT_RUNTIME_COMPILED_MODEL_H_
