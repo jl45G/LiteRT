@@ -50,7 +50,19 @@ cc_library(
     srcs = ["common.cc"],
     hdrs = ["common.h"],
     deps = [
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+cc_test(
+    name = "common_test",
+    srcs = [
+        "common_test.cc",
+    ],
+    deps = [
+        ":common",
+        "@com_google_googletest//:gtest_main",
     ],
 )
