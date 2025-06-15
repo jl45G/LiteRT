@@ -177,6 +177,18 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "rng_fixture",
+    testonly = True,
+    hdrs = ["rng_fixture.h"],
+    deps = [
+        ":fuzz",
+        "//litert/cc:litert_rng",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
 cc_test(
     name = "matchers_test",
     srcs = ["matchers_test.cc"],
@@ -204,6 +216,11 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "fuzz",
+    hdrs = ["fuzz.h"],
+)
+
 exports_files(srcs = [
     "testdata/mobilenet_v2_1.0_224.tflite",
     "testdata/shared_input_cpu_npu_google_tensor_precompiled.tflite",
@@ -214,5 +231,6 @@ exports_files(srcs = [
     "testdata/simple_model_mtk.bin",
     "testdata/simple_model_npu_google_tensor_precompiled.tflite",
     "testdata/simple_model_qualcomm.bin",
+    "testdata/simple_model_qualcomm_sm8650_precompiled.tflite",
     "testdata/simple_quantized_ops.tflite",
 ])

@@ -25,6 +25,7 @@ cc_library(
         "//litert/c:litert_common",
         "//litert/c:litert_opaque_options",
         "//litert/cc:litert_macros",
+        "//litert/runtime:litert_cpu_options",
         "//tflite/delegates/xnnpack:xnnpack_delegate",
     ],
 )
@@ -83,6 +84,7 @@ cc_library(
     srcs = ["litert_google_tensor_options.cc"],
     hdrs = ["litert_google_tensor_options.h"],
     deps = [
+        ":litert_google_tensor_options_type",
         "//litert/c:litert_common",
         "//litert/c:litert_opaque_options",
         "//litert/cc:litert_detail",
@@ -90,6 +92,7 @@ cc_library(
         "//litert/cc:litert_handle",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_opaque_options",
+        "//litert/runtime:litert_google_tensor",
         "@com_google_absl//absl/strings:string_view",
     ],
 )
@@ -134,6 +137,38 @@ cc_library(
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+cc_library(
+    name = "litert_runtime_options",
+    srcs = ["litert_runtime_options.cc"],
+    hdrs = ["litert_runtime_options.h"],
+    deps = [
+        "//litert/c:litert_common",
+        "//litert/c:litert_opaque_options",
+        "//litert/cc:litert_macros",
+        "//litert/runtime:litert_runtime_options",
+    ],
+)
+
+cc_library(
+    name = "litert_google_tensor_options_type",
+    hdrs = ["litert_google_tensor_options_type.h"],
+)
+
+cc_test(
+    name = "litert_runtime_options_test",
+    srcs = ["litert_runtime_options_test.cc"],
+    deps = [
+        ":litert_runtime_options",
+        "//litert/c:litert_common",
+        "//litert/c:litert_opaque_options",
+        "//litert/cc:litert_macros",
+        "//litert/test:matchers",
+        "@com_google_absl//absl/cleanup",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
