@@ -20,6 +20,7 @@
 #include "QnnTypes.h"  // from @qairt
 
 namespace qnn {
+static const char* kDumpSuffix = "_dump";
 
 // Get the Qnn_DataType_t associated with given C++ type.
 template <typename T>
@@ -91,12 +92,12 @@ class TensorWrapper final {
  public:
   explicit TensorWrapper();
 
-  explicit TensorWrapper(std::uint32_t id, Qnn_TensorType_t tensor_type,
+  explicit TensorWrapper(std::string name, Qnn_TensorType_t tensor_type,
                          Qnn_DataType_t data_type,
                          const QuantizeParamsWrapperVariant& quantize_params,
                          const std::vector<std::uint32_t>& dimentions);
 
-  explicit TensorWrapper(std::uint32_t id, Qnn_TensorType_t tensor_type,
+  explicit TensorWrapper(std::string name, Qnn_TensorType_t tensor_type,
                          Qnn_DataType_t data_type,
                          const QuantizeParamsWrapperVariant& quantize_params,
                          const std::vector<std::uint32_t>& dimentions,
@@ -111,6 +112,8 @@ class TensorWrapper final {
   ~TensorWrapper();
 
   bool operator==(const TensorWrapper& other) const { return this == &other; }
+
+  bool operator!=(const TensorWrapper& other) const { return this != &other; }
 
   void CloneTo(Qnn_Tensor_t& dst) const;
 
@@ -293,21 +296,40 @@ class TensorWrapper final {
   template <typename T>
   std::optional<absl::Span<const T>> GetStaticTensorData() const;
 
-  void ConvertAxisScaleOffsetToScaleOffset() {
-    if (!std::holds_alternative<AxisScaleOffsetQuantizeParamsWrapper>(
-            quantize_params_)) {
-      return;
-    }
-
-    quantize_params_.emplace<ScaleOffsetQuantizeParamsWrapper>(0.0, 0);
-  }
+  void ConvertAxisScaleOffsetToScaleOffset();
 
   size_t GetTensorBytes() const;
 
   void ConvertQint16ToQuint16();
 
+  void MarkDump() {
+    if (!IsStrEndsWith(name_, kDumpSuffix)) {
+      name_ += kDumpSuffix;
+      qnn_tensor_.v2.name = name_.c_str();
+    }
+    SetTensorType(QNN_TENSOR_TYPE_APP_READ);
+  }
+
+  bool IsMarkedDump() const {
+    return IsStrEndsWith(name_, kDumpSuffix) &&
+           qnn_tensor_.v2.type == QNN_TENSOR_TYPE_APP_READ;
+  }
+
+  std::string GetName() const { return name_; }
+
  private:
+  void UpdateQnnQuantParams() {
+    std::visit(
+        [this](auto&& quantize_params) -> void {
+          quantize_params.CloneTo(qnn_tensor_.v2.quantizeParams);
+        },
+        quantize_params_);
+  }
   Qnn_TensorType_t GetTensorType() const;
+
+  void SetTensorType(Qnn_TensorType_t tensor_type) {
+    qnn_tensor_.v2.type = tensor_type;
+  }
 
   void SetDataType(Qnn_DataType_t data_type) {
     qnn_tensor_.v2.dataType = data_type;
