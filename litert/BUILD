@@ -22,6 +22,7 @@ package(
 # These are the internal packages that have access to the cc api linked against the runtime .so.
 package_group(
     name = "litert_internal_users_with_public_cc",
+    # copybara:uncomment includes = ["//third_party/py/executorch:execufriends"],
     packages = [
         # Self packages.
         "//ci/tools/...",
@@ -58,6 +59,7 @@ package_group(
         "//litert/vendors/qualcomm/...",
         # When litert_lm_link_capi_so=false
         # copybara:uncomment "//third_party/odml/litert_lm/...",
+        # copybara:uncomment "//platforms/darwinn/devtools/google_tensor_tpu_delegate_executor/...",
     ],
 )
 
@@ -87,10 +89,14 @@ package_group(
 # All litert users, least restrictive option.
 package_group(
     name = "litert_public",
-    includes = [
-        ":litert_external_users",
-        ":litert_internal_users",
-    ],
+    # copybara:uncomment_begin(oss)
+    # includes = [
+    # ":litert_external_users",
+    # ":litert_internal_users",
+    # ],
+    # copybara:uncomment_end_and_comment_begin
+    packages = ["//..."],
+    # copybara:comment_end
 )
 
 package_group(
