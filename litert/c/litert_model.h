@@ -34,6 +34,8 @@ extern "C" {
 
 // Get the string name associated with this tensor. This is an optional
 // attribute and if not set will return a zero-length string.
+// The returned string pointer is owned by the LiteRtModel to which the given
+// Tensor belongs. It becomes invalid when the LiteRtModel is destroyed.
 LiteRtStatus LiteRtGetTensorName(LiteRtTensor tensor, const char** name);
 
 // Get the index associated with this tensor.
@@ -70,6 +72,12 @@ typedef struct {
   // The primitive element type of the constituent data.
   LiteRtElementType element_type;
 } LiteRtUnrankedTensorType;
+
+inline bool LiteRtIsSameUnrankedTensorType(
+    const LiteRtUnrankedTensorType* type1,
+    const LiteRtUnrankedTensorType* type2) {
+  return type1->element_type == type2->element_type;
+}
 
 // Tensor whose rank is static but dimensions may be dynamic.
 typedef struct {
@@ -247,9 +255,13 @@ LiteRtStatus LiteRtGetSubgraphOp(LiteRtSubgraph subgraph,
 
 // Default signature key. This is the key that is used if the model does not
 // define any signatures.
+// The returned string pointer is owned by the LiteRtModel to which the given
+// Signature belongs. It becomes invalid when the LiteRtModel is destroyed.
 LiteRtStatus LiteRtGetDefaultSignatureKey(const char** signature_key);
 
 // Get the signature key string defined in the model.
+// The returned string pointer is owned by the LiteRtModel to which the given
+// Signature belongs. It becomes invalid when the LiteRtModel is destroyed.
 LiteRtStatus LiteRtGetSignatureKey(LiteRtSignature signature,
                                    const char** signature_key);
 
@@ -262,6 +274,8 @@ LiteRtStatus LiteRtGetNumSignatureInputs(LiteRtSignature signature,
                                          LiteRtParamIndex* num_inputs);
 
 // Get the name of the i-th of input tensor name for the given signature.
+// The returned string pointer is owned by the LiteRtModel to which the given
+// Signature belongs. It becomes invalid when the LiteRtModel is destroyed.
 LiteRtStatus LiteRtGetSignatureInputName(LiteRtSignature signature,
                                          LiteRtParamIndex input_idx,
                                          const char** input_name);
@@ -271,6 +285,8 @@ LiteRtStatus LiteRtGetNumSignatureOutputs(LiteRtSignature signature,
                                           LiteRtParamIndex* num_outputs);
 
 // Get the name of the i-th of output tensor name for the given signature.
+// The returned string pointer is owned by the LiteRtModel to which the given
+// Signature belongs. It becomes invalid when the LiteRtModel is destroyed.
 LiteRtStatus LiteRtGetSignatureOutputName(LiteRtSignature signature,
                                           LiteRtParamIndex output_idx,
                                           const char** output_name);
@@ -281,7 +297,8 @@ LiteRtStatus LiteRtGetSignatureOutputName(LiteRtSignature signature,
 
 LiteRtStatus LiteRtCreateModelFromFile(const char* filename,
                                        LiteRtModel* model);
-
+// The caller must ensure that the buffer remains valid for the lifetime of
+// the model.
 LiteRtStatus LiteRtCreateModelFromBuffer(const void* buffer_addr,
                                          size_t buffer_size,
                                          LiteRtModel* model);

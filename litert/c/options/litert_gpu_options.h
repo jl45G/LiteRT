@@ -18,7 +18,7 @@
 #include <stdbool.h>
 
 #include "litert/c/litert_common.h"
-#include "litert/c/litert_opaque_options.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,12 +42,24 @@ LiteRtStatus LiteRtSetGpuOptionsInfiniteFloatCapping(
 LiteRtStatus LiteRtSetGpuOptionsBenchmarkMode(LiteRtOpaqueOptions gpu_options,
                                               bool enable);
 
-// Set to true to run in no immutable external tensors mode. This prevents GPU
-// Accelerator from using immutable external tensors.
+// Set to true to run in no external tensors mode. This prevents GPU
+// Accelerator from using external tensors.
+// This mode mostly gives a better performance but it requires additional
+// GPU-GPU copies for input and output tensors.
 //
 // WARNING: This is an experimental feature and subject to change.
+// TODO - b/421905729: Change name to LiteRtSetGpuOptionsNoExternalTensorsMode
+// with the next API updates.
 LiteRtStatus LiteRtSetGpuOptionsNoImmutableExternalTensorsMode(
     LiteRtOpaqueOptions gpu_options, bool enable);
+
+// Add a prefix pattern to match external tensors. External tensors won't be
+// affected by the NoExternalTensorsMode. This is useful for state
+// tensors to reduce GPU-GPU copies even with the NoExternalTensorsMode.
+// For example, if the prefix pattern is "kv_cache_", then all tensors whose
+// names begin with "kv_cache_" will be exempted from NoExternalTensorsMode.
+LiteRtStatus LiteRtAddGpuOptionsExternalTensorPattern(
+    LiteRtOpaqueOptions gpu_options, const char* pattern);
 
 // This enables dynamic range quantization of the input tensor for large sized
 // fully connected and convolution operations, if the device supports it. This
@@ -82,7 +94,8 @@ LiteRtStatus LiteRtSetGpuAcceleratorCompilationOptionsPreferTextureWeights(
 //
 // NOTE: Users should ensure that this directory is private to the app to
 // avoid data access issues.
-// Delegate copies the string and doesn't take ownership of the memory.
+// Delegate stores the pointer to the string and doesn't take ownership of the
+// memory. The string memory must outlive the `gpu_accelerator_options` object.
 LiteRtStatus LiteRtSetGpuAcceleratorCompilationOptionsSerializationDir(
     LiteRtOpaqueOptions gpu_accelerator_options, const char* serialization_dir);
 
@@ -93,7 +106,8 @@ LiteRtStatus LiteRtSetGpuAcceleratorCompilationOptionsSerializationDir(
 // StrFingerprint() in lite/delegates/serialization.h.
 //
 // Set to nullptr implies the delegate will not try serialization.
-// Delegate copies the string and doesn't take ownership of the memory.
+// Delegate stores the pointer to the string and doesn't take ownership of the
+// memory. The string memory must outlive the `gpu_accelerator_options` object.
 LiteRtStatus LiteRtSetGpuAcceleratorCompilationOptionsModelCacheKey(
     LiteRtOpaqueOptions gpu_accelerator_options, const char* model_cache_key);
 
@@ -123,6 +137,8 @@ LiteRtStatus LiteRtGetGpuOptionsInfiniteFloatCapping(
 LiteRtStatus LiteRtGetGpuOptionsBenchmarkMode(bool* enabled,
                                               LiteRtGpuOptionsPayload payload);
 
+// TODO - b/421905729: Change name to LiteRtGetGpuOptionsNoExternalTensorsMode
+// with the next API updates.
 LiteRtStatus LiteRtGetGpuOptionsNoImmutableExternalTensorsMode(
     bool* enabled, LiteRtGpuOptionsPayload payload);
 
@@ -139,9 +155,15 @@ LiteRtStatus LiteRtGetGpuAcceleratorCompilationOptionsBufferStorageType(
 LiteRtStatus LiteRtGetGpuAcceleratorCompilationOptionsPreferTextureWeights(
     bool* prefer_texture_weights, LiteRtGpuOptionsPayload payload);
 
+// Returns serialization directory.
+// The returned string pointer is owned by the user of
+// LiteRtSetGpuAcceleratorCompilationOptionsSerializationDir() API.
 LiteRtStatus LiteRtGetGpuAcceleratorCompilationOptionsSerializationDir(
     const char** serialization_dir, LiteRtGpuOptionsPayload payload);
 
+// Returns model cache key.
+// The returned string pointer is owned by the user of
+// LiteRtSetGpuAcceleratorCompilationOptionsModelCacheKey() API.
 LiteRtStatus LiteRtGetGpuAcceleratorCompilationOptionsModelCacheKey(
     const char** model_cache_key, LiteRtGpuOptionsPayload payload);
 
@@ -150,6 +172,13 @@ LiteRtStatus LiteRtGetGpuAcceleratorCompilationOptionsSerializeProgramCache(
 
 LiteRtStatus LiteRtGetGpuAcceleratorCompilationOptionsSerializeExternalTensors(
     bool* serialize_external_tensors, LiteRtGpuOptionsPayload payload);
+
+LiteRtStatus LiteRtGetNumGpuAcceleratorCompilationOptionsExternalTensorPatterns(
+    int* num_patterns, LiteRtGpuOptionsPayload payload);
+
+LiteRtStatus LiteRtGetGpuAcceleratorCompilationOptionsExternalTensorPattern(
+    const char** external_tensor_pattern, int pattern_index,
+    LiteRtGpuOptionsPayload payload);
 
 #ifdef __cplusplus
 }  // extern "C"

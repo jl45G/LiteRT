@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "neuron/api/NeuronAdapter.h"
 #include "absl/strings/str_cat.h"  // from @com_google_absl
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
@@ -45,20 +46,11 @@ NeuronAdapterApi::NeuronAdapterApi() : api_(new Api) {}
 
 litert::Expected<NeuronAdapterApi::Ptr> NeuronAdapterApi::Create(
     std::optional<std::string> shared_library_dir,
-    absl::optional<LiteRtOpaqueOptions> options) {
+    ::litert::Expected<litert::mediatek::MediatekOptions>& options) {
   std::unique_ptr<NeuronAdapterApi> neuron_adapter_api(new NeuronAdapterApi);
 
-  LiteRtMediatekOptionsNeronSDKVersionType sdk_version =
-      kLiteRtMediatekOptionsNeronSDKVersionTypeVersion8;
-  if (options.has_value()) {
-    ::litert::OpaqueOptions opq_opts(options.value(), ::litert::OwnHandle::kNo);
-    auto mediatek_options =
-        ::litert::FindOpaqueOptions<::litert::mediatek::MediatekOptions>(
-            opq_opts);
-    sdk_version = mediatek_options->GetNeronSDKVersionType();
-  }
-  if (auto status =
-          neuron_adapter_api->LoadSymbols(shared_library_dir, sdk_version);
+  if (auto status = neuron_adapter_api->LoadSymbols(
+          shared_library_dir, options->GetNeronSDKVersionType());
       !status) {
     LITERT_LOG(LITERT_ERROR, "Failed to load NeuronAdapter shared library: %s",
                status.Error().Message().c_str());
@@ -172,6 +164,11 @@ litert::Expected<void> NeuronAdapterApi::LoadSymbols(
   LOAD_SYMB(Neuron_getVersion, api_->get_version);
   LOAD_SYMB(NeuronModel_relaxComputationFloat32toFloat16,
             api_->relax_fp32_to_fp16);
+  LOAD_SYMB(Neuron_getL1MemorySizeKb, api_->get_l1_memory_size_kb);
+  LOAD_SYMB(NeuronCompilation_setL1MemorySizeKb,
+            api_->compilation_set_l1_memory_size_kb);
+  LOAD_SYMB(NeuronCompilation_setOptimizationHint,
+            api_->compilation_set_optimization_hint);
 
   LITERT_LOG(LITERT_INFO, "NeuronAdapter symbols loaded");
   return {};

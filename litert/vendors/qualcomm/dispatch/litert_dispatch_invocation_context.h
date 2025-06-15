@@ -19,9 +19,11 @@
 #define ODML_LITERT_LITERT_VENDORS_QUALCOMM_DISPATCH_LITERT_DISPATCH_INVOCATION_CONTEXT_H_
 
 #include <cstddef>
+#include <filesystem>
 #include <memory>
 #include <vector>
 
+#include "litert/c/litert_common.h"
 #include "litert/c/litert_model.h"
 #include "litert/c/litert_tensor_buffer_requirements.h"
 #include "litert/cc/litert_expected.h"
@@ -52,8 +54,12 @@ class LiteRtDispatchInvocationContextT {
 
   litert::Expected<void> AttachInput(
       int graph_input_index, LiteRtTensorBufferHandle tensor_buffer_handle);
-
   litert::Expected<void> AttachOutput(
+      int graph_output_index, LiteRtTensorBufferHandle tensor_buffer_handle);
+
+  litert::Expected<void> DetachInput(
+      int graph_input_index, LiteRtTensorBufferHandle tensor_buffer_handle);
+  litert::Expected<void> DetachOutput(
       int graph_output_index, LiteRtTensorBufferHandle tensor_buffer_handle);
 
   litert::Expected<void> Execute();
@@ -74,11 +80,17 @@ class LiteRtDispatchInvocationContextT {
   litert::Expected<void> AttachBuffer(
       Qnn_Tensor_t& tensor, LiteRtTensorBufferHandle tensor_buffer_handle);
 
+  litert::Expected<void> DetachBuffer(
+      Qnn_Tensor_t& tensor, LiteRtTensorBufferHandle tensor_buffer_handle);
+
   litert::Expected<void> ConvertToUint16(
       LiteRtTensorBufferHandle tensor_buffer_handle, size_t bytes);
 
   litert::Expected<void> ConvertToInt16(
       LiteRtTensorBufferHandle tensor_buffer_handle, size_t bytes);
+
+  litert::Expected<void> WriteTensorTo(
+      const std::filesystem::path& output_folder, ::qnn::TensorWrapper& tensor);
 
   litert::qnn::QnnManager& qnn_manager_;
   LiteRtDispatchDeviceContextT& device_context_;
