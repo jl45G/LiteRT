@@ -136,8 +136,6 @@ cc_library(
             "//tflite/delegates/gpu/gl:gl_buffer",
             "//tflite/delegates/gpu/gl:gl_texture",
         ],
-        "@platforms//os:ios": [":metal_memory"],
-        "@platforms//os:macos": [":metal_memory"],
         "//conditions:default": [],
     }),
 )
@@ -327,7 +325,6 @@ cc_library(
         "//litert/cc:litert_macros",
         "//litert/cc:litert_opaque_options",
         "//litert/cc:litert_tensor_buffer_utils",
-        "//litert/cc/internal:litert_event",
         "//litert/cc/internal:litert_options",
         "//litert/compiler/plugin:compiler_plugin",
         "//litert/core:buffer_error_reporter",
@@ -425,7 +422,6 @@ cc_test(
         "//litert/c:litert_event_type",
         "//litert/c:litert_gl_types",
         "//litert/c:litert_platform_support",
-        "//litert/cc:litert_event",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/core:environment",
@@ -544,6 +540,11 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "litert_darwinn_options",
+    hdrs = ["litert_darwinn_options.h"],
+)
+
 cc_test(
     name = "profiler_test",
     srcs = ["profiler_test.cc"],
@@ -627,5 +628,7 @@ objc_library(
         # "//tools/build_defs/swift:no_module",
         # copybara:uncomment_end
     ],
+    copts = ["--std=gnu++20"] + litert_metal_opts(),
+    linkopts = litert_metal_linkopts(),
     deps = [":gpu_environment_header"] + litert_metal_deps_without_gpu_environment(),
 )
