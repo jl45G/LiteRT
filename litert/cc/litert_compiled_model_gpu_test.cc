@@ -20,6 +20,7 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include "absl/container/flat_hash_map.h"  // from @com_google_absl
 #include "absl/debugging/leak_check.h"  // from @com_google_absl
 #include "absl/log/absl_log.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
@@ -29,11 +30,14 @@
 #include "litert/c/litert_event.h"
 #include "litert/c/litert_event_type.h"
 #include "litert/c/litert_profiler_event.h"
+#include "litert/c/litert_tensor_buffer.h"
 #include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_compiled_model.h"
+#include "litert/cc/litert_element_type.h"
 #include "litert/cc/litert_environment.h"
 #include "litert/cc/litert_event.h"
 #include "litert/cc/litert_expected.h"
+#include "litert/cc/litert_layout.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
 #include "litert/cc/litert_options.h"
@@ -55,6 +59,7 @@
 #include "tflite/delegates/gpu/gl/egl_environment.h"
 #endif  // LITERT_HAS_OPENGL_SUPPORT
 
+using testing::ElementsAre;
 using testing::Eq;
 using testing::FloatNear;
 using testing::Pointwise;
@@ -134,10 +139,6 @@ void BasicTest(bool no_immutable_external_tensors_mode) {
 class CompiledModelGpuTest : public ::testing::TestWithParam<bool> {};
 
 TEST_P(CompiledModelGpuTest, Basic) {
-  // MSAN does not support GPU tests.
-#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
-  GTEST_SKIP() << "GPU tests are not supported in MSAN";
-#endif
   // To workaround the memory leak in Nvidia's driver
   absl::LeakCheckDisabler disable_leak_check;
 
@@ -145,10 +146,6 @@ TEST_P(CompiledModelGpuTest, Basic) {
 }
 
 TEST_P(CompiledModelGpuTest, Basic2nd) {
-  // MSAN does not support GPU tests.
-#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
-  GTEST_SKIP() << "GPU tests are not supported in MSAN";
-#endif
   // To workaround the memory leak in Nvidia's driver
   absl::LeakCheckDisabler disable_leak_check;
 
@@ -158,10 +155,6 @@ TEST_P(CompiledModelGpuTest, Basic2nd) {
 }
 
 TEST_P(CompiledModelGpuTest, WithProfiler) {
-  // MSAN does not support GPU tests.
-#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
-  GTEST_SKIP() << "GPU tests are not supported in MSAN";
-#endif
   // To workaround the memory leak in Nvidia's driver
   absl::LeakCheckDisabler disable_leak_check;
 
@@ -237,10 +230,6 @@ TEST_P(CompiledModelGpuTest, WithProfiler) {
 }
 
 TEST_P(CompiledModelGpuTest, GpuEnvironment) {
-  // MSAN does not support GPU tests.
-#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
-  GTEST_SKIP() << "GPU tests are not supported in MSAN";
-#endif
   // To workaround the memory leak in Nvidia's driver
   absl::LeakCheckDisabler disable_leak_check;
 
@@ -283,10 +272,6 @@ TEST_P(CompiledModelGpuTest, GpuEnvironment) {
 }
 
 TEST_P(CompiledModelGpuTest, Async) {
-  // MSAN does not support GPU tests.
-#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
-  GTEST_SKIP() << "GPU tests are not supported in MSAN";
-#endif
   // To workaround the memory leak in Nvidia's driver
   absl::LeakCheckDisabler disable_leak_check;
 
@@ -366,10 +351,6 @@ TEST_P(CompiledModelGpuTest, Async) {
 }
 
 TEST_P(CompiledModelGpuTest, PartialDelegation) {
-  // MSAN does not support GPU tests.
-#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
-  GTEST_SKIP() << "GPU tests are not supported in MSAN";
-#endif
   // To workaround the memory leak in Nvidia's driver
   absl::LeakCheckDisabler disable_leak_check;
 
@@ -449,11 +430,6 @@ TEST_P(CompiledModelGpuTest, BasicAdd3dCstInt32) {
   constexpr const int32_t kInt32TestOutputTensor[] = {11, 22, 33, 44, 55, 66};
   constexpr const size_t kInt32TestInput0Size = 6;
   constexpr const size_t kInt32TestOutputSize = 6;
-
-  // MSAN does not support GPU tests.
-#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
-  GTEST_SKIP() << "GPU tests are not supported in MSAN";
-#endif
 
   LITERT_ASSERT_OK_AND_ASSIGN(
       auto model,
@@ -586,10 +562,7 @@ TEST_P(CompiledModelGpuTest, SyncWithGlClInterop) {
   if (!IsGlClInteropSupported()) {
     GTEST_SKIP() << "GPU tests are not supported in this configuration";
   }
-  // MSAN does not support GPU tests.
-#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
-  GTEST_SKIP() << "GPU tests are not supported in MSAN";
-#endif
+
   // To workaround the memory leak in Nvidia's driver
   absl::LeakCheckDisabler disable_leak_check;
 
@@ -676,10 +649,7 @@ TEST(CompiledModelGpuTest, AsyncWithGlClInterop) {
   if (!IsGlClInteropSupported()) {
     GTEST_SKIP() << "GPU tests are not supported in this configuration";
   }
-  // MSAN does not support GPU tests.
-#if defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER)
-  GTEST_SKIP() << "GPU tests are not supported in MSAN";
-#endif
+
   // To workaround the memory leak in Nvidia's driver
   absl::LeakCheckDisabler disable_leak_check;
 
@@ -765,6 +735,182 @@ TEST(CompiledModelGpuTest, AsyncWithGlClInterop) {
     }
     EXPECT_THAT(output, Pointwise(FloatNear(1e-5), kTestOutputTensor));
   }
+}
+
+// Test for constant output tensor support
+TEST(CompiledModelTest, ConstantOutputTensor) {
+  // Create Model with constant output tensor.
+  Model model = testing::LoadTestFileModel(kConstantOutputTensorModelFileName);
+  ASSERT_TRUE(model);
+
+  // Environment setup
+  LITERT_ASSERT_OK_AND_ASSIGN(Environment env, litert::Environment::Create({}));
+
+  // Create CompiledModel
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      CompiledModel compiled_model,
+      CompiledModel::Create(env, model, kLiteRtHwAcceleratorCpu));
+
+  // Get signatures
+  LITERT_ASSERT_OK_AND_ASSIGN(std::vector<Signature> signatures,
+                              model.GetSignatures());
+  ASSERT_EQ(signatures.size(), 1);
+  size_t signature_index = 0;
+
+  // Create input and output buffers
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      std::vector<TensorBuffer> input_buffers,
+      compiled_model.CreateInputBuffers(signature_index));
+  ASSERT_EQ(input_buffers.size(), 1);
+
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      std::vector<TensorBuffer> output_buffers,
+      compiled_model.CreateOutputBuffers(signature_index));
+  ASSERT_EQ(output_buffers.size(), 2);  // normal_output and constant_output
+
+  // Set input values
+  const float input_data[] = {5.0f, 10.0f};
+  ASSERT_TRUE(
+      input_buffers[0].Write<float>(absl::MakeConstSpan(input_data, 2)));
+
+  // Run the model
+  LITERT_ASSERT_OK(
+      compiled_model.Run(signature_index, input_buffers, output_buffers));
+
+  // Note: TFLite might reorder outputs - check which is which by size
+  // The constant output has 4 elements, the normal output has 2 elements
+  int constant_output_idx = -1;
+  int normal_output_idx = -1;
+
+  // Determine which output is which based on size
+  for (int i = 0; i < 2; i++) {
+    LITERT_ASSERT_OK_AND_ASSIGN(auto size, output_buffers[i].Size());
+    if (size == 4 * sizeof(float)) {
+      constant_output_idx = i;
+    } else if (size == 2 * sizeof(float)) {
+      normal_output_idx = i;
+    }
+  }
+
+  ASSERT_NE(constant_output_idx, -1) << "Could not find constant output";
+  ASSERT_NE(normal_output_idx, -1) << "Could not find normal output";
+
+  // Check normal output (should be [10.0, 20.0])
+  {
+    LITERT_ASSERT_OK_AND_ASSIGN(
+        auto lock_and_addr,
+        litert::TensorBufferScopedLock::Create<const float>(
+            output_buffers[normal_output_idx], TensorBuffer::LockMode::kRead));
+    auto output = absl::MakeSpan(lock_and_addr.second, 2);
+    EXPECT_THAT(output,
+                ElementsAre(FloatNear(10.0f, 1e-5), FloatNear(20.0f, 1e-5)));
+  }
+
+  // Check constant output (should always be [1.0, 2.0, 3.0, 4.0])
+  {
+    LITERT_ASSERT_OK_AND_ASSIGN(
+        auto lock_and_addr, litert::TensorBufferScopedLock::Create<const float>(
+                                output_buffers[constant_output_idx],
+                                TensorBuffer::LockMode::kRead));
+    auto output = absl::MakeSpan(lock_and_addr.second, 4);
+    EXPECT_THAT(output,
+                ElementsAre(FloatNear(1.0f, 1e-5), FloatNear(2.0f, 1e-5),
+                            FloatNear(3.0f, 1e-5), FloatNear(4.0f, 1e-5)));
+    ABSL_LOG(INFO) << "Constant output tensor test passed. Values: ["
+                   << output[0] << ", " << output[1] << ", " << output[2]
+                   << ", " << output[3] << "]";
+  }
+
+  // Run again with different input to verify constant output doesn't change
+  const float input_data2[] = {100.0f, 200.0f};
+  ASSERT_TRUE(
+      input_buffers[0].Write<float>(absl::MakeConstSpan(input_data2, 2)));
+  LITERT_ASSERT_OK(
+      compiled_model.Run(signature_index, input_buffers, output_buffers));
+
+  // Check normal output changed (should be [200.0, 400.0])
+  {
+    LITERT_ASSERT_OK_AND_ASSIGN(
+        auto lock_and_addr,
+        litert::TensorBufferScopedLock::Create<const float>(
+            output_buffers[normal_output_idx], TensorBuffer::LockMode::kRead));
+    auto output = absl::MakeSpan(lock_and_addr.second, 2);
+    EXPECT_THAT(output,
+                ElementsAre(FloatNear(200.0f, 1e-5), FloatNear(400.0f, 1e-5)))
+        << "Normal output should reflect new input values";
+  }
+
+  // Check that constant output is still [1.0, 2.0, 3.0, 4.0]
+  {
+    LITERT_ASSERT_OK_AND_ASSIGN(
+        auto lock_and_addr, litert::TensorBufferScopedLock::Create<const float>(
+                                output_buffers[constant_output_idx],
+                                TensorBuffer::LockMode::kRead));
+    auto output = absl::MakeSpan(lock_and_addr.second, 4);
+    EXPECT_THAT(output,
+                ElementsAre(FloatNear(1.0f, 1e-5), FloatNear(2.0f, 1e-5),
+                            FloatNear(3.0f, 1e-5), FloatNear(4.0f, 1e-5)))
+        << "Constant output should not change with different inputs";
+  }
+}
+
+TEST(CompiledModelTest, ExternalTensorBinding) {
+  // Environment setup.
+  LITERT_ASSERT_OK_AND_ASSIGN(Environment env, litert::Environment::Create({}));
+
+  // Create Model.
+  Model model = testing::LoadTestFileModel(kModelFileName);
+  ASSERT_TRUE(model);
+
+  // Create weight tensor buffer.
+  alignas(LITERT_HOST_MEMORY_BUFFER_ALIGNMENT) float kWeightTensor[] = {1.0f,
+                                                                        2.0f};
+  constexpr int kWeightSize = sizeof(kWeightTensor);
+
+  // Create Compilation options and bind weight tensor.
+  LITERT_ASSERT_OK_AND_ASSIGN(Options compilation_options, Options::Create());
+  compilation_options.SetHardwareAccelerators(kLiteRtHwAcceleratorGpu);
+  LITERT_ASSERT_OK(compilation_options.AddExternalTensorBinding(
+      /*signature_name=*/"", /*tensor_name=*/"arg1", kWeightTensor,
+      kWeightSize));
+
+  // Create CompiledModel.
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      CompiledModel compiled_model,
+      CompiledModel::Create(env, model, compilation_options));
+
+  // Create and fill input and output buffers.
+  LITERT_ASSERT_OK_AND_ASSIGN(std::vector<TensorBuffer> output_buffers,
+                              compiled_model.CreateOutputBuffers());
+  absl::flat_hash_map<absl::string_view, TensorBuffer> output_map;
+  output_map["tfl.add"] = std::move(output_buffers[0]);
+
+  absl::flat_hash_map<absl::string_view, TensorBuffer> input_map;
+  float kInputTensor[] = {1.0f, 1.0f};
+  LITERT_ASSERT_OK_AND_ASSIGN(TensorBufferRequirements requirements,
+                              compiled_model.GetInputBufferRequirements(0));
+  LITERT_ASSERT_OK_AND_ASSIGN(auto buffer_type, requirements.SupportedTypes());
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      TensorBuffer arg0_buffer,
+      TensorBuffer::CreateManaged(
+          env.Get(), buffer_type[0],
+          RankedTensorType(ElementType::Float32, Layout(Dimensions({2}))),
+          sizeof(kInputTensor)));
+  LITERT_ASSERT_OK(
+      arg0_buffer.Write<float>(absl::MakeConstSpan(kInputTensor, 2)));
+  input_map["arg0"] = std::move(arg0_buffer);
+
+  // Execute model with input and output buffers.
+  LITERT_ASSERT_OK(compiled_model.Run(input_map, output_map));
+
+  // Check model output.
+  LITERT_ASSERT_OK_AND_ASSIGN(
+      auto lock_and_addr,
+      litert::TensorBufferScopedLock::Create<const float>(
+          output_map["tfl.add"], TensorBuffer::LockMode::kRead));
+  auto output = absl::MakeSpan(lock_and_addr.second, 2);
+  constexpr float kExpectedOutput[] = {2.0f, 3.0f};
+  EXPECT_THAT(output, Pointwise(FloatNear(1e-5), kExpectedOutput));
 }
 
 INSTANTIATE_TEST_SUITE_P(CompiledModelGpuTest, CompiledModelGpuTest,

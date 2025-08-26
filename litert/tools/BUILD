@@ -107,10 +107,11 @@ litert_bin(
         "nosan",
     ],
     target_compatible_with = select({
-        "@org_tensorflow//tensorflow:android": ["@platforms//:incompatible"],
-        "//conditions:default": [],
+        "@platforms//os:linux": [],
+        "//conditions:default": ["@platforms//:incompatible"],
     }),
     ungrte = True,
+    visibility = ["//litert:litert_public"],
     deps = [
         ":apply_plugin",
         ":outstream",
@@ -299,6 +300,7 @@ cc_library(
         "//tflite/tools:utils",
         "//tflite/tools/benchmark:benchmark_model_lib",
         "//tflite/tools/benchmark:benchmark_params",
+        "//tflite/tools/benchmark/proto:benchmark_result_cc",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
     ],
@@ -519,5 +521,25 @@ litert_device_test(
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_binary(
+    name = "extract_bytecode",
+    srcs = ["extract_bytecode.cc"],
+    deps = [
+        ":tool_display",
+        "//litert/c:litert_common",
+        "//litert/c:litert_op_code",
+        "//litert/cc:litert_buffer_ref",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
+        "//litert/cc:litert_model",
+        "//litert/core:dispatch_op_schema",
+        "//litert/core/model",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )

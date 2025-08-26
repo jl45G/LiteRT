@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #import "third_party/odml/litert/litert/c/litert_tensor_buffer.h"
+#import <Metal/Metal.h>
 #import <XCTest/XCTest.h>
 #import <XCTest/XCTestAssertions.h>
 #include "litert/c/litert_any.h"
@@ -23,7 +24,6 @@
 #include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_any.h"
 #include "litert/cc/litert_layout.h"
-#include "litert/runtime/metal_memory.h"
 
 @interface LitertTensorBufferTest : XCTestCase
 @end
@@ -38,17 +38,26 @@ constexpr const LiteRtRankedTensorType kTensorType = {
     /*.element_type=*/kLiteRtElementTypeFloat32, ::litert::BuildLayout(kTensorDimensions)};
 
 - (void)testMetalBuffer {
-  XCTAssertTrue(litert::internal::MetalMemory::IsSupported());
-
   id<MTLDevice> device = MTLCreateSystemDefaultDevice();
   const void* kTestPtr = (__bridge void*)(device);
 
+  id<MTLCommandQueue> commandQueue = [device newCommandQueue];
+  const void* kCommandQueuePtr = (__bridge void*)(commandQueue);
+
   auto status = litert::ToLiteRtAny(std::any(kTestPtr));
   auto null_deivce_id = &status;
-  const std::array<LiteRtEnvOption, 1> environment_options = {
+
+  auto command_queue_status = litert::ToLiteRtAny(std::any(kCommandQueuePtr));
+  auto null_command_queue_id = &command_queue_status;
+
+  const std::array<LiteRtEnvOption, 2> environment_options = {
       LiteRtEnvOption{
           /*.tag=*/kLiteRtEnvOptionTagMetalDevice,
           /*.value=*/null_deivce_id->Value(),
+      },
+      LiteRtEnvOption{
+          /*.tag=*/kLiteRtEnvOptionTagMetalCommandQueue,
+          /*.value=*/null_command_queue_id->Value(),
       },
   };
   LiteRtEnvironment env;

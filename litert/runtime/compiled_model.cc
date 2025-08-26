@@ -37,7 +37,7 @@
 #include "absl/strings/str_format.h"  // from @com_google_absl
 #include "absl/strings/string_view.h"  // from @com_google_absl
 #include "absl/types/span.h"  // from @com_google_absl
-#include "litert/c/litert_accelerator.h"
+#include "litert/c/internal/litert_accelerator.h"
 #include "litert/c/litert_common.h"
 #include "litert/c/litert_logging.h"
 #include "litert/c/litert_options.h"
@@ -46,7 +46,6 @@
 #include "litert/c/litert_tensor_buffer_requirements.h"
 #include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_buffer_ref.h"
-#include "litert/cc/litert_event.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_handle.h"
 #include "litert/cc/litert_macros.h"
@@ -72,7 +71,7 @@
 #include "litert/runtime/tensor_buffer_requirements.h"
 #include "litert/runtime/tensor_identifier.h"
 #include "litert/runtime/tfl_utils.h"
-#include "tensorflow/compiler/mlir/lite/allocation.h"
+#include "tflite/converter/allocation.h"
 #include "tflite/builtin_ops.h"
 #include "tflite/c/common.h"
 #include "tflite/core/api/profiler.h"
@@ -80,8 +79,14 @@
 #include "tflite/delegates/utils/simple_opaque_delegate.h"
 #include "tflite/interpreter.h"
 #include "tflite/interpreter_options.h"
+#ifndef LITERT_NO_BUILTIN_OPS
 #include "tflite/kernels/register.h"
+#endif  // LITERT_NO_BUILTIN_OPS
 #include "tflite/model_builder.h"
+
+#ifdef LITERT_NO_BUILTIN_OPS
+#include "litert/runtime/stub_op_resolver.h"
+#endif  // LITERT_NO_BUILTIN_OPS
 
 using ::litert::Error;
 using ::litert::Expected;
@@ -93,7 +98,15 @@ using ::litert::internal::TfLiteTensorIdentifier;
 
 Expected<void> LiteRtCompiledModelT::InitializeRuntime(
     LiteRtEnvironmentT* env, LiteRtOptions jit_compilation_options) {
+#ifdef LITERT_NO_BUILTIN_OPS
+  // Use StubOpResolver which provides minimal stub implementations for all
+  // builtin ops. These stubs allow the model to pass validation, but the
+  // actual operations will be handled by LiteRT's accelerator system
+  // (NPU > GPU > CPU) through their respective delegates.
+  litert::internal::StubOpResolver resolver;
+#else
   tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates resolver;
+#endif  // LITERT_NO_BUILTIN_OPS
 
   // Apply custom ops.
   if (jit_compilation_options) {
@@ -153,6 +166,24 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
                       "Failed to build TFL interpreter");
   }
   interp_->SetNumThreads(num_threads);
+
+  if (jit_compilation_options) {
+    const auto& bindings =
+        reinterpret_cast<LiteRtOptionsT*>(jit_compilation_options)
+            ->external_tensor_bindings;
+    for (const auto& binding : bindings) {
+      if (litert::internal::SetCustomAllocationForInputTensor(
+              interp_.get(), binding) != kTfLiteOk) {
+        ReportError("Failed to set custom allocation for tensor: %s",
+                    binding.tensor_name.c_str());
+        return litert::Unexpected(
+            kLiteRtStatusErrorInvalidArgument,
+            absl::StrFormat("Failed to apply external tensor binding for "
+                            "signature %s, tensor %s.",
+                            binding.signature_name, binding.tensor_name));
+      }
+    }
+  }
 
   if (profiler_ != nullptr) {
     interp_->SetProfiler(profiler_);
@@ -590,6 +621,34 @@ Expected<void> LiteRtCompiledModelT::RegisterBuffer(
           return Unexpected(kLiteRtStatusErrorRuntimeFailure,
                             "Failed to register tensor buffer");
         }
+
+        // TODO(b/439926974): Move this to LiteRtCompiledModelT::Run()
+        // Handle constant output tensors for hardware backends (GPU/NPU)
+        if (!is_input && tensor->allocation_type == kTfLiteMmapRo &&
+            tensor->data.raw != nullptr) {
+          const void* const_data_ptr = tensor->data.raw;
+          size_t const_data_size = tensor->bytes;
+
+          LITERT_LOG(LITERT_INFO,
+                     "Uploading constant output tensor %s data to hardware "
+                     "buffer (type=%d)",
+                     tensor_name ? tensor_name : "<unnamed>",
+                     buffer->buffer_type());
+
+          void* buffer_ptr = nullptr;
+          if (auto status = LiteRtLockTensorBuffer(
+                  buffer, &buffer_ptr, kLiteRtTensorBufferLockModeWrite);
+              status == kLiteRtStatusOk) {
+            memcpy(buffer_ptr, const_data_ptr, const_data_size);
+            LiteRtUnlockTensorBuffer(buffer);
+          } else {
+            LITERT_LOG(LITERT_WARNING,
+                       "Failed to lock hardware buffer for constant tensor %s, "
+                       "status=%d",
+                       tensor_name ? tensor_name : "<unnamed>", status);
+          }
+        }
+
         // Mark the tensor as non-CPU to avoid TFLite from allocating it.
         tensor->allocation_type = kTfLiteNonCpu;
         tensor->data.data = nullptr;
@@ -646,9 +705,26 @@ Expected<void> LiteRtCompiledModelT::RegisterBuffer(
         LITERT_RETURN_IF_ERROR(LiteRtUnlockTensorBuffer(buffer));
       } else {
         locked_buffers.push_back(buffer);
-        runner->SetCustomAllocationForOutputTensor(tensor_name,
-                                                   custom_allocation,
-                                                   /*flags=*/0);
+        if (tensor->allocation_type == kTfLiteMmapRo) {
+          if (tensor->data.raw != nullptr) {
+            // This is a constant output tensor - copy data to CPU buffer
+            const void* const_data_ptr = tensor->data.raw;
+            size_t const_data_size = tensor->bytes;
+
+            LITERT_LOG(LITERT_INFO,
+                       "Uploading constant output tensor %s data to CPU buffer",
+                       tensor_name ? tensor_name : "<unnamed>");
+            memcpy(host_mem_addr, const_data_ptr, const_data_size);
+          } else {
+            return Unexpected(kLiteRtStatusErrorInvalidArgument,
+                              "Constant output tensor has null data pointer");
+          }
+        } else {  // tensor->allocation_type != kTfLiteMmapRo
+          // Normal output tensor - set custom allocation
+          runner->SetCustomAllocationForOutputTensor(tensor_name,
+                                                     custom_allocation,
+                                                     /*flags=*/0);
+        }
       }
       return {};
     }
@@ -673,8 +749,23 @@ Expected<void> LiteRtCompiledModelT::RegisterBuffer(
       runner->SetCustomAllocationForInputTensor(tensor_name, custom_allocation,
                                                 /*flags=*/0);
     } else {
-      runner->SetCustomAllocationForOutputTensor(tensor_name, custom_allocation,
-                                                 /*flags=*/0);
+      if (tensor->allocation_type == kTfLiteMmapRo &&
+          tensor->data.raw != nullptr) {
+        // This is a constant output tensor - copy data to CPU buffer
+        const void* const_data_ptr = tensor->data.raw;
+        size_t const_data_size = tensor->bytes;
+
+        LITERT_LOG(
+            LITERT_INFO,
+            "Uploading constant output tensor %s data to shared CPU buffer",
+            tensor_name ? tensor_name : "<unnamed>");
+        memcpy(host_mem_addr, const_data_ptr, const_data_size);
+      } else if (tensor->allocation_type != kTfLiteMmapRo) {
+        // Normal output tensor - set custom allocation
+        runner->SetCustomAllocationForOutputTensor(tensor_name,
+                                                   custom_allocation,
+                                                   /*flags=*/0);
+      }
     }
     return {};
   }
@@ -701,8 +792,11 @@ Expected<void> LiteRtCompiledModelT::Run(
   }
   size_t num_inputs = input_buffers.size();
   if (num_inputs != runner->subgraph_input_names().size()) {
-    return Unexpected(kLiteRtStatusErrorRuntimeFailure,
-                      "Input buffer size mismatch");
+    std::string error_message = absl::StrCat(
+        "Input buffer size mismatch: number of inputs:",
+        runner->subgraph_input_names().size(), " vs buffers:", num_inputs);
+
+    return Unexpected(kLiteRtStatusErrorRuntimeFailure, error_message);
   }
   size_t num_outputs = output_buffers.size();
   if (num_outputs != runner->subgraph_output_names().size()) {
@@ -734,6 +828,11 @@ Expected<void> LiteRtCompiledModelT::Run(
   for (int i = 0; i < num_inputs; ++i) {
     const auto& input_name = runner->subgraph_input_names()[i];
     auto* input_tensor = runner->input_tensor(input_name);
+    if (input_buffers[i] == nullptr) {
+      // skip if the input buffer is set to nullptr, indicating the input has
+      // been bound to an external buffer.
+      continue;
+    }
     auto res =
         RegisterBuffer(runner, input_tensor, input_name, input_buffers[i],
                        /*is_input=*/true, locked_buffers);
@@ -796,12 +895,8 @@ Expected<void> LiteRtCompiledModelT::Run(
     // synchronization events that have been attached to the outputs.
     for (auto& tb : output_buffers) {
       if (tb->HasEvent()) {
-        auto event = tb->GetEvent();
-        if (auto status = litert::Event(*event, litert::OwnHandle::kNo)
-                              .Wait(/*timeout_in_ms=*/-1);
-            !status) {
-          return status;
-        }
+        LITERT_ASSIGN_OR_RETURN(LiteRtEventT * event, tb->GetEvent());
+        LITERT_RETURN_IF_ERROR(event->Wait(/*timeout_in_ms=*/-1));
       }
     }
   }
@@ -1076,4 +1171,3 @@ Expected<std::string> LiteRtCompiledModelT::GetErrorMessages() {
 
   return buffer_reporter->message();
 }
-
