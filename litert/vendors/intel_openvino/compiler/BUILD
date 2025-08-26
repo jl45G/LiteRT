@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib", "litert_lib", "litert_test")
+load("//litert/build_common:litert_build_defs.bzl", "litert_bin", "litert_dynamic_lib", "litert_lib", "litert_test")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
@@ -26,29 +26,67 @@ litert_dynamic_lib(
     hdrs = [
         "//litert/vendors/c:litert_compiler_plugin.h",
     ],
+    copts = select({
+        "//litert/runtime/dispatch:windows_msvc": [
+            "/DLITERT_COMPILE_LIBRARY",
+            "/wd4018",  # -Wno-sign-compare
+        ],
+        "//litert/runtime/dispatch:windows_lexan": [
+            "-DLITERT_COMPILE_LIBRARY",
+            "-Wno-sign-compare",
+        ],
+        "//conditions:default": [],
+    }),
     export_litert_only = True,
     shared_lib_name = "intel_openvino_compiler_plugin_so",
     so_name = "libLiteRtCompilerPlugin_IntelOpenvino.so",
-    tags = [
-        "nobuilder",
-        "notap",
-    ],
     ungrte = True,
     visibility = ["//litert:__subpackages__"],
     deps = [
         ":graph_iterator",
-        "//litert/c:litert_common",
-        "//litert/c:litert_dispatch_headers",
-        "//litert/c:litert_environment_options",
-        "//litert/c:litert_model",
-        "//litert/c:litert_op_code",
-        "//litert/c:litert_op_options",
-        "//litert/c:litert_options",
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
         "@com_google_absl//absl/strings",
         "@intel_openvino//:openvino",
+    ],
+)
+
+litert_bin(
+    name = "LiteRtCompilerPlugin",
+    srcs = ["openvino_compiler_plugin.cc"],
+    copts = select({
+        "//litert/runtime/dispatch:windows_msvc": [
+            "/DLITERT_COMPILE_LIBRARY",
+            "/wd4018",  # -Wno-sign-compare
+        ],
+        "//litert/runtime/dispatch:windows_lexan": [
+            "-DLITERT_COMPILE_LIBRARY",
+            "-Wno-sign-compare",
+        ],
+        "//conditions:default": [],
+    }),
+    linkshared = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":graph_iterator",
+        ":litert_compiler_plugin_c_api",
+        "//litert/c:litert_runtime_c_api_shared_lib",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
+        "//litert/cc:litert_model",
+        "@intel_openvino//:openvino",
+    ],
+)
+
+litert_lib(
+    name = "litert_compiler_plugin_c_api",
+    hdrs = [
+        "//litert/vendors/c:litert_compiler_plugin.h",
+    ],
+    deps = [
+        "//litert/c:litert_runtime_c_api_shared_lib",
     ],
 )
 
@@ -58,15 +96,12 @@ litert_lib(
     hdrs = [
         "graph_iterator.h",
     ],
-    tags = [
-        "nobuilder",
-        "notap",
+    copts = [
+        "-Wno-unused-variable",
     ],
     deps = [
         ":decoder",
-        "//litert/c:litert_logging",
-        "//litert/c:litert_model",
-        "//litert/c:litert_op_code",
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_element_type",
         "//litert/cc:litert_model",
         "//litert/vendors/intel_openvino:ov_utils",
@@ -78,19 +113,8 @@ litert_lib(
     name = "decoder",
     srcs = ["decoder.cc"],
     hdrs = ["decoder.h"],
-    tags = [
-        "nobuilder",
-        "notap",
-    ],
     deps = [
-        "//litert/c:litert_common",
-        "//litert/c:litert_dispatch_headers",
-        "//litert/c:litert_environment_options",
-        "//litert/c:litert_logging",
-        "//litert/c:litert_model",
-        "//litert/c:litert_op_code",
-        "//litert/c:litert_op_options",
-        "//litert/c:litert_options",
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
@@ -115,6 +139,8 @@ litert_test(
     ],
     deps = [
         ":decoder",
+        "//litert/c:litert_runtime_c_api_shared_lib",
+        "//litert/cc:litert_model",
         "//litert/test:common",
         "//litert/test:matchers_oss",
         "//litert/test:test_models",
@@ -144,15 +170,14 @@ litert_test(
     target_compatible_with = select({
         "@platforms//os:android": [],
         "@platforms//os:linux": [],
+        "@platforms//os:windows": [],
         "//conditions:default": ["@platforms//:incompatible"],
     }),
     ungrte = True,
     use_sys_malloc = True,
     deps = [
         ":openvino_compiler_plugin",  # buildcleaner: keep
-        "//litert/c:litert_common",
-        "//litert/c:litert_logging",
-        "//litert/c:litert_op_code",
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",

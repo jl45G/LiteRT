@@ -136,10 +136,8 @@ cc_library(
             "//tflite/delegates/gpu/gl:gl_buffer",
             "//tflite/delegates/gpu/gl:gl_texture",
         ],
-        "@platforms//os:ios": [":metal_memory"],
-        "@platforms//os:macos": [":metal_memory"],
         "//conditions:default": [],
-    }),
+    }) + litert_metal_deps(),
 )
 
 cc_library(
@@ -155,15 +153,15 @@ cc_library(
         "tensor_buffer_registry.h",
         "//litert/c:litert_custom_tensor_buffer.h",
     ],
-    visibility = [
-        "//litert/c:__subpackages__",
-    ],
+    visibility = ["//litert/c:__subpackages__"],
     deps = [
         "//litert/c:litert_common",
+        "//litert/c:litert_logging",
         "//litert/c:litert_model",
         "//litert/c:litert_tensor_buffer_types",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_tensor_buffer_utils",
+        "@com_google_absl//absl/debugging:leak_check",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -207,10 +205,12 @@ GPU_ENVIRONMENT_DEPS = [
 
 cc_library(
     name = "gpu_environment_header",
-    hdrs = ["gpu_environment.h"],
+    hdrs = [
+        "gpu_environment.h",
+    ],
     copts = litert_metal_opts(),
     linkopts = litert_metal_linkopts(),
-    deps = GPU_ENVIRONMENT_DEPS + litert_metal_deps_without_gpu_environment(),
+    deps = GPU_ENVIRONMENT_DEPS + litert_metal_deps(),
 )
 
 cc_library(
@@ -255,17 +255,17 @@ cc_library(
         ":tensor_identifier",
         "//litert/c:litert_common",
         "//litert/c:litert_layout",
+        "//litert/c:litert_logging",
         "//litert/cc:litert_element_type",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_layout",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_model",
+        "//litert/core:options",
         "//tflite:framework_stable",
-        "//tflite/c:c_api",
         "//tflite/c:c_api_opaque",
         "//tflite/c:c_api_types",
         "//tflite/c:common",
-        "//tflite/core:private_cc_api_stable",
         "@com_google_absl//absl/strings:str_format",
     ],
 )
@@ -301,8 +301,14 @@ cc_library(
 cc_library(
     name = "compiled_model",
     srcs = ["compiled_model.cc"],
-    hdrs = ["compiled_model.h"],
-    copts = litert_metal_opts(),
+    hdrs = [
+        "compiled_model.h",
+        "stub_op_resolver.h",
+    ],
+    copts = litert_metal_opts() + select({
+        "//litert:without_builtin_ops": ["-DLITERT_NO_BUILTIN_OPS"],
+        "//conditions:default": [],
+    }),
     linkopts = litert_metal_linkopts(),
     deps = [
         ":accelerator",
@@ -315,19 +321,18 @@ cc_library(
         ":tensor_buffer",
         ":tensor_identifier",
         ":tfl_utils",
-        "//litert/c:litert_accelerator",
         "//litert/c:litert_common",
         "//litert/c:litert_logging",
         "//litert/c:litert_profiler_event",
         "//litert/c:litert_tensor_buffer",
         "//litert/c:litert_tensor_buffer_types",
+        "//litert/c/internal:litert_accelerator",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_handle",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_opaque_options",
         "//litert/cc:litert_tensor_buffer_utils",
-        "//litert/cc/internal:litert_event",
         "//litert/cc/internal:litert_options",
         "//litert/compiler/plugin:compiler_plugin",
         "//litert/core:buffer_error_reporter",
@@ -342,13 +347,15 @@ cc_library(
         "//tflite:builtin_ops",
         "//tflite:framework",
         "//tflite:model_builder",
+        "//tflite:mutable_op_resolver",
         "//tflite/c:c_api_opaque",
         "//tflite/c:c_api_types_opaque_delegate",
         "//tflite/c:common",
+        "//tflite/converter:allocation",
         "//tflite/core:private_cc_api_stable",
         "//tflite/core/api",
         "//tflite/delegates/utils:simple_opaque_delegate",
-        "//tflite/kernels:builtin_ops",
+        "//tflite/schema:schema_fbs",
         "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -357,8 +364,10 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
-        "@org_tensorflow//tensorflow/compiler/mlir/lite:allocation",
-    ],
+    ] + select({
+        "//litert:without_builtin_ops": [],
+        "//conditions:default": ["//tflite/kernels:builtin_ops"],
+    }),
 )
 
 cc_test(
@@ -375,18 +384,18 @@ cc_test(
     tags = ["requires-gpu-nvidia"],
     deps = [
         ":compiled_model",
-        ":litert_runtime_options",
         ":tensor_buffer",
-        ":tfl_utils",
         "//litert/c:litert_common",
         "//litert/c:litert_environment",
-        "//litert/c:litert_options",
         "//litert/c:litert_profiler",
         "//litert/c:litert_tensor_buffer",
         "//litert/c:litert_tensor_buffer_types",
+        "//litert/cc:litert_element_type",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_handle",
+        "//litert/cc:litert_layout",
         "//litert/cc:litert_macros",
+        "//litert/cc:litert_model",
         "//litert/cc/internal:litert_tensor_buffer",
         "//litert/cc/options:litert_runtime_options",
         "//litert/core:options",
@@ -425,7 +434,6 @@ cc_test(
         "//litert/c:litert_event_type",
         "//litert/c:litert_gl_types",
         "//litert/c:litert_platform_support",
-        "//litert/cc:litert_event",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_macros",
         "//litert/core:environment",
@@ -533,7 +541,7 @@ cc_library(
     name = "litert_gpu_util",
     hdrs = ["litert_gpu_util.h"],
     deps = [
-        "//litert/c:litert_dispatch_headers",
+        "//litert/c:litert_model",
         "//litert/c:litert_model_types",
         "//litert/c:litert_tensor_buffer_types",
         "//tflite/delegates/gpu/common:data_type",
@@ -542,6 +550,11 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
     ],
+)
+
+cc_library(
+    name = "litert_darwinn_options",
+    hdrs = ["litert_darwinn_options.h"],
 )
 
 cc_test(
@@ -557,75 +570,19 @@ cc_test(
     ],
 )
 
-objc_library(
-    name = "metal_memory",
-    srcs = ["metal_memory.mm"],
-    hdrs = [
-        "metal_memory.h",
-        "tensor_buffer_lockstate.h",
-    ],
-    aspect_hints = [
-        # copybara:uncomment_begin (google-only)
-        # "//tools/build_defs/swift:no_module",
-        # copybara:uncomment_end
-    ],
-    copts = ["--std=gnu++20"] + litert_metal_opts(),
+cc_library(
+    name = "metal_info",
+    srcs = select({
+        "@platforms//os:ios": ["metal_info.cc"],
+        "@platforms//os:macos": ["metal_info.cc"],
+        "//conditions:default": [],
+    }),
+    hdrs = ["metal_info.h"],
+    copts = litert_metal_opts(),
     linkopts = litert_metal_linkopts(),
     deps = [
-        ":gpu_environment",
-        ":metal_sync",
         "//litert/c:litert_common",
-        "//litert/c:litert_dispatch_headers",
-        "//litert/cc:litert_expected",
-        "//litert/cc:litert_macros",
-        "//litert/core/util:tensor_type_util",
-        "//tflite/delegates/gpu/metal:buffer",
-        "//tflite/delegates/gpu/metal:common",
-        "//tflite/delegates/gpu/metal:gpu_object",
-        "@com_google_absl//absl/cleanup",
-        "@com_google_absl//absl/synchronization",
-    ] + litert_metal_deps(),
+        "@com_google_absl//absl/log:absl_log",
+    ] + litert_metal_deps_without_gpu_environment(),
     alwayslink = True,
-)
-
-objc_library(
-    name = "metal_sync",
-    srcs = ["metal_sync.mm"],
-    hdrs = [
-        "litert_gpu_util.h",
-        "metal_sync.h",
-    ],
-    aspect_hints = [
-        # copybara:uncomment_begin (google-only)
-        # "//tools/build_defs/swift:no_module",
-        # copybara:uncomment_end
-    ],
-    copts = ["--std=gnu++20"] + litert_metal_opts(),
-    linkopts = litert_metal_linkopts(),
-    deps = [
-        ":gpu_environment",
-        "//litert/c:litert_common",
-        "//litert/c:litert_dispatch_headers",
-        "//litert/cc:litert_macros",
-        "//tflite/delegates/gpu/common:data_type",
-        "//tflite/delegates/gpu/common:shape",
-        "//tflite/delegates/gpu/common:tensor",
-        "//tflite/delegates/gpu/common/task:tensor_desc",
-        "//tflite/delegates/gpu/metal:metal_spatial_tensor",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-    ] + litert_metal_deps(),
-)
-
-objc_library(
-    name = "gpu_environment_metal",
-    srcs = ["gpu_environment_metal.mm"],
-    aspect_hints = [
-        # copybara:uncomment_begin (google-only)
-        # "//tools/build_defs/swift:no_module",
-        # copybara:uncomment_end
-    ],
-    deps = [":gpu_environment_header"] + litert_metal_deps_without_gpu_environment(),
 )

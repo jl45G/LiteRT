@@ -29,6 +29,7 @@
 #include "litert/c/litert_compiled_model.h"
 #include "litert/c/litert_metrics.h"
 #include "litert/c/litert_tensor_buffer.h"
+#include "litert/c/litert_tensor_buffer_types.h"
 #include "litert/cc/litert_expected.h"
 #include "litert/cc/litert_macros.h"
 #include "litert/cc/litert_model.h"
@@ -101,7 +102,6 @@ Expected<TensorBuffer> CompiledModel::CreateInputOutputBuffer(
                           buffer_requirements_expected);
   LITERT_ASSIGN_OR_RETURN(const RankedTensorType& tensor_type,
                           tensor.RankedTensorType());
-
   return CreateBufferImpl(env_, buffer_requirements, tensor_type);
 }
 
@@ -120,7 +120,7 @@ Expected<std::vector<TensorBuffer>> CompiledModel::CreateInputOutputBuffers(
   for (int i = 0; i < tensor_names.size(); ++i) {
     LITERT_ASSIGN_OR_RETURN(
         TensorBuffer tensor_buffer,
-        CreateInputOutputBuffer(signature.Key(), tensor_names[i], is_input));
+        CreateInputOutputBuffer(signature_index, tensor_names[i], is_input));
     tensor_buffers.push_back(std::move(tensor_buffer));
   }
 
@@ -193,9 +193,10 @@ Expected<void> CompiledModel::RunMapWithIndexHelper(
   for (int i = 0; i < num_inputs; ++i) {
     absl::string_view input_name = input_tensors[i].Name();
     auto it = input_map.find(input_name);
+    // if the input is not provided in the input map, we set it to nullptr.
     if (it == input_map.end()) {
-      return Unexpected(kLiteRtStatusErrorNotFound,
-                        "The given map is missing some input TensorBuffers");
+      input_buffers_ptr[i] = nullptr;
+      continue;
     }
     input_buffers_ptr[i] = it->second.Get();
   }
@@ -245,8 +246,8 @@ Expected<CompiledModel::Metrics> CompiledModel::StopMetricsCollection() {
 
 Expected<bool> CompiledModel::IsFullyAccelerated() {
   bool fully_accelerated = false;
-  LITERT_RETURN_IF_ERROR(LiteRtCompiledModelIsFullyAccelerated(
-      Get(), &fully_accelerated));
+  LITERT_RETURN_IF_ERROR(
+      LiteRtCompiledModelIsFullyAccelerated(Get(), &fully_accelerated));
   return fully_accelerated;
 }
 

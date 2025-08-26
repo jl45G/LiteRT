@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//litert/build_common:litert_build_defs.bzl", "litert_dynamic_lib")
+load("//litert/build_common:litert_build_defs.bzl", "litert_bin", "litert_dynamic_lib", "litert_lib")
 
 package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
@@ -38,7 +38,17 @@ litert_dynamic_lib(
         "-fno-asynchronous-unwind-tables",
         "-ffunction-sections",
         "-fdata-sections",
-    ],
+    ] + select({
+        "//litert/runtime/dispatch:windows_msvc": [
+            "/DLITERT_COMPILE_LIBRARY",
+            "/wd4018",  # -Wno-sign-compare
+        ],
+        "//litert/runtime/dispatch:windows_lexan": [
+            "-DLITERT_COMPILE_LIBRARY",
+            "-Wno-sign-compare",
+        ],
+        "//conditions:default": [],
+    }),
     export_litert_only = True,
     linkopts = select({
         "@org_tensorflow//tensorflow:android": ["-landroid"],
@@ -49,21 +59,65 @@ litert_dynamic_lib(
     ],
     shared_lib_name = "dispatch_api_so",
     so_name = "libLiteRtDispatch_IntelOpenvino.so",
-    tags = [
-        "nobuilder",
-        "notap",
-    ],
     visibility = ["//litert:__subpackages__"],
     deps = [
-        "//litert/c:litert_common",
-        "//litert/c:litert_dispatch_headers",
-        "//litert/c:litert_environment_options",
-        "//litert/c:litert_logging",
-        "//litert/c:litert_model",
-        "//litert/c:litert_op_code",
-        "//litert/c:litert_op_options",
-        "//litert/c:litert_options",
-        "//litert/c:litert_tensor_buffer",
+        "//litert/c:litert_runtime_c_api_shared_lib",
+        "//litert/cc:litert_element_type",
+        "//litert/cc:litert_environment_options",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_macros",
+        "//litert/cc:litert_model",
+        "//litert/core/util:tensor_type_util",
+        "//litert/vendors/c:litert_dispatch_c_api",
+        "//litert/vendors/intel_openvino:ov_utils",
+        "@com_google_absl//absl/cleanup",
+        "@intel_openvino//:openvino",
+    ],
+)
+
+litert_bin(
+    name = "LiteRtDispatch",
+    srcs = [
+        "device_context.cc",
+        "dispatch_api.cc",
+        "invocation_context.cc",
+    ],
+    copts = select({
+        "//litert/runtime/dispatch:windows_msvc": [
+            "/DLITERT_COMPILE_LIBRARY",
+            "/wd4018",  # -Wno-sign-compare
+        ],
+        "//litert/runtime/dispatch:windows_lexan": [
+            "-DLITERT_COMPILE_LIBRARY",
+            "-Wno-sign-compare",
+        ],
+        "//conditions:default": [],
+    }),
+    linkshared = 1,
+    visibility = ["//litert:__subpackages__"],
+    deps = [
+        ":litert_dispatch_api",
+        "//litert/c:litert_runtime_c_api_shared_lib",
+        "//litert/cc:litert_element_type",
+        "//litert/cc:litert_environment_options",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_model",
+        "//litert/core/util:tensor_type_util",
+        "//litert/vendors/c:litert_dispatch_c_api",
+        "//litert/vendors/intel_openvino:ov_utils",
+        "@com_google_absl//absl/cleanup",
+        "@intel_openvino//:openvino",
+    ],
+)
+
+litert_lib(
+    name = "litert_dispatch_api",
+    hdrs = [
+        "device_context.h",
+        "invocation_context.h",
+    ],
+    deps = [
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_element_type",
         "//litert/cc:litert_environment_options",
         "//litert/cc:litert_expected",
@@ -100,11 +154,11 @@ cc_test(
     ],
     deps = [
         ":dispatch_api",
-        "//litert/c:litert_common",
-        "//litert/c:litert_tensor_buffer",
+        "//litert/c:litert_runtime_c_api_shared_lib",
         "//litert/cc:litert_any",
-        "//litert/cc:litert_dispatch_delegate",
         "//litert/cc:litert_environment",
+        "//litert/cc:litert_expected",
+        "//litert/cc:litert_options",
         "//litert/core:filesystem_testonly",
         "//litert/test:common",
         "//litert/test:matchers",

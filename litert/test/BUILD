@@ -33,7 +33,11 @@ package(
 symlink_files(
     name = "mlir_test_data",
     srcs = ["@models"],
-    declared_outputs = [f.replace(".mlir", ".tflite") for f in glob(["testdata/*.mlir"])],
+    declared_outputs = [
+        f.replace(".mlir", ".tflite")
+        for f in glob(["testdata/*.mlir"])
+        if not glob([f.replace(".mlir", ".tflite")])
+    ],
     dst = "testdata",
     flatten = True,
 )
@@ -262,7 +266,7 @@ cc_library(
     name = "simple_buffer",
     hdrs = ["simple_buffer.h"],
     deps = [
-        "//litert/c:litert_dispatch_headers",
+        "//litert/c:litert_tensor_buffer",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_environment",
         "//litert/cc:litert_expected",
@@ -292,7 +296,9 @@ cc_test(
 )
 
 exports_files(srcs = [
+    "testdata/constant_output_tensor.tflite",
     "testdata/mobilenet_v2_1.0_224.tflite",
+    "testdata/model_with_external_weights.tflite",
     "testdata/shared_input_cpu_npu_google_tensor_precompiled.tflite",
     "testdata/simple_add_op_google_tensor_p25_precompiled.tflite",
     "testdata/simple_add_op_qc_v75_precompiled.tflite",

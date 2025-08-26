@@ -18,7 +18,7 @@ load("//litert/build_common:special_rule.bzl", "gles_deps", "gles_headers", "gle
 # copybara:uncomment load("//tools/build_defs/apple:ios.bzl", "ios_unit_test")
 # copybara:uncomment load("//tools/build_defs/apple:macos.bzl", "macos_unit_test")
 
-# copybara:uncomment LITERT_MIN_IOS_VERSION = "13.0"
+# copybara:uncomment LITERT_MIN_IOS_VERSION = "14.0"
 
 # copybara:uncomment LITERT_MIN_MACOS_VERSION = "14.0"
 
@@ -26,7 +26,7 @@ package(
     # copybara:uncomment default_applicable_licenses = ["@org_tensorflow//tensorflow:license"],
     default_visibility = [
         # copybara:uncomment_begin(oss litert_lm)
-        # "//litert:litert_public",
+        # "//litert:litert_c_users",
         # copybara:uncomment_end_and_comment_begin
         "//visibility:public",
         # copybara:comment_end
@@ -244,8 +244,8 @@ cc_library(
         "//litert/cc:litert_macros",
         "//litert/core/model",
         "//tflite/c:c_api_types",
+        "//tflite/converter/core:model_builder_base",
         "//tflite/schema:schema_fbs",
-        "@org_tensorflow//tensorflow/compiler/mlir/lite/core:model_builder_base",
     ],
 )
 
@@ -326,15 +326,7 @@ cc_library(
         "//litert/runtime:tensor_buffer",
         "@com_google_absl//absl/types:span",
         "@opencl_headers",
-    ] + gles_deps() + select({
-        "@platforms//os:ios": [
-            "//litert/runtime:metal_memory",
-        ],
-        "@platforms//os:macos": [
-            "//litert/runtime:metal_memory",
-        ],
-        "//conditions:default": [],
-    }),
+    ] + gles_deps(),
     alwayslink = 1,
 )
 
@@ -359,18 +351,6 @@ cc_test(
     ],
 )
 
-cc_library(
-    name = "litert_tensor_buffer_registry",
-    srcs = ["litert_tensor_buffer_registry.cc"],
-    hdrs = ["litert_tensor_buffer_registry.h"],
-    deps = [
-        ":litert_common",
-        ":litert_tensor_buffer_types",
-        "//litert/cc:litert_macros",
-        "//litert/runtime:tensor_buffer_registry",
-    ],
-)
-
 cc_test(
     name = "litert_tensor_buffer_requirements_test",
     srcs = ["litert_tensor_buffer_requirements_test.cc"],
@@ -386,23 +366,6 @@ cc_test(
 )
 
 cc_library(
-    name = "litert_dispatch_delegate",
-    hdrs = ["litert_dispatch_delegate.h"],
-    deps = [
-        ":litert_common",
-        ":litert_environment_options",
-        ":litert_metrics",
-        "//litert/runtime/dispatch:dispatch_delegate",
-        "//litert/vendors/c:litert_dispatch_c_api",
-        "//tflite/c:c_api",
-        "//tflite/c:c_api_opaque",
-        "//tflite/c:c_api_types",
-        "//tflite/c:common",
-        "//tflite/delegates/utils:simple_opaque_delegate",
-    ],
-)
-
-cc_library(
     name = "litert_options",
     srcs = ["litert_options.cc"],
     hdrs = [
@@ -411,7 +374,6 @@ cc_library(
     deps = [
         ":litert_common",
         ":litert_logging",
-        ":litert_opaque_options",
         "//litert/cc:litert_handle",
         "//litert/cc:litert_macros",
         "//litert/cc:litert_opaque_options",
@@ -501,35 +463,6 @@ cc_test(
 )
 
 cc_library(
-    name = "litert_accelerator",
-    srcs = ["litert_accelerator.cc"],
-    hdrs = ["litert_accelerator.h"],
-    deps = [
-        ":litert_common",
-        "//litert/cc:litert_expected",
-        "//litert/core:environment",
-        "//litert/runtime:accelerator",
-    ],
-)
-
-cc_test(
-    name = "litert_accelerator_test",
-    srcs = ["litert_accelerator_test.cc"],
-    deps = [
-        ":litert_accelerator",
-        ":litert_accelerator_registration",
-        ":litert_common",
-        ":litert_environment",
-        "//litert/cc:litert_expected",
-        "//litert/cc:litert_macros",
-        "//litert/runtime:accelerator",
-        "//litert/test:matchers",
-        "@com_google_absl//absl/strings:string_view",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
     name = "litert_opaque_options",
     srcs = ["litert_opaque_options.cc"],
     hdrs = ["litert_opaque_options.h"],
@@ -551,21 +484,6 @@ cc_test(
 )
 
 cc_library(
-    name = "litert_accelerator_registration",
-    srcs = ["litert_accelerator_registration.cc"],
-    hdrs = ["litert_accelerator_registration.h"],
-    deps = [
-        ":litert_accelerator",
-        ":litert_common",
-        ":litert_metrics",
-        ":litert_opaque_options",
-        "//litert/cc:litert_expected",
-        "//litert/core:environment",
-        "//litert/runtime:accelerator",
-    ],
-)
-
-cc_library(
     name = "litert_custom_tensor_buffer",
     hdrs = ["litert_custom_tensor_buffer.h"],
     deps = [
@@ -579,20 +497,6 @@ cc_library(
     name = "litert_platform_support",
     hdrs = ["litert_platform_support.h"],
     deps = [":litert_common"],
-)
-
-cc_test(
-    name = "litert_accelerator_registration_test",
-    srcs = ["litert_accelerator_registration_test.cc"],
-    deps = [
-        ":litert_accelerator",
-        ":litert_accelerator_registration",
-        ":litert_common",
-        ":litert_environment",
-        ":litert_opaque_options",
-        "//litert/runtime:accelerator",
-        "@com_google_googletest//:gtest_main",
-    ],
 )
 
 cc_library(
@@ -627,19 +531,6 @@ cc_test(
     ],
 )
 
-cc_library(
-    name = "litert_external_litert_buffer_context",
-    srcs = ["litert_external_litert_buffer_context.cc"],
-    hdrs = ["litert_external_litert_buffer_context.h"],
-    deps = [
-        ":litert_common",
-        ":litert_dispatch_headers",
-        "//litert/cc:litert_macros",
-        "//litert/runtime:external_litert_buffer_context",
-        "//tflite/c:common",
-    ],
-)
-
 filegroup(
     name = "litert_model_srcs",
     srcs = ["litert_model.cc"],
@@ -654,14 +545,11 @@ filegroup(
 
 # Collection of all C API targets.
 LITERT_C_API_COMMON_DEPS = [
-    ":litert_accelerator",
-    ":litert_accelerator_registration",
     ":litert_any",
     ":litert_common",
     ":litert_compiled_model",
     ":litert_custom_tensor_buffer",
     ":litert_options",
-    ":litert_dispatch_delegate",
     ":litert_event",
     ":litert_environment",
     ":litert_layout",
@@ -672,8 +560,11 @@ LITERT_C_API_COMMON_DEPS = [
     ":litert_op_options",
     ":litert_profiler",
     ":litert_tensor_buffer",
-    ":litert_external_litert_buffer_context",
-    ":litert_tensor_buffer_registry",
+    "//litert/c/internal:litert_accelerator",
+    "//litert/c/internal:litert_accelerator_registration",
+    "//litert/c/internal:litert_dispatch_delegate",
+    "//litert/c/internal:litert_external_litert_buffer_context",
+    "//litert/c/internal:litert_tensor_buffer_registry",
     "//litert/c/options:litert_cpu_options",
     "//litert/c/options:litert_qualcomm_options",
     "//litert/c/options:litert_google_tensor_options",
@@ -735,47 +626,6 @@ filegroup(
     srcs = [":litert_runtime_c_api_so"],
 )
 
-cc_library(
-    name = "litert_dispatch_headers",
-    hdrs = [
-        ":litert_accelerator.h",
-        ":litert_any.h",
-        ":litert_common.h",
-        ":litert_compiled_model.h",
-        ":litert_custom_tensor_buffer.h",
-        ":litert_custom_op_kernel.h",
-        ":litert_environment.h",
-        ":litert_environment_options.h",
-        ":litert_event.h",
-        ":litert_event_type.h",
-        ":litert_gl_types.h",
-        ":litert_layout.h",
-        ":litert_logging.h",
-        ":litert_metrics.h",
-        ":litert_model.h",
-        ":litert_op_code.h",
-        ":litert_op_options.h",
-        ":litert_opaque_options.h",
-        ":litert_options.h",
-        ":litert_platform_support.h",
-        ":litert_tensor_buffer.h",
-        ":litert_external_litert_buffer_context.h",
-        ":litert_tensor_buffer_requirements.h",
-        ":litert_tensor_buffer_types.h",
-        # Needed for litert/c/litert_op_code.h
-        "//tflite:builtin_ops.h",
-        # Neeeded for litert/c/litert_model.h
-        "//tflite/c:tensorflowlite_c_api_hdrs_filegroup",
-        "//tflite/c:tensorflowlite_c_impl_hdrs_filegroup",
-    ],  # Export all header files (.h) in this directory
-    deps = [
-        "//tflite/core/api",
-        "//tflite/profiling:memory_info",
-        "@com_google_absl//absl/types:span",
-        "@opencl_headers",
-    ],
-)
-
 # Config for LiteRT client executables to export LiteRt* symbols and let accelerator shared libs
 # resolve the symbols, not from libLiteRtRuntimeCApi.so.
 config_setting(
@@ -790,7 +640,10 @@ cc_library(
         ":resolve_symbols_in_exec": [],
         "//conditions:default": [":litert_runtime_c_api_so"],
     }),
-    hdrs = glob(["litert_*.h"]) + [
+    hdrs = glob([
+        "*.h",
+    ]) + [
+        "//litert/c/internal:internal_headers",
         "//litert/c/options:options_headers",
         "//tflite:builtin_ops.h",  # Needed for litert/c/litert_op_code.h
         "//tflite/c:tensorflowlite_c_api_hdrs_filegroup",  # Needed for litert/c/litert_model.h
@@ -825,12 +678,14 @@ objc_library(
     deps = [
         ":litert_any",
         ":litert_common",
-        ":litert_dispatch_headers",
+        ":litert_environment",
+        ":litert_environment_options",
+        ":litert_model",
         ":litert_tensor_buffer",
-        "//litert/c:litert_environment",
+        ":litert_tensor_buffer_types",
         "//litert/cc:litert_any",
         "//litert/cc:litert_layout",
-        "//litert/runtime:metal_memory",
+        "//litert/runtime/accelerators/gpu:ml_drift_metal_accelerator",
         "//third_party/apple_frameworks:XCTest",
     ],
 )

@@ -109,7 +109,8 @@ class DecoderTensor : public ov::frontend::tensorflow_lite::DecoderBaseTensor {
       int64_t input_index, int64_t output_index)
       : m_tensor_meta_info(tensor_meta_info),
         input_index_(input_index),
-        output_index_(output_index) {};
+        output_index_(output_index),
+        op_name_("DecoderTensor") {};
 
   ov::frontend::tensorflow_lite::TensorMetaInfo get_tensor_info()
       const override {
@@ -125,11 +126,13 @@ class DecoderTensor : public ov::frontend::tensorflow_lite::DecoderBaseTensor {
   /// \brief No attributes for tensor
   ov::Any get_attribute(const std::string &name) const override {
     LITERT_LOG(LITERT_ERROR, "get_attribute not implemented");
+    return ov::Any{};
   }
 
   /// \brief No inputs for tensor
   size_t get_input_size() const override {
     LITERT_LOG(LITERT_ERROR, "get_input_size not implemented");
+    return 0;
   }
 
   /// \brief No input nodes for tensor
@@ -140,19 +143,20 @@ class DecoderTensor : public ov::frontend::tensorflow_lite::DecoderBaseTensor {
   }
 
   /// \brief No operation for tensor
-  const std::string &get_op_type() const override {
-    LITERT_LOG(LITERT_ERROR, "get_op_type not implemented");
-  };
+  const std::string& get_op_type() const override { return op_type_; };
 
   /// \brief No operation name for tensor
   const std::string &get_op_name() const override {
     LITERT_LOG(LITERT_ERROR, "get_op_name not implemented");
+    return op_name_;
   };
 
  private:
   ov::frontend::tensorflow_lite::TensorMetaInfo m_tensor_meta_info;
   int64_t input_index_;
   int64_t output_index_;
+  std::string op_type_;
+  const std::string op_name_;
 };
 
 }  // namespace openvino

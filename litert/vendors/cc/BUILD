@@ -105,13 +105,12 @@ cc_test(
         "//litert/c:litert_model",
         "//litert/c:litert_op_code",
         "//litert/cc:litert_model",
-        "//litert/core/model:model_graph_testonly",
         "//litert/core/model:model_testonly",
         "//litert/core/util:flatbuffer_tools_testonly",
         "//litert/vendors/examples:example_conversion_impl",
         "//litert/vendors/examples:example_ir",
+        "//tflite/converter/schema:schema_fbs",
         "@com_google_googletest//:gtest_main",
-        "@org_tensorflow//tensorflow/compiler/mlir/lite/schema:schema_fbs",
     ],
 )
 
@@ -126,16 +125,15 @@ cc_test(
         "//litert/c:litert_op_code",
         "//litert/cc:litert_buffer_ref",
         "//litert/cc:litert_model",
-        "//litert/core/model:model_graph_testonly",
         "//litert/core/model:model_testonly",
         "//litert/core/util:flatbuffer_tools_testonly",
         "//litert/test:matchers",
         "//litert/vendors/examples:example_conversion_impl",
         "//litert/vendors/examples:example_ir",
+        "//tflite/converter/schema:schema_fbs",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
-        "@org_tensorflow//tensorflow/compiler/mlir/lite/schema:schema_fbs",
     ],
 )
 

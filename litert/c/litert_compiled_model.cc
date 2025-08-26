@@ -201,9 +201,16 @@ LiteRtStatus LiteRtCompiledModelResizeInputTensor(
 }
 
 LiteRtStatus LiteRtCompiledModelSetDispatchAnnotation(
-    LiteRtCompiledModel compiled_model, const char* key, const char* value) {
+    LiteRtCompiledModel compiled_model, LiteRtParamIndex signature_index,
+    const char* key, const char* value) {
   if (!compiled_model || !key || !value) {
     LITERT_LOG(LITERT_ERROR, "Invalid arguments: null pointers provided");
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+  // Validate signature index
+  if (signature_index >= compiled_model->GetNumSignatures()) {
+    LITERT_LOG(LITERT_ERROR, "Invalid signature index: %zu (max: %zu)",
+               signature_index, compiled_model->GetNumSignatures() - 1);
     return kLiteRtStatusErrorInvalidArgument;
   }
 
@@ -214,17 +221,23 @@ LiteRtStatus LiteRtCompiledModelSetDispatchAnnotation(
     return kLiteRtStatusErrorRuntimeFailure;
   }
 
-  auto& annotations = const_cast<std::unordered_map<std::string, std::string>&>(
-      buffer_context->GetDispatchAnnotations());
-  annotations[key] = value;
+  buffer_context->SetSignatureDispatchAnnotation(signature_index, key, value);
 
   return kLiteRtStatusOk;
 }
 
 LiteRtStatus LiteRtCompiledModelGetDispatchAnnotation(
-    LiteRtCompiledModel compiled_model, const char* key, const char** value) {
+    LiteRtCompiledModel compiled_model, LiteRtParamIndex signature_index,
+    const char* key, const char** value) {
   if (!compiled_model || !key || !value) {
     LITERT_LOG(LITERT_ERROR, "Invalid arguments: null pointers provided");
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+  // Validate signature index
+  if (signature_index >= compiled_model->GetNumSignatures()) {
+    LITERT_LOG(LITERT_ERROR, "Invalid signature index: %zu (max: %zu)",
+               signature_index, compiled_model->GetNumSignatures() - 1);
+    *value = nullptr;
     return kLiteRtStatusErrorInvalidArgument;
   }
 
@@ -236,10 +249,10 @@ LiteRtStatus LiteRtCompiledModelGetDispatchAnnotation(
     return kLiteRtStatusErrorRuntimeFailure;
   }
 
-  const auto& annotations = buffer_context->GetDispatchAnnotations();
-  auto it = annotations.find(key);
-  if (it != annotations.end()) {
-    *value = it->second.c_str();
+  const auto* annotation_value =
+      buffer_context->GetSignatureDispatchAnnotation(signature_index, key);
+  if (annotation_value) {
+    *value = annotation_value->c_str();
   } else {
     *value = nullptr;
   }
@@ -248,9 +261,16 @@ LiteRtStatus LiteRtCompiledModelGetDispatchAnnotation(
 }
 
 LiteRtStatus LiteRtCompiledModelRemoveDispatchAnnotation(
-    LiteRtCompiledModel compiled_model, const char* key) {
+    LiteRtCompiledModel compiled_model, LiteRtParamIndex signature_index,
+    const char* key) {
   if (!compiled_model || !key) {
     LITERT_LOG(LITERT_ERROR, "Invalid arguments: null pointers provided");
+    return kLiteRtStatusErrorInvalidArgument;
+  }
+  // Validate signature index
+  if (signature_index >= compiled_model->GetNumSignatures()) {
+    LITERT_LOG(LITERT_ERROR, "Invalid signature index: %zu (max: %zu)",
+               signature_index, compiled_model->GetNumSignatures() - 1);
     return kLiteRtStatusErrorInvalidArgument;
   }
 
@@ -261,9 +281,7 @@ LiteRtStatus LiteRtCompiledModelRemoveDispatchAnnotation(
     return kLiteRtStatusErrorRuntimeFailure;
   }
 
-  auto& annotations = const_cast<std::unordered_map<std::string, std::string>&>(
-      buffer_context->GetDispatchAnnotations());
-  annotations.erase(key);
+  buffer_context->RemoveSignatureDispatchAnnotation(signature_index, key);
 
   return kLiteRtStatusOk;
 }
@@ -273,6 +291,10 @@ LiteRtStatus LiteRtCompiledModelReportError(LiteRtCompiledModel compiled_model,
   LITERT_RETURN_IF_ERROR(compiled_model != nullptr && format != nullptr,
                          kLiteRtStatusErrorInvalidArgument);
 
+#if defined(LITERT_WINDOWS_OS)
+  LITERT_LOG(LITERT_ERROR, "Report error not implemented");
+  return kLiteRtStatusErrorUnsupported;
+#else
   va_list args;
   va_start(args, format);
   // Create a formatted string since ReportError expects format and variadic
@@ -288,6 +310,7 @@ LiteRtStatus LiteRtCompiledModelReportError(LiteRtCompiledModel compiled_model,
   free(buffer);
 
   return kLiteRtStatusOk;
+#endif
 }
 
 LiteRtStatus LiteRtCompiledModelClearErrors(

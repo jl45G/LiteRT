@@ -28,11 +28,10 @@
 #include "litert/c/litert_op_code.h"
 #include "litert/cc/litert_model.h"
 #include "litert/core/model/model.h"
-#include "litert/core/model/model_graph.h"
 #include "litert/core/util/flatbuffer_tools.h"
 #include "litert/vendors/examples/example_conversion_impl.h"
 #include "litert/vendors/examples/example_ir.h"
-#include "tensorflow/compiler/mlir/lite/schema/schema_generated.h"
+#include "tflite/converter/schema/schema_generated.h"
 
 namespace litert {
 namespace {

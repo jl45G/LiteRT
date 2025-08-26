@@ -19,7 +19,7 @@ package(
     default_visibility = [
         # Temporary visibility for GenAI until they bundle libLiteRtRuntimeCApi.so.
         # copybara:uncomment_begin(oss litert_lm)
-        # "//litert:litert_internal_users_with_internal_cc",
+        # "//litert:litert_cc_users_static_link",
         # copybara:uncomment_end_and_comment_begin
         "//visibility:public",
         # copybara:comment_end
@@ -28,9 +28,7 @@ package(
 
 cc_library(
     name = "litert_dispatch_delegate",
-    hdrs = [
-        "//litert/cc:litert_dispatch_delegate.h",
-    ],
+    hdrs = ["litert_dispatch_delegate.h"],
     deps = [
         "//litert/c:litert_common",
         "//litert/c:litert_environment_options",
@@ -92,9 +90,7 @@ cc_library(
 
 cc_library(
     name = "litert_tensor_buffer",
-    srcs = [
-        "//litert/cc:litert_tensor_buffer.cc",
-    ],
+    srcs = ["//litert/cc:litert_tensor_buffer.cc"],
     hdrs = [
         "//litert/cc:litert_tensor_buffer.h",
         "//litert/cc:litert_tensor_buffer_requirements.h",
@@ -122,9 +118,7 @@ cc_library(
 
 cc_library(
     name = "litert_tensor_buffer_requirements",
-    hdrs = [
-        "//litert/cc:litert_tensor_buffer_requirements.h",
-    ],
+    hdrs = ["//litert/cc:litert_tensor_buffer_requirements.h"],
     deps = [
         "//litert/c:litert_common",
         "//litert/c:litert_tensor_buffer",
@@ -154,6 +148,7 @@ cc_library(
         "//litert/c:litert_metrics",
         "//litert/c:litert_model",
         "//litert/c:litert_tensor_buffer",
+        "//litert/c:litert_tensor_buffer_types",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_handle",
         "//litert/cc:litert_macros",
@@ -170,10 +165,8 @@ cc_library(
     hdrs = ["//litert/cc:litert_options.h"],
     visibility = [
         # copybara:uncomment_begin(oss litert_lm)
-        # "//litert:litert_internal_users_with_internal_cc",
-        # # OSS build needs static lib.
-        # "//litert/vendors/google_tensor/dispatch:__pkg__",
-        # "//litert/vendors/mediatek/dispatch:__pkg__",
+        # "//litert:litert_cc_users_static_link",
+        # "//litert:litert_internal_users",  # TODO(b/424778444): Remove this.
         # copybara:uncomment_end_and_comment_begin
         "//visibility:public",
         # copybara:comment_end
@@ -304,12 +297,12 @@ cc_library(
 
 cc_library(
     name = "litert_external_litert_buffer_context",
-    hdrs = ["//litert/cc:litert_external_litert_buffer_context.h"],
+    hdrs = ["litert_external_litert_buffer_context.h"],
     deps = [
         ":litert_environment",
         ":litert_tensor_buffer",
         "//litert/c:litert_common",
-        "//litert/c:litert_external_litert_buffer_context",
+        "//litert/c/internal:litert_external_litert_buffer_context",
         "//litert/cc:litert_expected",
         "//litert/cc:litert_handle",
         "//litert/cc:litert_macros",
@@ -320,12 +313,11 @@ cc_library(
 cc_test(
     name = "litert_compiled_model_webgpu_test",
     srcs = ["//litert/cc:litert_compiled_model_webgpu_test.cc"],
-    data = [
-        "//litert/test:testdata/simple_model.tflite",
-    ],
+    data = ["//litert/test:testdata/simple_model.tflite"],
     tags = [
         "no_oss",
-        "notap",
+        "notap",  # TODO(byungchul): Re-enable once flaky leak check is fixed.
+        "requires-gpu-nvidia",
     ],
     deps = [
         ":litert_compiled_model",
@@ -349,20 +341,20 @@ cc_test(
         "//litert/test:common",
         "//litert/test:matchers",
         "//litert/test:simple_model",
+        "//third_party/vulkan_loader",
         "@com_google_absl//absl/debugging:leak_check",
         "@com_google_absl//absl/log:absl_log",
         "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
-        "@opencl_headers",
     ],
 )
 
 litert_device_exec(
     name = "litert_compiled_model_webgpu_device_test",
     backend_id = "gpu",
-    data = [
-        "//litert/test:testdata/simple_model.tflite",
-    ],
+    data = ["//litert/test:testdata/simple_model.tflite"],
     target = ":litert_compiled_model_webgpu_test",
 )
+
+exports_files(["litert_dispatch_delegate.h"])
